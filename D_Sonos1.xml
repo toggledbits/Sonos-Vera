@@ -1,0 +1,69 @@
+<?xml version="1.0"?>
+<root xmlns="urn:schemas-upnp-org:device-1-0">
+  <!-- $Id$ -->
+  <specVersion>
+    <major>1</major>
+    <minor>0</minor>
+  </specVersion>
+  <device>
+    <friendlyName>Sonos</friendlyName>
+    <manufacturer>Sonos</manufacturer>
+    <manufacturerURL>http://www.sonos.com</manufacturerURL>
+    <modelDescription>Sonos</modelDescription>
+    <modelName>Sonos</modelName>
+    <modelNumber>1.0</modelNumber>
+
+    <deviceType>urn:schemas-micasaverde-com:device:Sonos:1</deviceType>
+    <Category_Num>15</Category_Num>
+	<staticJson>D_Sonos1.json</staticJson>
+
+    <serviceList>
+      <service>
+        <serviceType>urn:schemas-micasaverde-com:service:Sonos:1</serviceType>
+        <serviceId>urn:micasaverde-com:serviceId:Sonos1</serviceId>
+        <SCPDURL>S_Sonos1.xml</SCPDURL>
+      </service>
+
+      <service>
+        <serviceType>urn:micasaverde-com:service:MediaNavigation:1</serviceType>
+        <serviceId>urn:micasaverde-com:serviceId:MediaNavigation1</serviceId>
+        <SCPDURL>S_MediaNavigation1.xml</SCPDURL>
+      </service>
+
+      <service>
+        <serviceType>urn:micasaverde-com:service:Volume:1</serviceType>
+        <serviceId>urn:micasaverde-com:serviceId:Volume1</serviceId>
+        <SCPDURL>S_Volume1.xml</SCPDURL>
+      </service>
+
+      <service>
+        <serviceType>urn:schemas-upnp-org:service:AVTransport:1</serviceType>
+        <serviceId>urn:upnp-org:serviceId:AVTransport</serviceId>
+        <SCPDURL>S_SonosAVTransport1.xml</SCPDURL>
+      </service>
+
+      <service>
+        <serviceType>urn:schemas-upnp-org:service:RenderingControl:1</serviceType>
+        <serviceId>urn:upnp-org:serviceId:RenderingControl</serviceId>
+        <SCPDURL>S_SonosRenderingControl1.xml</SCPDURL>
+      </service>
+
+      <service>
+        <serviceType>urn:schemas-upnp-org:service:GroupRenderingControl:1</serviceType>
+        <serviceId>urn:upnp-org:serviceId:GroupRenderingControl</serviceId>
+        <SCPDURL>S_SonosGroupRenderingControl1.xml</SCPDURL>
+      </service>
+
+      <service>
+        <serviceType>urn:schemas-micasaverde-com:service:HaDevice:1</serviceType>
+        <serviceId>urn:micasaverde-com:serviceId:HaDevice1</serviceId>
+        <SCPDURL>S_HaDevice1.xml</SCPDURL>
+      </service>
+
+    </serviceList>
+
+    <implementationList>
+      <implementationFile>I_Sonos1.xml</implementationFile>
+    </implementationList>
+  </device>
+</root>
