@@ -6,7 +6,7 @@ valuable addition to the ecosystem. Unfortunately, lolodomo moved on to another 
 several years ago, but he released his original work into the public domain, so this project
 takes that code and continues its support and enhancement.
 
-The project is currently led by Vera Community user (rigpapa)[https://community.getvera.com/u/rigpapa].
+The project is currently led by Vera Community user [rigpapa](https://community.getvera.com/u/rigpapa).
 If you would like to volunteer to be a part of the community support of this project, please drop him
 a PM, as more community volunteers are needed for development and testing.
 
@@ -15,11 +15,11 @@ a PM, as more community volunteers are needed for development and testing.
 Currently, this project is distributed exclusively through its Github repository and the AltAppStore.
 Release in the Vera plugin marketplace is planned for later.
 
-> CAUTION! Currently, it is recommended that the "UPnP Event Proxy" plugin be installed on Vera when running this plugin. The event proxy makes it possible for the Sonos plugin to be proactively notified of state changes on the media player(s). If not used, the Sonos plugin will, by default, poll the player frequently, resulting in additional load on your Vera and additional network traffic (when most of time nothing of value is happening/changing). See the "Other Configuration" section below for additional information on controlling polling (TBD???).
+**IMPORTANT** Currently, it is *highly* recommended that the "UPnP Event Proxy" plugin be installed on Vera when running this plugin. The event proxy makes it possible for the Sonos plugin to be proactively notified of state changes on the media player(s). If not used, the Sonos plugin will, by default, poll the player frequently, resulting in additional load on your Vera and additional network traffic (when most of time nothing of value is happening/changing). See the "Other Configuration" section below for additional information on controlling polling (TBD???).
 
 ### Installation on Vera
 
-1. Go to (the Github repository for the project)[https://github.com/toggledbits/Sonos-Vera].
+1. Go to [the Github repository for the project](https://github.com/toggledbits/Sonos-Vera).
 2. Click the green "Clone or download" button and choose "Download ZIP". Save the ZIP file somewhere.
 3. Unzip the ZIP file.
 4. Select the files (except the `.md` files) as a group and drag them to the upload tool at *Apps > Develop apps > Luup files*. This will upload all the files as a single batch and then restart Luup.
@@ -27,11 +27,12 @@ Release in the Vera plugin marketplace is planned for later.
   * Description: `Sonos` (or whatever you choose)
   * Device UPnP Filename: `D_Sonos1.xml` (exactly as shown)
   * Device UPnP Filename: `I_Sonos1.xml` (exactly as shown)
-  > WARNING: You must enter the filenames exactly as shown above. Any error may cause your system to not restart and require intervention from Vera Support.
+    > WARNING: You must enter the filenames exactly as shown above. Any error may cause your system to not restart and require intervention from Vera Support.
   * IP Address: *enter the IP address of your Sonos player, if you know it*
-  > NOTE: If you enter the IP address here, you can skip step 8 below. If you do not know the IP address of your player, leave the field blank--step 8 should find it.
+    > NOTE: If you enter the IP address here, you can skip step 8 below. If you do not know the IP address of your player, leave the field blank--step 8 should find it.
+  * Hit the "Create device" button.
 6. Go to *Apps > Develop apps > Test Luup code (Lua)* and enter/run: `luup.reload()` 
-7. After Luup finishes reloading, (hard-refresh your browser)[https://www.getfilecloud.com/blog/2015/03/tech-tip-how-to-do-hard-refresh-in-browsers/]. This is a vital step that cannot be skipped!
+7. After Luup finishes reloading, [hard-refresh your browser](https://www.getfilecloud.com/blog/2015/03/tech-tip-how-to-do-hard-refresh-in-browsers/). This is a vital step that cannot be skipped!
 8. You can then go into the "Settings" tab of the Sonos device and use discovery to find your first Sonos media player. 
 9. Repeat steps 5-8 for each additional zone player.
 
