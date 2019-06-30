@@ -1,6 +1,13 @@
 //
 // $Id$
-//
+// version 1.4.3
+// Modified by:
+//	explorer for openLuup
+//	cybermage for ResponsiveVoice
+//	reneboer to combine both the above and some usability
+// version 1.4.3
+//  rigpapa fix
+
 var Sonos = {
 	timeoutVar : undefined,
 	timeoutVar2 : undefined,
@@ -355,8 +362,8 @@ function Sonos_showHelp(device)
 
 	var favRadios = get_device_state(device, Sonos.CONTENT_DIRECTORY_SID, "FavoritesRadios", 1);
 	if (favRadios != undefined && favRadios != "") {
-		var pos = favRadios.indexOf('\n', 0); 
-		if (pos >= 0) { 
+		var pos = favRadios.indexOf('\n', 0);
+		if (pos >= 0) {
 			var line = favRadios.substring(0, pos);
 			var pos2 = line.indexOf('@');
 			if (pos2 >= 0) {
@@ -367,14 +374,14 @@ function Sonos_showHelp(device)
 				html += '<td>FR:' + title + '</td>';
 				html += '</tr>';
 			}
-		} 
+		}
 	}
 
 	var savedQueues = get_device_state(device, Sonos.CONTENT_DIRECTORY_SID, "SavedQueues", 1);
 	if (savedQueues != undefined && savedQueues != "") {
 		var pos1 = 0;
-		var pos2 = savedQueues.indexOf('\n', pos1); 
-		while (pos2 >= 0) { 
+		var pos2 = savedQueues.indexOf('\n', pos1);
+		while (pos2 >= 0) {
 			var line = savedQueues.substring(pos1, pos2);
 			var pos3 = line.indexOf('@');
 			if (pos3 >= 0) {
@@ -387,7 +394,7 @@ function Sonos_showHelp(device)
 				html += '</tr>';
 			}
 			pos1 = pos2+1;
-			pos2 = savedQueues.indexOf('\n', pos1); 
+			pos2 = savedQueues.indexOf('\n', pos1);
 		}
 	}
 
@@ -497,7 +504,8 @@ function Sonos_showTTS(device)
 	var engines = [	[ "GOOGLE", "Google" ],
 					[ "OSX_TTS_SERVER", 'OSX TTS server' ],
 					[ "MICROSOFT", "Microsoft" ],
-					[ "MARY", "Mary" ] ];
+					[ "MARY", "Mary" ],
+					[ "RV", "ResponsiveVoice" ] ];
 	var defaultEngine = get_device_state(device, Sonos.SONOS_SID, "DefaultEngineTTS", 1);
 	if (defaultEngine == undefined) {
 		defaultEngine = 'GOOGLE';
@@ -540,6 +548,10 @@ function Sonos_showTTS(device)
 		MaryServerURL = '';
 	}
 
+	var RVServerURL = get_device_state(device, Sonos.SONOS_SID, "ResponsiveVoiceTTSServerURL", 1);
+	if (RVServerURL == undefined) {
+		RVServerURL = '';
+	}
 	var clientId = get_device_state(device, Sonos.SONOS_SID, "MicrosoftClientId", 1);
 	if (clientId == undefined) {
 		clientId = '';
@@ -547,6 +559,18 @@ function Sonos_showTTS(device)
 	var clientSecret = get_device_state(device, Sonos.SONOS_SID, "MicrosoftClientSecret", 1);
 	if (clientSecret == undefined) {
 		clientSecret = '';
+	}
+	var option = get_device_state(device, Sonos.SONOS_SID, "MicrosoftOption", 1);
+	if (option == undefined) {
+		option = '';
+	}
+	var rate = get_device_state(device, Sonos.SONOS_SID, "TTSRate", 1);
+	if (rate == undefined) {
+		rate = '';
+	}
+	var pitch = get_device_state(device, Sonos.SONOS_SID, "TTSPitch", 1);
+	if (pitch == undefined) {
+		pitch = '';
 	}
 
 	html += '<table>';
@@ -663,6 +687,13 @@ function Sonos_showTTS(device)
 	html += '</tr>';
 
 	html += '<tr>';
+	html += '<td>Responsive Voice server URL:</td>';
+	html += '<td>';
+	html += '<input id="ResponsiveVoiceTTSServerURL" type="text" value="' + RVServerURL + '" style="width: 450px"/>';
+	html += '</td>';
+	html += '</tr>';
+
+	html += '<tr>';
 	html += '<td>Microsoft Client Id:</td>';
 	html += '<td>';
 	html += '<input id="ClientId" type="text" value="' + clientId + '" style="width: 450px"/>';
@@ -673,6 +704,27 @@ function Sonos_showTTS(device)
 	html += '<td>Microsoft Client Secret:</td>';
 	html += '<td>';
 	html += '<input id="ClientSecret" type="text" value="' + clientSecret + '" style="width: 450px"/>';
+	html += '</td>';
+	html += '</tr>';
+
+	html += '<tr>';
+	html += '<td>Microsoft option:</td>';
+	html += '<td>';
+	html += '<input id="Option" type="text" value="' + option + '" style="width: 450px"/>';
+	html += '</td>';
+	html += '</tr>';
+
+	html += '<tr>';
+	html += '<td>Rate (0-1):</td>';
+	html += '<td>';
+	html += '<input id="TTSRate" type="text" value="' + rate + '" style="width: 450px"/>';
+	html += '</td>';
+	html += '</tr>';
+
+	html += '<tr>';
+	html += '<td>Pitch (0-2):</td>';
+	html += '<td>';
+	html += '<input id="TTSPitch" type="text" value="' + pitch + '" style="width: 450px"/>';
 	html += '</td>';
 	html += '</tr>';
 
@@ -937,8 +989,8 @@ function Sonos_refreshPlayer(device)
 	if (savedQueues != undefined && savedQueues != Sonos.prevSavedQueues) {
 		var html = "";
 		var pos1 = 0;
-		var pos2 = savedQueues.indexOf('\n', pos1); 
-		while (pos2 >= 0) { 
+		var pos2 = savedQueues.indexOf('\n', pos1);
+		while (pos2 >= 0) {
 			var line = savedQueues.substring(pos1, pos2);
 			var pos3 = line.indexOf('@');
 			if (pos3 >= 0) {
@@ -950,7 +1002,7 @@ function Sonos_refreshPlayer(device)
 				html += '<option value="' + value + '">' + title + '</option>';
 			}
 			pos1 = pos2+1;
-			pos2 = savedQueues.indexOf('\n', pos1); 
+			pos2 = savedQueues.indexOf('\n', pos1);
 		}
 		jQuery('#savedQueues').html(html);
 		Sonos.prevSavedQueues = savedQueues;
@@ -960,15 +1012,15 @@ function Sonos_refreshPlayer(device)
 	if (queue != undefined && queue != Sonos.prevQueue) {
 		var html = "";
 		var pos1 = 0;
-		var pos2 = queue.indexOf('\n', pos1); 
-		while (pos2 >= 0) { 
-			var title = queue.substring(pos1, pos2); 
+		var pos2 = queue.indexOf('\n', pos1);
+		while (pos2 >= 0) {
+			var title = queue.substring(pos1, pos2);
 			if (title.length > 50) {
 				title = title.substr(0, 50) + '...';
 			}
 			html += '<option>' + title + '</option>';
 			pos1 = pos2+1;
-			pos2 = queue.indexOf('\n', pos1); 
+			pos2 = queue.indexOf('\n', pos1);
 		}
 		jQuery('#queue').html(html);
 		Sonos.prevQueue = queue;
@@ -978,8 +1030,8 @@ function Sonos_refreshPlayer(device)
 	if (favRadios != undefined && favRadios != Sonos.prevFavRadios) {
 		var html = "";
 		var pos1 = 0;
-		var pos2 = favRadios.indexOf('\n', pos1); 
-		while (pos2 >= 0) { 
+		var pos2 = favRadios.indexOf('\n', pos1);
+		while (pos2 >= 0) {
 			var line = favRadios.substring(pos1, pos2);
 			var pos3 = line.indexOf('@');
 			if (pos3 >= 0) {
@@ -991,7 +1043,7 @@ function Sonos_refreshPlayer(device)
 				html += '<option value="' + value + '">' + title + '</option>';
 			}
 			pos1 = pos2+1;
-			pos2 = favRadios.indexOf('\n', pos1); 
+			pos2 = favRadios.indexOf('\n', pos1);
 		}
 		jQuery('#favRadios').html(html);
 		Sonos.prevFavRadios = favRadios;
@@ -1001,8 +1053,8 @@ function Sonos_refreshPlayer(device)
 	if (favorites != undefined && favorites != Sonos.prevFavorites) {
 		var html = "";
 		var pos1 = 0;
-		var pos2 = favorites.indexOf('\n', pos1); 
-		while (pos2 >= 0) { 
+		var pos2 = favorites.indexOf('\n', pos1);
+		while (pos2 >= 0) {
 			var line = favorites.substring(pos1, pos2);
 			var pos3 = line.indexOf('@');
 			if (pos3 >= 0) {
@@ -1014,7 +1066,7 @@ function Sonos_refreshPlayer(device)
 				html += '<option value="' + value + '">' + title + '</option>';
 			}
 			pos1 = pos2+1;
-			pos2 = favorites.indexOf('\n', pos1); 
+			pos2 = favorites.indexOf('\n', pos1);
 		}
 		jQuery('#favorites').html(html);
 		Sonos.prevFavorites = favorites;
@@ -1652,9 +1704,13 @@ function Sonos_setupTTS(device)
 	var url = encodeURIComponent(jQuery('#GoogleTTSserverURL').val());
 	var url2 = encodeURIComponent(jQuery('#TTSserverURL').val());
 	var url3 = encodeURIComponent(jQuery('#MaryTTSserverURL').val());
+	var url4 = encodeURIComponent(jQuery('#ResponsiveVoiceTTSServerURL').val());
 	var clientId = encodeURIComponent(jQuery('#ClientId').val());
 	var clientSecret = encodeURIComponent(jQuery('#ClientSecret').val());
-	Sonos_callAction(device, Sonos.SONOS_SID, 'SetupTTS', {'DefaultLanguage':language, 'DefaultEngine':engine, 'GoogleTTSServerURL':url, 'OSXTTSServerURL':url2, 'MaryTTSServerURL':url3, 'MicrosoftClientId':clientId, 'MicrosoftClientSecret':clientSecret} );
+	var option = encodeURIComponent(jQuery('#Option').val());
+	var rate = encodeURIComponent(jQuery('#TTSRate').val());
+	var pitch = encodeURIComponent(jQuery('#TTSPitch').val());
+	Sonos_callAction(device, Sonos.SONOS_SID, 'SetupTTS', {'DefaultLanguage':language, 'DefaultEngine':engine, 'GoogleTTSServerURL':url, 'OSXTTSServerURL':url2, 'MaryTTSServerURL':url3, 'ResponsiveVoiceTTSServerURL': url4 ,'MicrosoftClientId':clientId, 'MicrosoftClientSecret':clientSecret, 'MicrosoftOption':option, 'Rate':rate, 'Pitch':pitch} );
 }
 
 function Sonos_selectAllMembers(state)
@@ -1807,10 +1863,10 @@ function Sonos_callAction(device, sid, actname, args) {
 	for (key in args) {
 		q[key] = args[key];
 	}
-    if (Sonos.browserIE) {
-    	q['timestamp'] = new Date().getTime(); //we need this to avoid IE caching of the AJAX get
-    }
-	new Ajax.Request (command_url+'/data_request', {
+	if (Sonos.browserIE) {
+		q['timestamp'] = new Date().getTime(); //we need this to avoid IE caching of the AJAX get
+	}
+	new Ajax.Request (data_request_url+'/data_request', {
 		method: 'get',
 		parameters: q,
 		onSuccess: function (response) {
@@ -1821,4 +1877,3 @@ function Sonos_callAction(device, sid, actname, args) {
 		}
 	});
 }
-

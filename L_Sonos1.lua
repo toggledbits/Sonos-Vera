@@ -1,4 +1,12 @@
 module("L_Sonos1", package.seeall)
+--[[ 
+Verion 1.4+
+Modified by:
+	explorer for openLuup
+	cybermage for ResponsiveVoice
+	reneboer to combine both the above and some usability
+
+]]
 
 local url = require("socket.url")
 local socket = require("socket")
@@ -6,7 +14,7 @@ local http = require("socket.http")
 local ltn12 = require("ltn12")
 
 -- 5 Second timeout
-http.TIMEOUT = 5
+local HTTP_TIMEOUT = 5
 
 local IPTABLES_PARAM = "-d 224.0.0.0/4 -j SNAT --to-source %s"
 local IPTABLES_CMD = "iptables -t nat -%s POSTROUTING %s"
@@ -40,12 +48,24 @@ local warning = print
 local error = print
 local contentType
 local Services = {}
+local subscriptionQueue = {}
+
+-- Shared tables indexed by Vera devices
+local ips = {}
+local playbackCxt = {}
+local sayPlayback = {}
+local UUIDs = {}
+
+-- Shared tables indexed by Sonos UUIDs
+local metaDataKeys = {}
+local dataTable = {}
 
 function initialize(logger, warningLogger, errorLogger, ct)
   log = logger
   warning = warningLogger
   error = errorLogger
   contentType = ct or 'text/xml; charset="utf-8"'
+  return ips, playbackCxt, sayPlayback, UUIDs, metaDataKeys, dataTable
 end
 
 function decode(val)
@@ -102,7 +122,7 @@ function UPnP_subscribe(eventSubURL, callbackURL, renewalSID)
 	-- Create a socket with a timeout.
 	local sock = function()
 		local s = socket.tcp()
-		s:settimeout(http.TIMEOUT)
+		s:settimeout(HTTP_TIMEOUT)
 		return s
 	end
 
@@ -944,8 +964,9 @@ end
   -- proxyVersionAtLeast(n)
   -- Returns true if the proxy is running and is at least version n.
   function proxyVersionAtLeast(n)
-    if (ProxyApiVersion and tonumber(ProxyApiVersion:match("^(%d+)")) >= n) then
-        return true
+    if ProxyApiVersion then
+        local version = tonumber(ProxyApiVersion:match("^(%d+)"))
+        if version and version >= n then return true end
     end
     return false
   end
@@ -960,6 +981,72 @@ end
   end
 
 
+-- Add a notification to the notification queue.
+-- This queue will be sent on a timer
+-- to make it easy for the server to process sonos proxy traffic 
+function equeueSubscription(sid, proxyRequestBody)
+	table.insert(subscriptionQueue, {
+		sid = sid,
+		proxyRequestBody = proxyRequestBody
+	})
+	
+	if (#subscriptionQueue == 1) then
+	    luup.call_delay("processProxySubscriptions", 2, "Enqued:" .. #subscriptionQueue )
+	end
+end
+
+
+function processProxySubscriptions()
+	if (#subscriptionQueue > 0) then
+		local subscription = table.remove(subscriptionQueue, 1)
+		
+		local sock = function()
+			local s = socket.tcp()
+			s:settimeout(2)
+			return s
+		end
+
+		local t = {}
+
+		local r = {
+			url = "http://localhost:2529/upnp/event/" .. url.escape(subscription.sid),
+			create = sock,
+			sink = ltn12.sink.table(t)
+		}
+		
+		if subscription.proxyRequestBody then
+			r.method = "PUT"
+			r.source = ltn12.source.string(subscription.proxyRequestBody)
+			r.headers = {
+				["Content-Type"] = "text/xml",
+				["Content-Length"] = subscription.proxyRequestBody:len()
+			}
+		else
+			r.method = "DELETE"
+			r.source = ltn12.source.empty()
+		end
+		
+        log("Send Proxy subscription request: " .. r.method .. " SID " .. subscription.sid )
+		local request, reason = http.request(r)
+			
+		if request == nil and reason == "timeout" then
+			log("Retry Proxy subscription request: " .. r.method .. " SID " .. subscription.sid )
+			table.insert(subscriptionQueue, subscription)
+		elseif request == nil then
+			log("Give up Proxy subscription request: " .. r.method .. " SID " .. subscription.sid )
+		elseif	reason ~= 200 then
+			local data = table.concat(t)
+			log("Invalid Proxy subscription request: " .. r.method .. " SID " .. subscription.sid .. " Response: " .. data )
+		else
+			log("Completed Proxy subscription request: " .. r.method .. " SID " .. subscription.sid )
+		end
+	end
+	
+	if (#subscriptionQueue > 0) then
+	    luup.call_delay("processProxySubscriptions", 2, "Enqued:" .. #subscriptionQueue  )
+	end
+end  
+  
   -- subscribeToUPnPEvent(device, veraIP, eventSubURL, eventVariable, actionServiceId, actionName, renewalSID)
   -- Process a new subscription to an event for an UPnP device, or renew an active subscription
   -- First send a subscription request to the UPnP device and then notify the proxy of this new subscription
@@ -978,12 +1065,6 @@ end
   function subscribeToUPnPEvent(device, veraIP, eventSubURL, eventVariable, actionServiceId, actionName, renewalSID)
     log("Subscribing to event " .. eventSubURL .. " for variable " .. eventVariable .. " with SID " .. (renewalSID or "nil"))
 
-	local sock = function()
-		local s = socket.tcp()
-		s:settimeout(5)
-		return s
-	end
-
 	-- Ask the device to inform the proxy about status changes.
     local callbackURL = string.format("http://%s:2529/upnp/event", veraIP)
 	local expiry = nil
@@ -994,29 +1075,7 @@ end
 		-- Tell proxy about this subscription and the variable we care about.
 		-- Volume is the variable we care about.
 		local proxyRequestBody = PROXY_REQUEST:format(expiry, eventVariable, device, actionServiceId, actionName, eventVariable)
-		local request, code = http.request({
-			url = "http://localhost:2529/upnp/event/" .. url.escape(sid),
-			create = sock,
-			method = "PUT",
-			headers = {
-				["Content-Type"] = "text/xml",
-				["Content-Length"] = proxyRequestBody:len(),
-			},
-			source = ltn12.source.string(proxyRequestBody),
-			sink = ltn12.sink.null(),
-		})
--- TODO retry if timeout
-		if (request == nil and code ~= "closed") then
-			error("Failed to notify proxy of subscription: " .. code)
-			sid = nil
-			expiry = nil
-		elseif (code ~= 200) then
-			error("Failed to notify proxy of subscription: " .. code)
-			sid = nil
-			expiry = nil
-		else
-			log("Successfully notified proxy of subscription")
-		end
+		equeueSubscription(sid, proxyRequestBody)
 	end
 
 	return sid, expiry, duration
@@ -1026,35 +1085,9 @@ end
   -- WeMo plugin contrib
   -- cancelProxySubscription(sid)
   -- Sends a DELETE /upnp/event/[sid] message to the UPnP event proxy,
-  -- Return value:
-  --   nil if the proxy timed out (should try again).
-  --   false if the proxy refused our request (permanently).
-  --   true if the proxy agreed to our request.
   function cancelProxySubscription(sid)
     log("Cancelling subscription for sid " .. sid)
-    local sock = function()
-        local s = socket.tcp()
-        s:settimeout(2)
-        return s
-    end
-
-    local request, code = http.request({
-        url = "http://localhost:2529/upnp/event/" .. url.escape(sid),
-        create = sock,
-        method = "DELETE",
-        source = ltn12.source.empty(),
-        sink = ltn12.sink.null(),
-    })
-    if (request == nil and code ~= "closed") then
-        error("Failed to cancel subscription: " .. code)
-        return nil
-    elseif (code ~= 200) then
-        error("Failed to cancel subscription: " .. code)
-        return false
-    else
-        log("Successfully cancelled subscription")
-        return true
-    end
+	equeueSubscription(sid)
   end
 
 
@@ -1082,10 +1115,14 @@ end
     log("Subscribing to all events")
 
     if (proxyVersionAtLeast(1) == false) then
-        return true
+	   log("Event subscription postponed, proxy is not running. " .. device )
+--	   luup.call_delay("renewSubscriptions", 30, device .. ":" .. uuid)
+       return true
     end
     if (aresServicesLoaded(uuid) == false) then
-        return true
+  	   log("Event subscription postponed, services are not loaded yet. " .. device )
+--	   luup.call_delay("renewSubscriptions", 30, device .. ":" .. uuid)
+      return true
     end
 
     local result = true
@@ -1130,9 +1167,11 @@ end
         if (minDuration >= 600) then
             minDuration = minDuration - 300
         end
-
-        luup.call_delay("renewSubscriptions", minDuration, device .. ":" .. uuid)
+	else
+		minDuration = 60
     end
+
+    luup.call_delay("renewSubscriptions", minDuration, device .. ":" .. uuid)
 
     return result
   end
