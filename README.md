@@ -12,7 +12,7 @@ a PM, as more community volunteers are needed for development and testing.
 
 ## Installation
 
-Currently, this project is distributed exclusively through its Github repository and the AltAppStore.
+Currently, this project is distributed exclusively through its [Github repository](https://github.com/toggledbits/Sonos-Vera/) and the AltAppStore.
 Release in the Vera plugin marketplace is planned for later.
 
 **IMPORTANT** Currently, it is *highly* recommended that the "UPnP Event Proxy" plugin be installed on Vera when running this plugin. The event proxy makes it possible for the Sonos plugin to be proactively notified of state changes on the media player(s). If not used, the Sonos plugin will, by default, poll the player frequently, resulting in additional load on your Vera and additional network traffic (when most of time nothing of value is happening/changing). See the "Other Configuration" section below for additional information on controlling polling (TBD???).
@@ -247,7 +247,7 @@ Notes:
 
 ## Configuring TTS
 
-As of this writing, the only reliably-working TTS services are MaryTTS and ResponsiveVoice, and the latter is potentially going away. 
+As of this writing, the only reliably-working TTS services are [MaryTTS](http://mary.dfki.de/) and ResponsiveVoice, and the latter is potentially going away. 
 
 GoogleTTS, which has long been the default, is now being limited by Google and attempts to use it result in "suspicious activity" blocks from their servers pretty quickly--this is why it works for a while and then quietly stops working. It's possible we may reconnect this service to Google's newer "official" TTS cloud service at some point (requires account registration), but at the moment, the GoogleTTS engine is basically dead and should not be used.
 
@@ -261,7 +261,7 @@ If you are using the plugin on openLuup, you will need to configure the `TTSBase
 
 Set the `TTSBasePath` to the full pathname of a directory in your openLuup installation where the sound files should be written, and set `TTSBaseURL` to the full URL (e.g. `http://192.168.0.2:80`) that can be used to retrieve files written in the `TTSBasePath` directory.
 
-If you're not sure, try setting `TTSBasePath` to the full directory path of the directory containing the Sonos plugin files, and setting `TTSBaseURL` to `http://openluup-ip-addr:3480` (e.g. `http://192.168.0.120:3480`).
+If you're not sure, try setting `TTSBasePath` to the full directory path of the openLuup subdirectory containing the installed Sonos plugin files, and setting `TTSBaseURL` to `http://openluup-ip-addr:3480` (e.g. `http://192.168.0.120:3480`).
 
 ## Other Configuration
 
