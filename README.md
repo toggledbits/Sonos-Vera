@@ -17,7 +17,7 @@ Release in the Vera plugin marketplace is planned for later.
 
 **IMPORTANT** Currently, it is *highly* recommended that the "UPnP Event Proxy" plugin be installed on Vera when running this plugin. The event proxy makes it possible for the Sonos plugin to be proactively notified of state changes on the media player(s). If not used, the Sonos plugin will, by default, poll the player frequently, resulting in additional load on your Vera and additional network traffic (when most of time nothing of value is happening/changing). See the "Other Configuration" section below for additional information on controlling polling (TBD???).
 
-### Installation on Vera
+### Installation on Vera (manually)
 
 1. Go to [the Github repository for the project](https://github.com/toggledbits/Sonos-Vera).
 2. Click the green "Clone or download" button and choose "Download ZIP". Save the ZIP file somewhere.
@@ -35,6 +35,12 @@ Release in the Vera plugin marketplace is planned for later.
 7. After Luup finishes reloading, [hard-refresh your browser](https://www.getfilecloud.com/blog/2015/03/tech-tip-how-to-do-hard-refresh-in-browsers/). This is a vital step that cannot be skipped!
 8. You can then go into the "Settings" tab of the Sonos device and use discovery to find your first Sonos media player. 
 9. Repeat steps 5-8 for each additional zone player.
+
+### Installation using AltAppStore
+
+Once published to the AltAppStore, you'll be able to install this plugin on Vera or openLuup from the AltAppStore in the usual way. Working on it...
+
+openLuup users, please note that additional configuration is required to use TTS. Please see "Special TTS Configuration for openLuup" below.
 
 ## State Variables
 
@@ -245,19 +251,17 @@ Notes:
 * It is possible to use the parameter named GroupDevices in place of GroupZones. In this case, you must have a device in the Vera for all the Sonos zones you want to address. The value is a CSV list of device ids. For example, if your living-room and kitchen Sonos are linked respectively to devices 667 and 668 in your Vera, you will use GroupDevices="667,668". The GroupDevices has been kept for compatibility reasons with old versions but the use of GroupZones is now recommended.
 * Parameters not specified will default internally. (Duration=0, GroupDevices="", GroupZones="", Volume=nil, SameVolumeForAll=false) By default, the volume is not set.
 
-## Configuring TTS
+## Configuring TTS (Text-to-Speech)
 
 As of this writing, the only reliably-working TTS services are [MaryTTS](http://mary.dfki.de/) and ResponsiveVoice, and the latter is potentially going away. 
 
-GoogleTTS, which has long been the default, is now being limited by Google and attempts to use it result in "suspicious activity" blocks from their servers pretty quickly--this is why it works for a while and then quietly stops working. It's possible we may reconnect this service to Google's newer "official" TTS cloud service at some point (requires account registration), but at the moment, the GoogleTTS engine is basically dead and should not be used.
-
-We also believe Microsoft TTS is dead, but we haven't removed it from the code yet.
-
-Status of OSX TTS is unknown as of this writing. Can anybody test?
+If you are using any of the other services *successfully*, [please let us know](https://community.getvera.com/c/plugins-and-plugin-development/sonos-plugin):
+* GoogleTTS, which has long been the default, is now being restricted by Google and attempts to use it result in "suspicious activity" blocks from their servers pretty quickly--this is why it works for a while and then suddenly stops working. To be fair to Google, it's because this "service" is actually borrowing a subfeature of Google Translate that was probably never intended to be used in this way (by us and many others, I'm sure), and Google has gotten wise to it. It's possible we may provide a replacement engine/service to Google's newer "official" TTS cloud service at some point (requires account/API registration), but at the moment, this GoogleTTS engine is basically dead and should not be used.
+* Both OSX and Microsoft engines are unknown, rumored to be dead.
 
 ### Special TTS Configuration for openLuup
 
-If you are using the plugin on openLuup, you will need to configure the `TTSBaseURL` and `TTSBasePath` state variables. The TTS services require that sound files be written somewhere where they can retrieved by an HTTP request from the Sonos players in your network. This may be within the openLuup directory tree, but not necessarily; configuration will depend on how your openLuup is installed and where, and what if any additional services (e.g. Apache) may be running on the same host. As a result, local knowledge is required.
+If you are using the plugin on openLuup, you will first need to configure the `TTSBaseURL` and `TTSBasePath` state variables. The TTS services require that sound files be written somewhere where they can retrieved by an HTTP request from the Sonos players in your network. This may be within the openLuup directory tree, but not necessarily; configuration will depend on how your openLuup is installed and where, and what if any additional services (e.g. Apache) may be running on the same host. As a result, local knowledge is required.
 
 Set the `TTSBasePath` to the full pathname of a directory in your openLuup installation where the sound files should be written, and set `TTSBaseURL` to the full URL (e.g. `http://192.168.0.2:80`) that can be used to retrieve files written in the `TTSBasePath` directory.
 
