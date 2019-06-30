@@ -260,7 +260,7 @@ If you are using the plugin on openLuup, you will need to configure the `TTSBase
 
 Set the `TTSBasePath` to the full pathname of a directory in your openLuup installation where the sound files should be written, and set `TTSBaseURL` to the full URL (e.g. `http://192.168.0.2:80`) that can be used to retrieve files written in the `TTSBasePath` directory.
 
-If you're not sure, try setting `TTSBasePath` to the full directory path of the directory containing the Sonos plugin files, and setting `TTSBaseURL` to `http://`*openluup-host-ip-address*`:3480`.
+If you're not sure, try setting `TTSBasePath` to the full directory path of the directory containing the Sonos plugin files, and setting `TTSBaseURL` to `http://`*openluup-host-ip-address*`:3480` (e.g. `http://192.168.0.120:3480`).
 
 ## Other Configuration
 
