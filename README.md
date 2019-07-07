@@ -10,19 +10,21 @@ The project is currently led by Vera Community user [rigpapa](https://community.
 If you would like to volunteer to be a part of the community support of this project, please drop him
 a PM, as more community volunteers are needed for development and testing.
 
+**PLEASE SEE [CHANGELOG.md](https://github.com/toggledbits/Sonos-Vera/blob/master/CHANGELOG.md) FOR RELEASE NOTES**
+
 ## Installation
 
 Currently, this project is distributed exclusively through its [Github repository](https://github.com/toggledbits/Sonos-Vera/) and the AltAppStore.
 Release in the Vera plugin marketplace is planned for later.
 
-**IMPORTANT** Currently, it is *highly* recommended that the "UPnP Event Proxy" plugin be installed on Vera when running this plugin. The event proxy makes it possible for the Sonos plugin to be proactively notified of state changes on the media player(s). If not used, the Sonos plugin will, by default, poll the player frequently, resulting in additional load on your Vera and additional network traffic (when most of time nothing of value is happening/changing). See the "Other Configuration" section below for additional information on controlling polling (TBD???).
+**IMPORTANT** Currently, it is *highly* recommended that the "UPnP Event Proxy" plugin be installed on Vera when running this plugin. The event proxy makes it possible for the Sonos plugin to be proactively notified of state changes on the media player(s). If not used, the Sonos plugin will, by default, poll the player frequently, resulting in additional load on your Vera and additional network traffic (when most of time nothing of value is happening/changing). See the "Other Configuration" section below for additional information on controlling polling rate.
 
 ### Installation on Vera (manually)
 
 1. Go to [the Github repository for the project](https://github.com/toggledbits/Sonos-Vera).
 2. Click the green "Clone or download" button and choose "Download ZIP". Save the ZIP file somewhere.
 3. Unzip the ZIP file.
-4. Select the files (except the `.md` files) as a group and drag them to the upload tool at *Apps > Develop apps > Luup files*. This will upload all the files as a single batch and then restart Luup.
+4. Select the files (except the `.md` files and the `services` and `icons` directories--these are no longer required) as a group and drag them to the upload tool at *Apps > Develop apps > Luup files*. This will upload all the files as a single batch and then restart Luup.
 5. After the Luup restart, go to *Apps > Develop apps > Create device*, enter and submit:
   * Description: `Sonos` (or whatever you choose)
   * Device UPnP Filename: `D_Sonos1.xml` (exactly as shown)
@@ -35,6 +37,9 @@ Release in the Vera plugin marketplace is planned for later.
 7. After Luup finishes reloading, [hard-refresh your browser](https://www.getfilecloud.com/blog/2015/03/tech-tip-how-to-do-hard-refresh-in-browsers/). This is a vital step that cannot be skipped!
 8. You can then go into the "Settings" tab of the Sonos device and use discovery to find your first Sonos media player. 
 9. Repeat steps 5-8 for each additional zone player.
+
+**NOTE:** The correct icon for your new player may not show up in the UI immediately. A [hard-refresh of your browser](https://www.getfilecloud.com/blog/2015/03/tech-tip-how-to-do-hard-refresh-in-browsers/) may be required to get it to display. 
+If your new players don't show the right icon after a few minutes, reload Luup and do a hard refresh.
 
 ### Installation using AltAppStore
 
@@ -65,8 +70,9 @@ openLuup users, please note that additional configuration is required to use TTS
 * ProxyUsed - "proxy is in use" or "proxy is not in use" to indicate if the UPnP event proxy is in use
 * RouterIp - router/firewall IP when the Sonos unit can access the Vera only with a port forwarding rule
 * RouterPort - router/firewall port when the Sonos unit can access the Vera only with a port forwarding rule
-* SonosModel - for plugin internal usage (icon management)
+* SonosModel - for plugin internal usage (icon management; legacy, not used after 1.4.3)
 * SonosModelName - model of the Sonos unit, for example "Sonos PLAY:5" or "Sonos CONNECT:AMP"
+* SonosModelNumber - model number as reported by Sonos unit (e.g. ZP100, S1, S12, etc.)
 * SonosOnline - "1" when the Sonos is online or "0" when it is offline
 * SonosServicesKeys - for plugin internal usage
 * TTSBasePath - Local directory path where TTS sound files will be written (must be retrievable at `TTSBaseURL` below)
@@ -269,7 +275,9 @@ If you're not sure, try setting `TTSBasePath` to the full directory path of the 
 
 ## Other Configuration
 
-TBD
+### `PollDelays`
+
+If the UPnP Event Proxy is not installed or cannot be contacted, the Sonos plugin will poll players for status. As of 1.4.3-19188, the `PollDelays` state variable contains a pair of numbers, which are the delays to be used for polling when active and inactive (player stopped), respectively. The default is 15 seconds for active players, and 60 seconds on stopped players. This reduces network traffic somewhat, but it's still not as good as using the UPnP Event Proxy, so the proxy remains the recommended solution.
 
 ## User Support
 
