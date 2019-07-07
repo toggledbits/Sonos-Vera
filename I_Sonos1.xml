@@ -148,7 +148,7 @@ Modified by:
 		SonosModelName = SONOS_SID,
 		SonosModel = SONOS_SID,
 		SonosModelNumber = SONOS_SID,
-		PollDelays = SONOS_SID
+		PollDelays = SONOS_SID,
 
 		ProxyUsed = SONOS_SID
   }
@@ -1644,16 +1644,16 @@ Modified by:
   end
 
   function updateWithoutProxy(device)
+	local dn = tonumber(device) or error "updateWithoutProxy() invalid device: "..tostring(device)
 	if (upnp.proxyVersionAtLeast(1) == false) then
-		local ts = luup.variable_get( UPNP_AVTRANSPORT_SID, "TransportState", device ) or "STOPPED"
-		local rp,rs = ( luup.variable_get( SONOS_SID, "PollDelays", device ) or "15,60" ):match( '^(%S+)%,%s*(.*)$' )
+		local ts = luup.variable_get( UPNP_AVTRANSPORT_SID, "TransportState", dn ) or "STOPPED"
+		local rp,rs = ( luup.variable_get( SONOS_SID, "PollDelays", dn ) or "15,60" ):match( '^(%S+)%,%s*(.*)$' )
 		rp = tonumber(rp) or 15
 		rs = tonumber(rs) or 60
 		luup.call_delay("updateWithoutProxy", ts ~= "STOPPED" and rp or rs, device)
 	end
-	device = tonumber(device)
 
-	refreshNow(device, true, true)
+	refreshNow(dn, true, true)
   end
 
   local function getAvailableServices(uuid)
@@ -1786,6 +1786,14 @@ Modified by:
 		iconURL = PLUGIN_ICON:format(VERA_IP, VERA_WEB_PORT)
 	end
 
+	luup.log( string.format("%s: %s is %q, %s (%s) %s", MSG_CLASS,
+		tostring( ip[device] ),
+		tostring( modelName ),
+		tostring( values.modelNumber ), model,
+		tostring( values.UDN )
+		)
+	)
+
 	if values.modelNumber then
 		-- Maybe tune static JSON to device
 		local installPath = "/etc/cmh-ludl/" -- Vera default
@@ -1830,7 +1838,7 @@ Modified by:
 			d._comment = "AUTOMATICALLY GENERATED -- DO NOT MODIFY THIS FILE"
 			-- Save it.
 			f = io.open( installPath .. staticJSONFile, "w" )
-			if not f then 
+			if not f then
 				luup.log( string.format("%s: can't write %s%s", MSG_CLASS, installPath, staticJSONFile), 1)
 				staticJSONFile = nil
 			else
