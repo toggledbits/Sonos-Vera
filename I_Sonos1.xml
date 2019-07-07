@@ -87,7 +87,7 @@ Modified by:
 		expiry = "" }
   }
 
-  local PLUGIN_ICON = "http://%s:%d/cmh/skins/default/icons/Sonos.png"
+  local PLUGIN_ICON = "Sonos.png"
 
   local QUEUE_URI = "x-rincon-queue:%s#0"
 
@@ -149,6 +149,8 @@ Modified by:
 		SonosModel = SONOS_SID,
 		SonosModelNumber = SONOS_SID,
 		PollDelays = SONOS_SID,
+		PluginVersion = SONOS_SID,
+		Enabled = SONOS_SID,
 
 		ProxyUsed = SONOS_SID
   }
@@ -206,12 +208,13 @@ Modified by:
   end
 
   local function setData(name, value, deviceId, default)
-	  local uuid = UUIDs[deviceId]
+	  local uuid = UUIDs[deviceId] or ""
 	  if (uuid ~= "" and dataTable[uuid] ~= nil) then
 		  dataTable[uuid][name] = value
 	  end
 
 	  if (deviceId == 0 or variableSidTable[name] == nil) then
+		  error(string.format("setData() can't set %s on %d no SID!", tostring(name), deviceId))
 		  return (default or false)
 	  end
 
@@ -223,6 +226,20 @@ Modified by:
 	  else
 		  return (default or false)
 	  end
+  end
+
+  local function initData(name, value, deviceId)
+	  local uuid = UUIDs[deviceId]
+	  if (uuid ~= "" and dataTable[uuid] ~= nil) then
+		  dataTable[uuid][name] = value
+	  end
+
+	  local curValue = luup.variable_get(variableSidTable[name], name, deviceId)
+	  if curValue == nil then
+		  luup.variable_set(variableSidTable[name], name, value, deviceId)
+		  return value
+	  end
+	  return curValue
   end
 
   local function setVariableValue(serviceId, name, value, deviceId)
@@ -425,8 +442,6 @@ Modified by:
   local function deviceIsOffline(device)
 	local changed = setData("SonosOnline", "0", device, false)
 	if (changed) then
-		iconURL = PLUGIN_ICON:format(VERA_IP, VERA_WEB_PORT)
-
 		groupsState = "&lt;ZoneGroups>&lt;/ZoneGroups>"
 
 		changed = setData("TransportState", "STOPPED",  device, changed)
@@ -450,7 +465,7 @@ Modified by:
 		changed = setData("CurrentArtist", "", device, changed)
 		changed = setData("CurrentAlbum", "", device, changed)
 		changed = setData("CurrentDetails", "", device, changed)
-		changed = setData("CurrentAlbumArt", iconURL, device, changed)
+		changed = setData("CurrentAlbumArt", PLUGIN_ICON, device, changed)
 		changed = setData("RelativeTimePosition", "NOT_IMPLEMENTED", device, changed)
 		changed = setData("Volume", "0", device, changed)
 		changed = setData("Mute", "0", device, changed)
@@ -464,7 +479,7 @@ Modified by:
 
 		setVariableValue(HADEVICE_SID, "LastUpdate", os.time(), device)
 
-		if (device ~= 0) then
+		if device ~= 0 then
 			upnp.cancelProxySubscriptions(EventSubscriptions)
 		end
 	end
@@ -701,7 +716,7 @@ Modified by:
   local function refreshNow(device, force, refreshQueue)
 	debug("refreshNow: device=" .. device)
 
-	if (upnp.proxyVersionAtLeast(1) and force == false) then
+	if upnp.proxyVersionAtLeast(1) and not force then
 		return ""
 	end
 
@@ -822,7 +837,7 @@ Modified by:
   local function refreshVolumeNow(device)
 	debug("refreshVolumeNow: start")
 
-	if (upnp.proxyVersionAtLeast(1)) then
+	if upnp.proxyVersionAtLeast(1) then
 		return
 	end
 	local Rendering = upnp.getService(UUIDs[device], UPNP_RENDERING_CONTROL_SERVICE)
@@ -850,7 +865,7 @@ Modified by:
   local function refreshMuteNow(device)
 	debug("refreshMuteNow: start")
 
-	if (upnp.proxyVersionAtLeast(1)) then
+	if upnp.proxyVersionAtLeast(1) then
 		return
 	end
 	local Rendering = upnp.getService(UUIDs[device], UPNP_RENDERING_CONTROL_SERVICE)
@@ -1644,16 +1659,18 @@ Modified by:
   end
 
   function updateWithoutProxy(device)
-	local dn = tonumber(device) or error "updateWithoutProxy() invalid device: "..tostring(device)
-	if (upnp.proxyVersionAtLeast(1) == false) then
+	local dn = tonumber(device) or _G.error "updateWithoutProxy() invalid device: "..tostring(device)
+	refreshNow(dn, true, true)
+	if not upnp.proxyVersionAtLeast(1) then
 		local ts = luup.variable_get( UPNP_AVTRANSPORT_SID, "TransportState", dn ) or "STOPPED"
 		local rp,rs = ( luup.variable_get( SONOS_SID, "PollDelays", dn ) or "15,60" ):match( '^(%S+)%,%s*(.*)$' )
 		rp = tonumber(rp) or 15
 		rs = tonumber(rs) or 60
-		luup.call_delay("updateWithoutProxy", ts ~= "STOPPED" and rp or rs, device)
+		luup.call_delay("updateWithoutProxy", ( ts == "STOPPED" ) and rs or rp, device)
+		debug("Scheduled update for no proxy, state "..tostring(ts))
+		return
 	end
-
-	refreshNow(dn, true, true)
+	debug("Proxy found, skipping poll reschedule")
   end
 
   local function getAvailableServices(uuid)
@@ -1680,13 +1697,23 @@ Modified by:
 	return services
   end
 
+  function fixLegacyIcons()
+	function moveIcon( p )
+		local f = io.open( "/www/cmh/skins/default/icons/" .. p, "r" )
+		if not f then return end
+		f:close()
+		os.execute( "mv /www/cmh/skins/default/icons/"..p.." /etc/cmh-ludl/" )
+		os.execute( "ln -s /etc/cmh-ludl/"..p.." /www/cmh/skins/default/img/devices/device_states/" )
+	end
+	moveIcon( "Sonos.png" )
+	for k=0,150,25 do moveIcon( "Sonos_"..tostring(k)..".png" ) end
+  end
+
   function setup(device, init)
 	device = tonumber(device)
 
 	local changed = false
 	local info
-
-	setData( "PollDelays", "15,60", device, changed )
 
 	local newDevice = false
 	local newIP
@@ -1780,39 +1807,42 @@ Modified by:
 	end
 	changed = setData("SonosModel", string.format("%d", model), device, changed)
 
-	if icon ~= nil and values.modelNumber then
+	if icon then
 		iconURL = icon
-	else
-		iconURL = PLUGIN_ICON:format(VERA_IP, VERA_WEB_PORT)
-	end
-
-	luup.log( string.format("%s: %s is %q, %s (%s) %s", MSG_CLASS,
-		tostring( ip[device] ),
-		tostring( modelName ),
-		tostring( values.modelNumber ), model,
-		tostring( values.UDN )
-		)
-	)
-
-	if values.modelNumber then
-		-- Maybe tune static JSON to device
+		-- Set up local copy of icon from device and static JSON pointing to it
+		-- (so icon works both locally and remote)
 		local installPath = "/etc/cmh-ludl/" -- Vera default
 		if isOpenLuup then -- ??? FIXME
 			local loader = require "openLuup.loader"
 			if loader.find_file == nil then
-				luup.log("This version of the Sonos plugin requires openLuup 2018.11 or higher", 2)
+				warning("This version of the Sonos plugin requires openLuup 2018.11 or higher")
 				installPath = "./" -- punt
 			else
 				installPath = loader.find_file( "D_Sonos1.json" ):gsub( "D_Sonos1.json$", "" )
 			end
+		else
+			-- Always (re)link default icon path. This is UI7.
+			os.execute( "ln -sf "..installPath.."Sonos.png /www/cmh/skins/default/img/devices/device_states/" )
+		end
+		-- See if there's a local copy of the icon
+		local f
+		local iconFile = string.format( "Sonos_%s%s", values.modelNumber, icon:match( "[^/]+$" ):match( "%..+$" ) )
+		local f = io.open( installPath .. iconFile, "r" )
+		if f then f:close() else
+			log( string.format("fetching device icon from %s to %s%s", iconURL, installPath, iconFile ) )
+			os.execute( "curl -s -o "..installPath..iconFile.." '"..iconURL.."'" )
+			if not isOpenLuup then
+				-- Link icon to UI7 default icon path
+				os.execute( "ln -sf "..installPath..iconFile.." /www/cmh/skins/default/img/devices/device_states/" )
+			end
 		end
 		-- See if we've already created a custom static JSON for this UDN or model.
-		local staticJSONFile, f
+		local staticJSONFile
 		if values.UDN then
 			staticJSONFile = string.format( "D_Sonos1_%s.json", tostring( values.UDN ):gsub( "^uuid:", "" ):gsub( "[^a-zA-Z0-9_]", "_" ) )
 			f = io.open( installPath .. staticJSONFile, "r" )
 			if f then
-				luup.log( string.format( "%s: using device-specific UI %s", MSG_CLASS, staticJSONFile ) )
+				log( string.format( "using device-specific UI %s", staticJSONFile ) )
 				f:close()
 			else
 				staticJSONFile = nil
@@ -1825,21 +1855,21 @@ Modified by:
 		if not f then
 			-- No. Create model-specific version
 			f = io.open( installPath .. "D_Sonos1.json", "r" )
-			if not f then error "Can't read generic static JSON file" end
+			if not f then _G.error "Can't read generic static JSON file" end
 			local s = f:read("*a")
 			f:close()
 			local json = require "dkjson"
 			local d = json.decode( s )
-			if not d then error "Can't parse generic static JSON file" end
-			-- Modify to new icon
-			d.flashicon = iconURL
-			d.default_icon = iconURL
-			d.state_icons = { iconURL }
+			if not d then _G.error "Can't parse generic static JSON file" end
+			-- Modify to new icon in default path
+			d.default_icon = iconFile
+			d.flashicon = iconFile
+			d.state_icons = { iconFile }
 			d._comment = "AUTOMATICALLY GENERATED -- DO NOT MODIFY THIS FILE"
 			-- Save it.
 			f = io.open( installPath .. staticJSONFile, "w" )
 			if not f then
-				luup.log( string.format("%s: can't write %s%s", MSG_CLASS, installPath, staticJSONFile), 1)
+				error( string.format("can't write %s%s", installPath, staticJSONFile), 1)
 				staticJSONFile = nil
 			else
 				f:write( json.encode( d ) )
@@ -1851,17 +1881,28 @@ Modified by:
 		local cj = luup.attr_get( 'device_json', device ) or ""
 		if staticJSONFile and cj ~= staticJSONFile then
 			-- No. Switch it out.
-			luup.log(string.format("%s: device_json currently %s, swapping to %s (and reloading)", MSG_CLASS, cj, staticJSONFile ), 2)
+			warning(string.format("device_json currently %s, swapping to %s (and reloading)", MSG_CLASS, cj, staticJSONFile ))
 			luup.attr_set( 'device_json', staticJSONFile, device )
 			luup.reload()
 		end
+	else
+		iconURL = PLUGIN_ICON
 	end
+
+	log( string.format("#%s at %s is %q, %s (%s) %s",
+		tostring( device ),
+		tostring( ip[device] ),
+		tostring( modelName ),
+		tostring( values.modelNumber ), model,
+		tostring( values.UDN )
+		)
+	)
 
 	if (device ~= 0 and (init or newDevice or newOnline)) then
 		upnp.subscribeToEvents(device, VERA_IP, EventSubscriptions, SONOS_SID, uuid)
 	end
 
-	if (upnp.proxyVersionAtLeast(1)) then
+	if upnp.proxyVersionAtLeast(1) then
 		changed = setData("ProxyUsed", "proxy is in use", device, changed)
 		BROWSE_TIMEOUT = 30
 	else
@@ -1874,7 +1915,7 @@ Modified by:
 		metaDataKeys[uuid] = loadServicesMetaDataKeys(device)
 	end
 
-	if (init or newDevice or newOnline or upnp.proxyVersionAtLeast(1) == false) then
+	if (init or newDevice or newOnline or not upnp.proxyVersionAtLeast(1) ) then
 		-- Sonos playlists
 		info = upnp.browseContent(uuid, UPNP_MR_CONTENT_DIRECTORY_SERVICE, "SQ:", false, "dc:title", parseSavedQueues, BROWSE_TIMEOUT)
 		changed = setData("SavedQueues", info, device, changed)
@@ -2122,7 +2163,7 @@ Modified by:
   end
 
   function SonosReload()
-	luup.call_action("urn:micasaverde-com:serviceId:HomeAutomationGateway1", "Reload", {}, 0)
+	luup.reload()
   end
 
   -- Check that the proxy is running.
@@ -2130,9 +2171,11 @@ Modified by:
 
 	local proxy = false
 	local version = upnp.getProxyApiVersion()
-	if (version) then
-		log("UPnP event proxy identified - API version " .. version)
+	if version then
+		log("UPnP Event Proxy identified - API version " .. version)
 		proxy = true
+	else
+		warning("UPnP Event Proxy plugin could not be contacted; polling for status will be used. This is inefficient; please consider installing the plugin from the marketplace.")
 	end
 
 	if ( not proxy ) then
@@ -2169,17 +2212,18 @@ Modified by:
   end
 
   function sonosStartup(lul_device)
-	log("#" .. lul_device .. " starting up with id " .. luup.devices[lul_device].id)
+	log("version " .. PLUGIN_VERSION .. " starting up #" .. lul_device .. " ("
+		.. luup.devices[lul_device].description .. ")")
 
-	luup.variable_set(SONOS_SID, "PluginVersion", PLUGIN_VERSION, lul_device)
+	pcall( fixLegacyIcons )
 
-	local enabled = luup.variable_get(SONOS_SID, "Enabled", lul_device) or ""
-	if "" == enabled then
-		enabled = "1"
-		luup.variable_set(SONOS_SID, "Enabled", enabled, lul_device)
-	end
+	setData( "PluginVersion", PLUGIN_VERSION, lul_device, false )
+	initData( "PollDelays", "15,60", lul_device )
+
+	local enabled = initData( "Enabled", "1", lul_device )
 	if "0" == enabled then
-		warning("#"..lul_device.." disabled via state variable; start aborting.")
+		warning("#"..lul_device.." disabled via state variable config; start aborting.")
+		deviceIsOffline( lul_device )
 		return
 	end
 
@@ -2247,7 +2291,7 @@ Modified by:
 
 	port = 1400
 	descriptionURL = "http://%s:%s/xml/device_description.xml"
-	iconURL = PLUGIN_ICON:format(VERA_IP, VERA_WEB_PORT)
+	iconURL = PLUGIN_ICON
 
 	if (upnp.isDiscoveryPatchInstalled(VERA_LOCAL_IP)) then
 		luup.variable_set(SONOS_SID, "DiscoveryPatchInstalled", "1", lul_device)
@@ -3831,7 +3875,7 @@ Modified by:
 	  else
 		  luup.variable_set(SONOS_SID, "DiscoveryPatchInstalled", "0", lul_device)
 	  end
-	  if (reload) then
+	  if reload then
 		  luup.call_delay("SonosReload", 2, "")
 	  end
 	</run>
@@ -3853,7 +3897,7 @@ Modified by:
 	  else
 		  luup.variable_set(SONOS_SID, "DiscoveryPatchInstalled", "0", lul_device)
 	  end
-	  if (reload) then
+	  if reload then
 		  luup.call_delay("SonosReload", 2, "")
 	  end
 	</run>
