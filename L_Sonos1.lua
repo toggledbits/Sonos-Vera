@@ -236,10 +236,8 @@ function UPnP_request(controlURL, action, servicetype, args)
   --
   -- Flatten the resultTable into a regular string
   --
-  local data = ""
-  for i, v in ipairs(resultTable) do
-    data = data .. v
-  end
+  local data = table.concat( resultTable, "" )
+  resultTable = nil
   
   if (status == nil) then
     --
@@ -950,8 +948,8 @@ end
         return nil
     elseif (request == nil and code ~= "closed") then
         -- Proxy not running.
-        error("Cannot contact UPnP event proxy: " .. code)
-        return ""
+        warning("Cannot contact UPnP Event Proxy: " .. code)
+        return nil
     else
         -- Proxy is running, note its version number.
         ProxyApiVersion = table.concat(t)
@@ -964,11 +962,8 @@ end
   -- proxyVersionAtLeast(n)
   -- Returns true if the proxy is running and is at least version n.
   function proxyVersionAtLeast(n)
-    if ProxyApiVersion then
-        local version = tonumber(ProxyApiVersion:match("^(%d+)"))
-        if version and version >= n then return true end
-    end
-    return false
+    local v = tonumber(ProxyApiVersion or "")
+    return v and v >= n or false
   end
 
 
