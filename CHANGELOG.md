@@ -2,6 +2,8 @@
 
 ## Version 1.4.3 (development)
 
+* rigpapa: Dynamic icon by mashing up static JSON on the fly using device description URL. Should eliminate need to change code when new devices are released just to get the icon right.
+* rigpapa: Implement variable polling for when UPnP Event Proxy is not installed to reduce system load and network traffic; configurable: polling rates are controlled by PollDelay, default 15,60; polls every 15 seconds except when player stopped, then every 60 seconds.
 * rigpapa: Attempt to incorporate, if not literally at least the intent of, all changes since 1.4 (including a somewhat published 1.4.1 and fractionally available parts of the whole).
 * rigpapa: Resolve conflicts between Vera Luup's needs and openLuup's needs for TTS (problem noted below with 1.4.1).
 * rigpapa: Fix ResponsiveVoiceTTS (2019).

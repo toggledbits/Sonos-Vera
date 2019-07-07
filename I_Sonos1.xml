@@ -147,6 +147,8 @@ Modified by:
 		SonosID = UPNP_DEVICE_PROPERTIES_SID,
 		SonosModelName = SONOS_SID,
 		SonosModel = SONOS_SID,
+		SonosModelNumber = SONOS_SID,
+		PollDelays = SONOS_SID
 
 		ProxyUsed = SONOS_SID
   }
@@ -1643,7 +1645,11 @@ Modified by:
 
   function updateWithoutProxy(device)
 	if (upnp.proxyVersionAtLeast(1) == false) then
-		luup.call_delay("updateWithoutProxy", 15, device)
+		local ts = luup.variable_get( UPNP_AVTRANSPORT_SID, "TransportState", device ) or "STOPPED"
+		local rp,rs = ( luup.variable_get( SONOS_SID, "PollDelays", device ) or "15,60" ):match( '^(%S+)%,%s*(.*)$' )
+		rp = tonumber(rp) or 15
+		rs = tonumber(rs) or 60
+		luup.call_delay("updateWithoutProxy", ts ~= "STOPPED" and rp or rs, device)
 	end
 	device = tonumber(device)
 
@@ -1679,6 +1685,8 @@ Modified by:
 
 	local changed = false
 	local info
+
+	setData( "PollDelays", "15,60", device, changed )
 
 	local newDevice = false
 	local newIP
@@ -1772,10 +1780,73 @@ Modified by:
 	end
 	changed = setData("SonosModel", string.format("%d", model), device, changed)
 
-	if (icon ~= nil) then
+	if icon ~= nil and values.modelNumber then
 		iconURL = icon
 	else
 		iconURL = PLUGIN_ICON:format(VERA_IP, VERA_WEB_PORT)
+	end
+
+	if values.modelNumber then
+		-- Maybe tune static JSON to device
+		local installPath = "/etc/cmh-ludl/" -- Vera default
+		if isOpenLuup then -- ??? FIXME
+			local loader = require "openLuup.loader"
+			if loader.find_file == nil then
+				luup.log("This version of the Sonos plugin requires openLuup 2018.11 or higher", 2)
+				installPath = "./" -- punt
+			else
+				installPath = loader.find_file( "D_Sonos1.json" ):gsub( "D_Sonos1.json$", "" )
+			end
+		end
+		-- See if we've already created a custom static JSON for this UDN or model.
+		local staticJSONFile, f
+		if values.UDN then
+			staticJSONFile = string.format( "D_Sonos1_%s.json", tostring( values.UDN ):gsub( "^uuid:", "" ):gsub( "[^a-zA-Z0-9_]", "_" ) )
+			f = io.open( installPath .. staticJSONFile, "r" )
+			if f then
+				luup.log( string.format( "%s: using device-specific UI %s", MSG_CLASS, staticJSONFile ) )
+				f:close()
+			else
+				staticJSONFile = nil
+			end
+		end
+		if not staticJSONFile then
+			staticJSONFile = string.format( "D_Sonos1_%s.json", tostring( values.modelNumber or "generic" ):gsub( "[^a-zA-Z0-9_]", "_" ) )
+		end
+		f = io.open( installPath .. staticJSONFile, "r" )
+		if not f then
+			-- No. Create model-specific version
+			f = io.open( installPath .. "D_Sonos1.json", "r" )
+			if not f then error "Can't read generic static JSON file" end
+			local s = f:read("*a")
+			f:close()
+			local json = require "dkjson"
+			local d = json.decode( s )
+			if not d then error "Can't parse generic static JSON file" end
+			-- Modify to new icon
+			d.flashicon = iconURL
+			d.default_icon = iconURL
+			d.state_icons = { iconURL }
+			d._comment = "AUTOMATICALLY GENERATED -- DO NOT MODIFY THIS FILE"
+			-- Save it.
+			f = io.open( installPath .. staticJSONFile, "w" )
+			if not f then 
+				luup.log( string.format("%s: can't write %s%s", MSG_CLASS, installPath, staticJSONFile), 1)
+				staticJSONFile = nil
+			else
+				f:write( json.encode( d ) )
+				-- note we're leaving f open for later close
+			end
+		end
+		if f then f:close() end
+		-- Is this device using the right static JSON file?
+		local cj = luup.attr_get( 'device_json', device ) or ""
+		if staticJSONFile and cj ~= staticJSONFile then
+			-- No. Switch it out.
+			luup.log(string.format("%s: device_json currently %s, swapping to %s (and reloading)", MSG_CLASS, cj, staticJSONFile ), 2)
+			luup.attr_set( 'device_json', staticJSONFile, device )
+			luup.reload()
+		end
 	end
 
 	if (device ~= 0 and (init or newDevice or newOnline)) then
@@ -2093,7 +2164,7 @@ Modified by:
 	log("#" .. lul_device .. " starting up with id " .. luup.devices[lul_device].id)
 
 	luup.variable_set(SONOS_SID, "PluginVersion", PLUGIN_VERSION, lul_device)
-	
+
 	local enabled = luup.variable_get(SONOS_SID, "Enabled", lul_device) or ""
 	if "" == enabled then
 		enabled = "1"
