@@ -7,13 +7,14 @@ Modified by:
 	cybermage for ResponsiveVoice
 	reneboer to combine both the above and some usability
 	rigpapa fix responsivevoice and Vera incompat
+		    add @cranb suggested recognition for newer One
 -->
 <functions>
   local url = require("socket.url")
 
   local MSG_CLASS = "Sonos"
 
-  local PLUGIN_VERSION = "1.4.3"
+  local PLUGIN_VERSION = "1.4.3-19188"
 
   local DEBUG_MODE = false
   local taskHandle = -1
@@ -1747,6 +1748,7 @@ Modified by:
 		modelName = upnp.decode(modelName)
 	end
 	changed = setData("SonosModelName", modelName or "", device, changed)
+	changed = setData("SonosModelNumber", values.modelNumber or "", device, changed)
 	local model = 0
 	if (values.modelNumber == "S3") then
 		model = 1
@@ -1764,6 +1766,9 @@ Modified by:
 		model = 5
 	elseif (values.modelNumber == "S1") then
 		model = 6
+	elseif values.modelNumber == "S12" then
+		-- Newer hardware revision of Play 1
+		model = 6 -- 2019-07-05 rigpapa; from @cranb https://community.getvera.com/t/version-1-4-3-development/209171/11
 	end
 	changed = setData("SonosModel", string.format("%d", model), device, changed)
 
