@@ -1,1231 +1,3634 @@
-module("L_Sonos1", package.seeall)
---[[ 
-Verion 1.4+
-Modified by:
-	explorer for openLuup
-	cybermage for ResponsiveVoice
-	reneboer to combine both the above and some usability
+module( "L_Sonos1", package.seeall )
 
-]]
+local PLUGIN_VERSION = "1.4.3-19191"
 
 local url = require("socket.url")
-local socket = require("socket")
-local http = require("socket.http")
-local ltn12 = require("ltn12")
 
--- 5 Second timeout
-local HTTP_TIMEOUT = 5
+local MSG_CLASS = "Sonos"
 
-local IPTABLES_PARAM = "-d 224.0.0.0/4 -j SNAT --to-source %s"
-local IPTABLES_CMD = "iptables -t nat -%s POSTROUTING %s"
+local DEBUG_MODE = true
+local isOpenLuup = false -- ??? rigpapa: needs implementation
+local taskHandle = -1
 
-local UPNP_DISCOVERY = "M-SEARCH * HTTP/1.1\r\nHOST: 239.255.255.250:1900\r\nMAN: \"ssdp:discover\"\r\nMX: 5\r\nST: %s\r\n\r\n"
+local TASK_ERROR = 2
+local TASK_ERROR_PERM = -2
+local TASK_SUCCESS = 4
+-- local TASK_BUSY = 1
 
-local UPNP_REQUEST = [[<?xml version="1.0" encoding="utf-8"?>
-<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
-<s:Body>
-<u:%s xmlns:u="%s">%s</u:%s>
-</s:Body>
-</s:Envelope>]]
+local VERA_LOCAL_IP
+local VERA_IP
+local VERA_WEB_PORT = 80
 
-local DIDL_FORMAT=[[<DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/">
-<item id="%s" parentID="%s" restricted="true">
-<res protocolInfo="x-file-cifs:*:audio/mpeg:*">%s</res>
-<r:streamContent>%s</r:streamContent>
-<upnp:albumArtURI>%s</upnp:albumArtURI>
-<dc:title>%s</dc:title>
-<upnp:class>%s</upnp:class>
-<dc:creator>%s</dc:creator>
-<upnp:album>%s</upnp:album>
-<upnp:originalTrackNumber>%s</upnp:originalTrackNumber>
-<r:albumArtist>%s</r:albumArtist>
-</item>
-</DIDL-Lite>
-]]
+local UPNP_AVTRANSPORT_SERVICE = 'urn:schemas-upnp-org:service:AVTransport:1'
+local UPNP_RENDERING_CONTROL_SERVICE = 'urn:schemas-upnp-org:service:RenderingControl:1'
+local UPNP_GROUP_RENDERING_CONTROL_SERVICE = 'urn:schemas-upnp-org:service:GroupRenderingControl:1'
+-- local UPNP_DEVICE_PROPERTIES_SERVICE = 'urn:schemas-upnp-org:service:DeviceProperties:1'
+-- local UPNP_CONNECTION_MANAGER_SERVICE = 'urn:schemas-upnp-org:service:ConnectionManager:1'
+local UPNP_ZONEGROUPTOPOLOGY_SERVICE = 'urn:schemas-upnp-org:service:ZoneGroupTopology:1'
+local UPNP_MUSICSERVICES_SERVICE = 'urn:schemas-upnp-org:service:MusicServices:1'
+local UPNP_MR_CONTENT_DIRECTORY_SERVICE = 'urn:schemas-upnp-org:service:ContentDirectory:1'
 
-local log = print
-local warning = print
-local error = print
-local contentType
-local Services = {}
-local subscriptionQueue = {}
+local UPNP_AVTRANSPORT_SID = 'urn:upnp-org:serviceId:AVTransport'
+local UPNP_RENDERING_CONTROL_SID = 'urn:upnp-org:serviceId:RenderingControl'
+-- local UPNP_GROUP_RENDERING_CONTROL_SID = 'urn:upnp-org:serviceId:GroupRenderingControl'
+local UPNP_DEVICE_PROPERTIES_SID = 'urn:upnp-org:serviceId:DeviceProperties'
+-- local UPNP_CONNECTION_MANAGER_SID = 'urn:upnp-org:serviceId:ConnectionManager'
+local UPNP_ZONEGROUPTOPOLOGY_SID = 'urn:upnp-org:serviceId:ZoneGroupTopology'
+-- local UPNP_MUSICSERVICES_SID = 'urn:upnp-org:serviceId:MusicServices'
+local UPNP_MR_CONTENT_DIRECTORY_SID = 'urn:upnp-org:serviceId:ContentDirectory'
 
--- Shared tables indexed by Vera devices
-local ips = {}
+if (package.path:find("/etc/cmh-ludl/?.lua;/etc/cmh-lu/?.lua", 1, true) == nil) then
+	package.path = package.path..";/etc/cmh-ludl/?.lua;/etc/cmh-lu/?.lua"
+end
+package.loaded.L_SonosUPnP = nil
+package.loaded.L_SonosTTS = nil
+
+local upnp = require "L_SonosUPnP"
+local tts = require "L_SonosTTS"
+
+-- Table of Sonos IP addresses indexed by Vera devices
+local ip = {}
+local port
+local descriptionURL
+local iconURL
+
+local HADEVICE_SID = "urn:micasaverde-com:serviceId:HaDevice1"
+local SONOS_SID = "urn:micasaverde-com:serviceId:Sonos1"
+local SONOS_DEVICE_TYPE = "urn:schemas-micasaverde-com:device:Sonos:1"
+
+local EventSubscriptions = {
+	{ service = UPNP_AVTRANSPORT_SERVICE,
+	eventVariable = "LastChange",
+	actionName = "NotifyAVTransportChange",
+	id = "",
+	expiry = "" },
+	{ service = UPNP_RENDERING_CONTROL_SERVICE,
+	eventVariable = "LastChange",
+	actionName = "NotifyRenderingChange",
+	id = "",
+	expiry = "" },
+	{ service = UPNP_ZONEGROUPTOPOLOGY_SERVICE,
+	eventVariable = "ZoneGroupState",
+	actionName = "NotifyZoneGroupTopologyChange",
+	id = "",
+	expiry = "" },
+	{ service = UPNP_MR_CONTENT_DIRECTORY_SERVICE,
+	eventVariable = "ContainerUpdateIDs",
+	actionName = "NotifyContentDirectoryChange",
+	id = "",
+	expiry = "" }
+}
+
+local PLUGIN_ICON = "Sonos.png"
+
+local QUEUE_URI = "x-rincon-queue:%s#0"
+
 local playbackCxt = {}
 local sayPlayback = {}
+
+-- Table of Sonos UUIDs indexed by Vera devices
 local UUIDs = {}
 
--- Shared tables indexed by Sonos UUIDs
+local groupsState = ""
+
+local sonosServices = {}
+
+-- Tables indexed by Sonos UUIDs
 local metaDataKeys = {}
 local dataTable = {}
 
-function initialize(logger, warningLogger, errorLogger, ct)
-  log = logger
-  warning = warningLogger
-  error = errorLogger
-  contentType = ct or 'text/xml; charset="utf-8"'
-  return ips, playbackCxt, sayPlayback, UUIDs, metaDataKeys, dataTable
+local variableSidTable = {
+	TransportState = UPNP_AVTRANSPORT_SID,
+	TransportStatus = UPNP_AVTRANSPORT_SID,
+	TransportPlaySpeed = UPNP_AVTRANSPORT_SID,
+	CurrentPlayMode = UPNP_AVTRANSPORT_SID,
+	CurrentCrossfadeMode = UPNP_AVTRANSPORT_SID,
+	CurrentTransportActions = UPNP_AVTRANSPORT_SID,
+	NumberOfTracks = UPNP_AVTRANSPORT_SID,
+	CurrentMediaDuration = UPNP_AVTRANSPORT_SID,
+	AVTransportURI = UPNP_AVTRANSPORT_SID,
+	AVTransportURIMetaData = UPNP_AVTRANSPORT_SID,
+	CurrentRadio = UPNP_AVTRANSPORT_SID,
+	CurrentService = SONOS_SID,
+	CurrentTrack = UPNP_AVTRANSPORT_SID,
+	CurrentTrackDuration = UPNP_AVTRANSPORT_SID,
+	CurrentTrackURI = UPNP_AVTRANSPORT_SID,
+	CurrentTrackMetaData = UPNP_AVTRANSPORT_SID,
+	CurrentStatus = UPNP_AVTRANSPORT_SID,
+	CurrentTitle = UPNP_AVTRANSPORT_SID,
+	CurrentArtist = UPNP_AVTRANSPORT_SID,
+	CurrentAlbum = UPNP_AVTRANSPORT_SID,
+	CurrentDetails = UPNP_AVTRANSPORT_SID,
+	CurrentAlbumArt = UPNP_AVTRANSPORT_SID,
+	RelativeTimePosition = UPNP_AVTRANSPORT_SID,
+
+	Mute = UPNP_RENDERING_CONTROL_SID,
+	Volume = UPNP_RENDERING_CONTROL_SID,
+
+	SavedQueues = UPNP_MR_CONTENT_DIRECTORY_SID,
+	FavoritesRadios = UPNP_MR_CONTENT_DIRECTORY_SID,
+	Favorites = UPNP_MR_CONTENT_DIRECTORY_SID,
+	Queue = UPNP_MR_CONTENT_DIRECTORY_SID,
+
+	GroupCoordinator = SONOS_SID,
+	ZonePlayerUUIDsInGroup = UPNP_ZONEGROUPTOPOLOGY_SID,
+	ZoneGroupState = UPNP_ZONEGROUPTOPOLOGY_SID,
+
+	SonosOnline = SONOS_SID,
+	ZoneName = UPNP_DEVICE_PROPERTIES_SID,
+	SonosID = UPNP_DEVICE_PROPERTIES_SID,
+	SonosModelName = SONOS_SID,
+	SonosModel = SONOS_SID,
+	SonosModelNumber = SONOS_SID,
+	PollDelays = SONOS_SID,
+	PluginVersion = SONOS_SID,
+	Enabled = SONOS_SID,
+
+	ProxyUsed = SONOS_SID
+}
+
+local BROWSE_TIMEOUT = 5
+local fetchQueue = true
+
+local idConfRefresh = 0
+
+local function log(stuff, level)
+	luup.log(string.format("%s: %s", MSG_CLASS, tostring(stuff)), (level or 50))
 end
 
-function decode(val)
-      return val:gsub("&#38;", '&')
-                :gsub("&#60;", '<')
-                :gsub("&#62;", '>')
-                :gsub("&#34;", '"')
-                :gsub("&#39;", "'")
-                :gsub("&lt;", "<")
-                :gsub("&gt;", ">")
-                :gsub("&quot;", '"')
-                :gsub("&apos;", "'")
-                :gsub("&amp;", "&")
+local function warning(stuff)
+	log("warning: " .. tostring(stuff), 2)
 end
 
-local function encode(val)
-      return val:gsub("&", "&amp;")
-                :gsub("<", "&lt;")
-                :gsub(">", "&gt;")
-                :gsub('"', "&quot;")
-                :gsub("'", "&apos;")
+local function error(stuff)
+	log("error: " .. tostring(stuff), 1)
 end
 
-function unformatXML(val)
-      return val:gsub("^%s+<", "<")
-                :gsub(">%s+$", ">")
-                :gsub(">%s+<", "><")
+local function debug(stuff)
+	if DEBUG_MODE then log("debug: " .. tostring(stuff)) end
 end
 
-function createDIDL(resURI, creator, album, title, artist, streamContent, albumArtURI, trackNumber, class, id, parentID)
-  return DIDL_FORMAT:format(encode(id or 1),
-                            encode(parentID or -1),
-                            encode(resURI or ""),
-                            encode(streamContent or ""),
-                            encode(albumArtURI or ""),
-                            encode(title or "No title"),
-                            encode(class or "object.item.audioItem.musicTrack"),
-                            encode(creator or ""),
-                            encode(album or ""),
-                            encode(trackNumber or 1),
-                            encode(artist or "No artist"))
-end
-
--- Send a UPnP SUBSCRIBE to the UPnP device,
--- Return value on success:
---   SID (subscription ID) provided by the device.
---   Duration (in seconds) before the subscription must be renewed
--- Return value on failure:
---   nil
---   Reason for failure (string)
--- Code coming from Wemo plugin (function subscribeToDevice) and adjusted
-function UPnP_subscribe(eventSubURL, callbackURL, renewalSID)
-
-	-- Create a socket with a timeout.
-	local sock = function()
-		local s = socket.tcp()
-		s:settimeout(HTTP_TIMEOUT)
-		return s
-	end
-
-	local headers = {
-		["TIMEOUT"] = "Second-3600",
-	}
-
-	if (renewalSID) then
-		-- Renewing, include SID header.
-		headers["SID"] = renewalSID
+local function task(text, mode)
+	luup.log("task " .. text)
+	if (mode == TASK_ERROR_PERM) then
+		taskHandle = luup.task(text, TASK_ERROR, MSG_CLASS, taskHandle)
 	else
-		-- New subscription, include CALLBACK and NT headers
-		headers["CALLBACK"] = string.format("<%s>", callbackURL)
-		headers["NT"] = "upnp:event"
-	end
+		taskHandle = luup.task(text, mode, MSG_CLASS, taskHandle)
 
-	-- Ask the device to inform the proxy about status changes.
-	local request, code, headers = http.request({
-		url = eventSubURL,
-		method = "SUBSCRIBE",
-		headers = headers,
-		create = sock,
-	})
-
-	if (request == nil and code ~= "closed") then
-		error("Failed to subscribe to " .. eventSubURL .. ": " .. code)
-		return nil, code
-	elseif (code ~= 200) then
-		error("Failed to subscribe to " .. eventSubURL .. ": " .. code)
-		return nil, code
-	else
-		local duration = headers["timeout"]:match("Second%-(%d+)")
-		log("Subscription confirmed, SID = " .. headers["sid"] .. " with timeout " .. duration)
-		return headers["sid"], tonumber(duration)
+		-- Clear the previous error, since they're all transient
+		if (mode ~= TASK_SUCCESS) then
+			luup.call_delay("clearTask", 30, "", false)
+		end
 	end
 end
-  
-  
-function UPnP_request(controlURL, action, servicetype, args)
-  local function table2XML(value)
-    local result = ""
-
-    if (args == nil) then
-        return result
-    end
-
-    --
-    -- Convert all the Number, Boolean and Table objects, and escape all the string
-    -- values in the XML output stream
-    --
-    -- If value table has an entry OrderedArgs, we consider that all the values
-    -- are set in this special entry and we bypass all the other values of the value table.
-    -- In this particular case, this entry itself is a table of strings, each element of
-    -- the table following the format "parameter=value"
-    --
-    if (value.OrderedArgs ~= nil and type(value.OrderedArgs) == "table") then
-        for i, val in ipairs(value.OrderedArgs) do
-            local e, v = val:match("([^=]+)=(.*)")
-            if (e ~= nil) then
-                if (v == nil) then
-                    result = result .. string.format("<%s />", e)
-                elseif (type(v) == "table") then
-                    result = result .. table2XML(v)
-                elseif (type(v) == "number") then
-                    result = result .. string.format("<%s>%.0f</%s>", e, v, e)
-                elseif (type(v) == "boolean") then
-                    result = result .. string.format("<%s>%s</%s>", e, (v and "1" or "0"), e)
-                else
-                    result = result .. string.format("<%s>%s</%s>", e, encode(v), e)
-                end
-            end
-        end
-    else
-        for e, v in pairs(value) do
-            if (v == nil) then
-                result = result .. string.format("<%s />", e)
-            elseif (type(v) == "table") then
-                result = result .. table2XML(v)
-            elseif (type(v) == "number") then
-                result = result .. string.format("<%s>%.0f</%s>", e, v, e)
-            elseif (type(v) == "boolean") then
-                result = result .. string.format("<%s>%s</%s>", e, (v and "1" or "0"), e)
-            else
-                result = result .. string.format("<%s>%s</%s>", e, encode(v), e)
-            end
-        end
-    end
-
-    return result
-  end
-
-  local postBody = string.format(UPNP_REQUEST, action, servicetype, table2XML(args), action)
-  log(string.format("UPnP_request: url=[%s], body=[%s]", controlURL, postBody))
-
-  --
-  -- Execute the resulting URL, and collect the results as a Table
-  --
-  local resultTable = {}
-  local status, statusMsg = http.request{
-    url = controlURL,
-    sink = ltn12.sink.table(resultTable),
-    method = "POST",
-    headers = {["Accept"] = "*/*",
-               ["SOAPAction"] = '"' .. servicetype .. "#" .. action .. '"',
-               ["Connection"] = "close",
-               ["Content-Length"] = postBody:len(),
-               ["Content-Type"] = contentType},
-    source = ltn12.source.string(postBody),
-  }
-
-  --
-  -- Flatten the resultTable into a regular string
-  --
-  local data = table.concat( resultTable, "" )
-  resultTable = nil
-  
-  if (status == nil) then
-    --
-    -- Handle TIMEOUT
-    --
-    return false, statusMsg or "An error occurred during the UPnP call"
-  end
-  
-  if (tostring(statusMsg) == "200") then
-    --
-    -- Handle SUCCESS
-    --
-    log(string.format("UPnP_request: status=%s statusMsg=%s result=[%s]", status or "no status",
-                      statusMsg or "no message",
-                      data or "no result"))
-
-    if (data == nil or data == "") then
-      return true, ""
-    else
-      local pattern = string.format('<.-:Body><.-:%sResponse%%sxmlns:.-="urn:.-">(.*)</.-:%sResponse></.-:Body></.-:Envelope>',
-                                    action, action)
-      local value = unformatXML(data):match(pattern) or ""
-
-      -- TODO: Handle UPnP Error responses
-      -- TODO: Handle Non-Scalar results
-
-      -- commented out and returns a simple string instead. Due to multiple tags (not nested though)
-      --      [[local dataTable = {}
-      --      for tagBegin, value, tagEnd in value:gmatch("<(.*)>(.*)</(.*)>") do
-      --        print(tagBegin .. " -> " .. value .. " <- " .. tagEnd)
-      --        dataTable[tagBegin] = value
-      --      end
-
-      --     return dataTable]]
-      return true, value
-    end
-  else
-    --
-    -- UNKNOWN ERROR
-    --
-    error(string.format("UPnP_request (%s, %s): status=%s statusMsg=%s result=[%s]",
-                      action or "no action",
-                      servicetype or "no servicetype",
-                      status or "no status",
-                      statusMsg or "no message",
-                      data or "no result"))
-
-    assert("Unhandled Response statusMsg=" .. statusMsg)
-  end
-end -- function UPnP_request
 
 --
--- Return a handle to a UPnP Service object.
--- This can be used to call arbitrary Service Methods on that service using dynamic naming foo.
+-- Has to be "non-local" in order for MiOS to call it :(
 --
-function service(controlURL, servicetype, actions)
-    local self = {}
-    local mt = {}
-
-    mt.__index = function(table, key)
-        log("service.__index: Accessing non-existing function " .. key)
-
-        local fn = function(...)
-            if (actions[key]) then
-                log(string.format("%s('%s', '%s') Called with parameter count=%d", key, controlURL, servicetype, select("#", ...)))
-                return UPnP_request(controlURL, key, servicetype, ...)
-            else
-                return false, "action not available"
-            end
-        end
-
-        table[key] = fn
-        return fn
-    end
-
-    setmetatable(self, mt)
-
-    return self
+function clearTask()
+	task("Clearing...", TASK_SUCCESS)
 end
 
+local function defaultValue(arr, val, default)
+	if (arr == nil or arr[val] == nil or arr[val] == "") then
+		return default
+	else
+		return arr[val]
+	end
+end
 
---------------------------------------------------------------------------------
--- UPnP discovery
---------------------------------------------------------------------------------
+local function setData(name, value, deviceId, default)
+	local uuid = UUIDs[deviceId] or ""
+	if (uuid ~= "" and dataTable[uuid] ~= nil) then
+		dataTable[uuid][name] = value
+	end
 
+	if (deviceId == 0 or variableSidTable[name] == nil) then
+		error(string.format("setData() can't set %s on %d no SID!", tostring(name), deviceId))
+		return (default or false)
+	end
 
-function isDiscoveryPatchInstalled(ip)
-	local cmd = IPTABLES_CMD:format("S", "")
-	cmd = cmd .. "| grep \"^-A POSTROUTING " .. IPTABLES_PARAM:format(ip):gsub("%.", "\\.") .. "\""
-	if (os.execute(cmd) == 0) then
+	local curValue = luup.variable_get(variableSidTable[name], name, deviceId)
+
+	if ((value ~= curValue) or (curValue == nil)) then
+		luup.variable_set(variableSidTable[name], name, value, deviceId)
 		return true
 	else
-		return false
+		return (default or false)
 	end
 end
 
-
-function installDiscoveryPatch(ip)
-	local resu = isDiscoveryPatchInstalled(ip)
-	if (resu == false) then
-		os.execute(IPTABLES_CMD:format("I", IPTABLES_PARAM:format(ip)))
-		resu = isDiscoveryPatchInstalled(ip)
+local function initData(name, value, deviceId)
+	local uuid = UUIDs[deviceId]
+	if (uuid ~= "" and dataTable[uuid] ~= nil) then
+		dataTable[uuid][name] = value
 	end
-	return resu
-end
 
-
-function uninstallDiscoveryPatch(ip)
-	local resu = isDiscoveryPatchInstalled(ip)
-	if (resu == true) then
-		os.execute(IPTABLES_CMD:format("D", IPTABLES_PARAM:format(ip)))
-		resu = isDiscoveryPatchInstalled(ip)
+	local curValue = luup.variable_get(variableSidTable[name], name, deviceId)
+	if curValue == nil then
+		luup.variable_set(variableSidTable[name], name, value, deviceId)
+		return value
 	end
-	return not resu
+	return curValue
 end
 
-
-function UPnP_discover(target)
-    local devices = {}
-    local udp = socket.udp()
-    if (udp ~= nil) then
-        local result, message = udp:sendto(UPNP_DISCOVERY:format(target), "239.255.255.250", 1900)
-        if (result ~= nil) then
-            udp:settimeout(5)
-            for i=1,500 do
-                result, message = udp:receivefrom()
-                if (result == nil) then
-                    break
-                else
-                    local location, ip, port = result:match("[Ll][Oo][Cc][Aa][Tt][Ii][Oo][Nn]:%s?(http://([%d%.]-):(%d+)/.-)\r\n")
-                    local st = result:match("[Ss][Tt]:%s?(.-)\r\n")
-                    if (location ~= nil and ip ~= nil and port ~= nil and st ~= nil) then
-                        local new = true
-                        for i,device in ipairs(devices) do
-                            if (device.descriptionURL == location and device.st == st) then
-                                new = false
-                                break
-                            end
-                        end
-                        if (new) then
-                            table.insert(devices, { descriptionURL=location, ip=ip, port=port, st=st })
-                        end
-                    end
-                end
-            end
-        end
-        udp:close()
-    end
-    return devices
-end
-
-
-function scanUPnPDevices(deviceType, infos)
-    local xml = "<devices>"
-    local devices = UPnP_discover(deviceType)
-    for i,dev in ipairs(devices) do
-        local descrXML = UPnP_getDeviceDescription(dev.descriptionURL)
-        if (descrXML ~= nil) then
-            local values, found = getInfosFromDescription(descrXML, deviceType, infos)
-            if (found) then
-                xml = xml .. "<device>"
-                xml = xml .. "<ip>" .. (dev.ip or "") .. "</ip>"
-                xml = xml .. "<port>" .. (dev.port or "") .. "</port>"
-                xml = xml .. "<descriptionURL>" .. (dev.descriptionURL or "") .. "</descriptionURL>"
-                if (infos ~= nil) then
-                    for i,tag in ipairs(infos) do
-                        xml = xml .. "<" .. tag .. ">" .. (values[tag] or "") .. "</" .. tag .. ">"
-                    end
-                end
-                xml = xml .. "</device>"
-            end
-        end
-    end
-    xml = xml .. "</devices>"
-    return xml
-end
-
-
-function searchUPnPDevices(deviceType, name, ip)
-    local devices = UPnP_discover(deviceType)
-    for i,dev in ipairs(devices) do
-        if (ip == nil or ip == "" or ip == dev.ip) then
-            local descrXML = UPnP_getDeviceDescription(dev.descriptionURL)
-            if (descrXML ~= nil) then
-                local values = getInfosFromDescription(descrXML, deviceType, { "modelName" })
-                if (values.modelName == name) then
-                    return dev.descriptionURL
-                end
-            end
-        end
-    end
-    return nil
-end
-
-
---------------------------------------------------------------------------------
--- UPnP device and services description
---------------------------------------------------------------------------------
-
-
-function UPnP_getDeviceDescription(descriptionURL)
-    local status, xml = luup.inet.wget(descriptionURL, 5)
-    if (status ~= 0) then
-        error("UPnP_getDeviceDescription wget failed - status=" .. (status or "nil") .. " xml=" ..(xml or "nil"))
-        xml = nil
-    end
-    return xml
-end
-
-
-function getInfosFromDescription(descriptionXML, deviceType, infos)
-    local data = {}
-    local foundType = true
-    local tag, value, devices, device
-    if (infos ~= nil) then
-        foundType = false
-        local rootDevPart1, embeddedDevices, rootDevPart2 = descriptionXML:match("(<device%s?[^>]->.-)<deviceList%s?[^>]->(.-)</deviceList>(.-</device>)")
-        if (rootDevPart1 == nil or rootDevPart2 == nil or embeddedDevices == nil) then
-            devices = descriptionXML:match("(<device%s?[^>]->.*</device>)") or ""
-        elseif (deviceType ~= nil) then
-            devices = rootDevPart1 .. rootDevPart2 .. embeddedDevices
-        else
-            devices = rootDevPart1 .. rootDevPart2
-        end
-        for device in devices:gmatch("<device%s?[^>]->(.-)</device>") do
-            value = device:match("<deviceType>(.+)</deviceType>")
-            if (deviceType == nil or value == deviceType) then
-                foundType = true
-                for i,tag in ipairs(infos) do
-                    value = device:match("<"..tag..">(.+)</"..tag..">")
-                    if (value ~= nil) then
-                        data[tag] = value
-                    end
-                end
-            end
-        end
-    end
-    return data, foundType
-end
-
-
-function getIconFromDescription(descriptionXML)
-    local resultURL = nil
-    local rootDevice, icon, size, height, width, icnoURL
-    local rootDevPart1, embeddedDevices, rootDevPart2 = descriptionXML:match("(<device%s?[^>]->.-)<deviceList%s?[^>]->(.-)</deviceList>(.-</device>)")
-    if (rootDevPart1 == nil or rootDevPart2 == nil or embeddedDevices == nil) then
-        rootDevice = descriptionXML:match("(<device%s?[^>]->.*</device>)") or ""
-    else
-        rootDevice = rootDevPart1 .. rootDevPart2
-    end
-    size = 0
-    for icon in rootDevice:gmatch("<icon%s?[^>]->(.-)</icon>") do
-        height = icon:match("<height>(.+)</height>")
-        width = icon:match("<width>(.+)</width>")
-        icnoURL = icon:match("<url>(.+)</url>")
-        if (icnoURL ~= nil and height ~= nil and width ~= nil) then
-            height = tonumber(height) or 0
-            width = tonumber(width) or 0
-            if (height >= width and height > size) then
-                size = height
-                resultURL = icnoURL
-            elseif (height < width and width > size) then
-                size = width
-                resultURL = icnoURL
-            end
-        end
-    end
-    return resultURL
-end
-
-
-function getActionsFromSCPD(scpdURL)
-    local actions = {}
-    local action, name
-    local status, xml = luup.inet.wget(scpdURL, 5)
-    if (status == 0) then
-        for action in xml:gmatch("<action>(.-)</action>") do
-            name = action:match("<name>(.-)</name>")
-            if (name ~= nil) then
-                actions[name] = true
-            end
-        end
-    else
-        error("getActionsFromSCPD wget failed - status=" .. (status or "nil") .. " xml=" ..(xml or "nil"))
-    end
-    return actions
-end
-
-
-function getStateVariablesFromSCPD(scpdURL)
-    local stateVariables = {}
-    local variable, name, dataType, range, minimum, maximum, step, list, values, value
-    local status, xml = luup.inet.wget(scpdURL, 5)
-    if (status == 0) then
-        for variable in xml:gmatch("<stateVariable%s?[^>]->(.-)</stateVariable>") do
-            name = variable:match("<name>(.-)</name>")
-            dataType = variable:match("<dataType>(.-)</dataType>")
-            range = variable:match("<allowedValueRange>(.-)</allowedValueRange>")
-            if (range ~= nil) then
-                minimum = range:match("<minimum>(.-)</minimum>")
-                maximum = range:match("<maximum>(.-)</maximum>")
-                step = range:match("<step>(.-)</step>")
-            else
-                minimum = nil
-                maximum = nil
-                step = nil
-            end
-            list = variable:match("<allowedValueList>(.-)</allowedValueList>")
-            if (list ~= nil) then
-                values = ""
-                for value in list:gmatch("<allowedValue>(.-)</allowedValue>") do
-                    if (values == "") then
-                        values = value
-                    else
-                        values = values .. "," .. value
-                    end
-                end
-            else
-                values = nil
-            end
-            if (name ~= nil and dataType ~= nil) then
-                stateVariables[name] = {}
-                stateVariables[name].dataType = dataType
-                if (minimum ~= nil) then
-                    stateVariables[name].minimum = minimum
-                end
-                if (maximum ~= nil) then
-                    stateVariables[name].maximum = maximum
-                end
-                if (step ~= nil) then
-                    stateVariables[name].step = step
-                end
-                if (values ~= nil) then
-                    stateVariables[name].allowedValueList = values
-                end
-            end
-        end
-    else
-        error("getStateVariablesFromSCPD wget failed - status=" .. (status or "nil") .. " xml=" ..(xml or "nil"))
-    end
-    return stateVariables
-end
-
-
-function buildURL(baseURL, baseDirectory, path)
-    if (path:sub(1,1) ~= "/") then
-        path = baseDirectory .. path
-    end
-    return url.absolute(baseURL, path)
-end
-
-
-function getServicesFromDescription(descriptionXML, deviceType, baseURL, baseDirectory, subsetServices)
-    local services = {}
-    local value, devices, device, service, service2, serviceType, serviceId, controlURL, eventSubURL
-    if (subsetServices ~= nil) then
-        local rootDevPart1, embeddedDevices, rootDevPart2 = descriptionXML:match("(<device%s?[^>]->.-)<deviceList%s?[^>]->(.-)</deviceList>(.-</device>)")
-        if (rootDevPart1 == nil or rootDevPart2 == nil or embeddedDevices == nil) then
-            devices = descriptionXML:match("(<device%s?[^>]->.*</device>)") or ""
-        else
-            devices = rootDevPart1 .. rootDevPart2 .. embeddedDevices
-        end
-        for device in devices:gmatch("<device%s?[^>]->(.-)</device>") do
-            value = device:match("<deviceType>(.+)</deviceType>")
-            if (deviceType == nil or value == deviceType) then
-                for service in device:gmatch("<service%s?[^>]->(.-)</service>") do
-                    serviceType = service:match("<serviceType>(.*)</serviceType>")
-                    serviceId = service:match("<serviceId>(.*)</serviceId>")
-                    controlURL = service:match("<controlURL>(.*)</controlURL>")
-                    eventSubURL = service:match("<eventSubURL>(.*)</eventSubURL>")
-                    scpdURL = service:match("<SCPDURL>(.*)</SCPDURL>")
-                    if (serviceType ~= nil and serviceId ~= nil
-                           and controlURL ~= nil and eventSubURL ~= nil
-                           and scpdURL ~= nil) then
-                        for i,service2 in ipairs(subsetServices) do
-                            if (service2 == serviceType) then
-                               services[serviceType] = {
-                                       controlURL = buildURL(baseURL, baseDirectory, controlURL),
-                                       eventSubURL = buildURL(baseURL, baseDirectory, eventSubURL),
-                                       scpdURL = buildURL(baseURL, baseDirectory, scpdURL),
-                                       serviceId = serviceId,
-                                       actions = getActionsFromSCPD(buildURL(baseURL, baseDirectory, scpdURL)),
-                                       object = nil }
-                                break
-                            end
-                        end
-                    end
-                end
-            end
-        end
-    end
-    return services
-end
-
-
---------------------------------------------------------------------------------
--- Services management
---------------------------------------------------------------------------------
-
-
-  function aresServicesLoaded(uuid)
-    if (uuid ~= nil and uuid ~= "" and Services[uuid] ~= nil) then
-        return true
-    else
-        return false
-    end
-  end
-
-  function getService(uuid, serviceType)
-    local s = nil
-    if (aresServicesLoaded(uuid) and Services[uuid][serviceType] ~= nil) then
-        s = Services[uuid][serviceType].object
-    end
-    return s
-  end
-
-  function getInfoStateVariables(uuid, serviceType)
-    local result = nil
-    if (aresServicesLoaded(uuid) and Services[uuid][serviceType] ~= nil and Services[uuid][serviceType].scpdURL ~= nil) then
-        result = getStateVariablesFromSCPD(Services[uuid][serviceType].scpdURL)
-    end
-    return result
-  end
-
-  function resetServices(uuid)
-    if (aresServicesLoaded(uuid)) then
-        Services[uuid] = nil
-    end
-  end
-
-  function addServices(uuid, descriptionURL, descriptionXML, subsetServices)
-    if (uuid == nil or uuid == "") then
-        return
-    end
-
-    local baseURL, baseDirectory = descriptionURL:match("(http://[%d%.]-:%d+)(/.-)[^/]*$")
-
-    if (Services[uuid] == nil) then
-        Services[uuid] = {}
-    end
-
-    for i,servicesForType in ipairs(subsetServices) do
-        local services = getServicesFromDescription(
-                                  descriptionXML, servicesForType[1],
-                                  baseURL, baseDirectory,
-                                  servicesForType[2])
-        for k,v in pairs(services) do
-            Services[uuid][k] = v
-        end
-    end
-
-    for k,v in pairs(Services[uuid]) do
-        log(k .. " " .. v.serviceId .. " " .. v.controlURL .. " " .. v.eventSubURL .. " " .. v.scpdURL)
-        if (v.object == nil) then
-            v.object = service(v.controlURL, k, v.actions)
-        end
-    end
-  end
-
-
-  function setup(descriptionURL, deviceType, infos, subsetServices)
-
-    local descriptionXML = UPnP_getDeviceDescription(descriptionURL)
-    if (descriptionXML == nil) then
-        return false, false, "", {}, nil
-    end
-
-    local baseURL, baseDirectory = descriptionURL:match("(http://[%d%.]-:%d+)(/.-)[^/]*$")
-
-    local found = false
-    for i, info in ipairs(infos) do
-        if (info == "UDN") then
-            found = true
-            break
-        end
-    end
-    if (not found) then
-        table.insert(infos, "UDN")
-    end
-
-    local values = getInfosFromDescription(descriptionXML, deviceType, infos)
-
-    local uuid = values.UDN:match("uuid:(.+)") or ""
-
-    local iconURL = getIconFromDescription(descriptionXML)
-    if (iconURL ~= nil) then
-        iconURL = buildURL(baseURL, baseDirectory, iconURL)
-    end
-
-    if (aresServicesLoaded(uuid) == false) then
-        addServices(uuid, descriptionURL, descriptionXML, subsetServices)
-    end
-
-    return true, aresServicesLoaded(uuid), values, iconURL
-  end
-
-
-
-  function testURL(URLtoBeChecked, headers)
-    local sock = function()
-        local s = socket.tcp()
-        s:settimeout(2)
-        return s
-    end
-
-    if (headers == nil) then
-        headers = {}
-    end
-
-    local resultHeaders
-    local request, code, resultHeaders = http.request({
-        url = URLtoBeChecked,
-        method = "HEAD",
-        headers = headers,
-        create = sock
-    })
-
-    if (request ~= nil and code == 200) then
-        return true, resultHeaders
-    else
-        return false, {}
-    end
-  end
-
-
-  --------------------------------------------------------------------------------
-  -- UPnP AV metadata (DIDL-Lite parsing)
-  --------------------------------------------------------------------------------
-
-
-  -- parseElt(value, tag, subTag)
-  -- Parse XML data at the second or third depth level
-  -- If there are several elements, only the first is taken in consideration
-  -- Parameters:
-  --   value is the XML data
-  --   tag is the first depth level XML tag
-  --   subTag is the second depth level XML tag or nil if data have to be retrieved from the second depth level
-  -- Return values:
-  --   multilines string containing all parsed values; each line is formatted like that: tag="value"
-  --   table containing parsed data (attributes + values) indexed either by the tag or tag@attribute
-  function parseFirstElt(value, tag, subTag)
-      local pattern, tmp, attributes, token, value1, attr, value2
-      pattern = string.format("<%s(%%s?[^>]-)>(.*)</%s>", tag, tag)
-      attributes, tmp = value:match(pattern)
-      if (tmp ~= nil and subTag ~= nil) then
-          -- Get the content of the first sub tag
-          pattern = string.format("<%s(%%s?[^>]-)>(.-)</%s>", subTag, subTag)
-          attributes, tmp = tmp:match(pattern)
-      end
-
-      if (tmp == nil) then
-          return nil, {}
-      end
-
-      local elts, eltsTable = "", {}
-
-      for attr, value1 in attributes:gmatch('%s(.-)="(.-)"') do
-          eltsTable["@" .. attr] = value1
-      end
-	
-      for token, attributes, value1 in tmp:gmatch("<([a-zA-Z0-9:]+)(%s?[^>]-)>(.-)</[^>]->") do
-          elts = elts .. string.format('%s="%s"\n', token, value1)
-          eltsTable[token] = value1
-          for attr, value2 in attributes:gmatch('%s(.-)="(.-)"') do
-              eltsTable[token .. "@" .. attr] = value2
-          end
-      end
-
-      return elts, eltsTable
-  end
-
-  -- parseDIDLItem(value)
-  -- Parse XML data for the item of a DIDL UPnP AV defining metadata XML meta data
-  -- Parameters:
-  --   value is the DIDL XML data
-  -- Return values:
-  --   multilines string containing all parsed values; each line is formatted like that: tag="value"
-  --   table containing parsed data (attributes + values) indexed either by the tag or tag@attribute
-  function parseDIDLItem(value)
-      return parseFirstElt(value, "DIDL%-Lite", "item")
-  end
-
-
-  local function extractElementValue(tag, xml)
-    local result = nil
-    if (xml ~= nil) then
-        local pattern = string.format("<%s%%s?[^>]->", tag)
-        local pos0, pos1 = xml:find(pattern)
-        if (pos0 ~= nil and pos1 ~= nil) then
-            if (xml:sub(pos1-1, pos1-1) == "/") then
-                result = ""
-            else
-                pattern = string.format("</%s>", tag)
-                local pos2 = xml:find(pattern, pos1)
-                if (pos2 ~= nil) then
-                    result = xml:sub(pos1+1, pos2-1)
-                end
-            end
-        end
-    end
-    return result
-  end
-
-
-  function extractElement(tag, xml, default)
-    local result = default
-    local value = extractElementValue(tag, xml)
-    if (value ~= nil) then
-        result = decode(value)
-    end
-    return result
-  end
-
-
-  function browseContent(uuid, serviceType, browseObj, onlyMetadata, filter, transformFct, timeout)
-      local t0 = os.clock()
-      local result = ""
-      local ContentDirectory = getService(uuid, serviceType)
-      if (ContentDirectory == nil) then
-          return result
-      end
-
-      local browseFlag
-      if (onlyMetadata) then
-          browseFlag = "BrowseMetadata"
-      else
-          browseFlag = "BrowseDirectChildren"
-      end
-
-      local fetched = 0
-      local total = 0
-      local status, tmp
-      repeat
-          status, tmp = ContentDirectory.Browse({OrderedArgs={
-                                 "ObjectID=" .. browseObj,
-                                 "BrowseFlag=" .. browseFlag,
-                                 "Filter=" .. (filter or "*"),
-                                 "StartingIndex=" .. string.format("%d", fetched),
-                                 "RequestedCount=100",
-                                 "SortCriteria="}})
-          if (status == true) then
-              local value = unformatXML(extractElement("Result", tmp, ""))
-			  if (fetched == 0 and transformFct == nil) then
-				  local val = value:match("(<DIDL%-Lite%s?[^>]->.-)</DIDL%-Lite>")
-				  if (val == nil) then
-					  val = value:match("(<DIDL%-Lite%s?[^>]-/>)")
-					  if (val ~= nil) then
-						  val = val:sub(1, #val - 2) .. ">"
-					  end
-				  end
-				  if (val ~= nil) then
-                      result = val
-				  end
-			  elseif (transformFct == nil and result ~= "") then
-                  result = result .. (extractElementValue("DIDL%-Lite", value) or "")
-              else
-                  result = result .. (transformFct(value) or "")
-			  end
-              fetched = fetched + tonumber(extractElement("NumberReturned", tmp, "0"))
-              total = tonumber(extractElement("TotalMatches", tmp, "0"))
-          else
-              total = 0
-          end
-      until (fetched >= total or (timeout ~= nil and (os.clock() - t0) >= timeout))
-      if (result ~= "" and transformFct == nil) then
-          result = result .. "</DIDL-Lite>"
-      end
-      log("browseContent " .. browseObj .. " - duration: " .. (os.clock() - t0) .. " s - " .. fetched .. " fetched elements - size result " .. #result .. " - timeout " .. (timeout or "nil"))
-      return result
-  end
-
-
-  --------------------------------------------------------------------------------
-  -- UPnP Event Proxy
-  --------------------------------------------------------------------------------
-
-
-  -- XML pattern used when notifying the UPnP event proxy of the the subscription to an event
-  local PROXY_REQUEST = "<subscription expiry='%d'><variable name='%s' host='localhost' deviceId='%d' serviceId='%s' action='%s' parameter='%s' sidParameter='sid'/></subscription>"
-
-  -- Version of the UPnP event proxy, or nil if proxy is not running or not used
-  local ProxyApiVersion = nil
-
-
-  -- getProxyApiVersion()
-  -- Calls the proxy with GET /version.
-  -- Sets the ProxyApiVersion global variable to the value received
-  -- Return value:
-  --   nil if the proxy is not running.
-  --   The proxy API version (as a string) otherwise.
-  function getProxyApiVersion()
-    local sock = function()
-        local s = socket.tcp()
-        s:settimeout(2)
-        return s
-    end
-
-    local t = {}
-    local request, code = http.request({
-        url = "http://localhost:2529/version",
-        create = sock,
-        sink = ltn12.sink.table(t)
-    })
-
-    if (request == nil and code == "timeout") then
-        -- Proxy may be busy.
-        warning("Temporarily cannot communicate with proxy")
-        return nil
-    elseif (request == nil and code ~= "closed") then
-        -- Proxy not running.
-        warning("Cannot contact UPnP Event Proxy: " .. code)
-        return nil
-    else
-        -- Proxy is running, note its version number.
-        ProxyApiVersion = table.concat(t)
-        return ProxyApiVersion
-    end
-  end
-
-
-  -- WeMo plugin contrib
-  -- proxyVersionAtLeast(n)
-  -- Returns true if the proxy is running and is at least version n.
-  function proxyVersionAtLeast(n)
-    local v = tonumber(ProxyApiVersion or "")
-    return v and v >= n or false
-  end
-
-
-  -- unuseProxy()
-  -- Disable the usage of the UPnP event proxy by resetting the variable ProxyApiVersion to nil
-  -- Return value: none
-  function unuseProxy()
-    ProxyApiVersion = nil
-    warning("UPnP event proxy is now unused")
-  end
-
-
--- Add a notification to the notification queue.
--- This queue will be sent on a timer
--- to make it easy for the server to process sonos proxy traffic 
-function equeueSubscription(sid, proxyRequestBody)
-	table.insert(subscriptionQueue, {
-		sid = sid,
-		proxyRequestBody = proxyRequestBody
-	})
-	
-	if (#subscriptionQueue == 1) then
-	    luup.call_delay("processProxySubscriptions", 2, "Enqued:" .. #subscriptionQueue )
+local function setVariableValue(serviceId, name, value, deviceId)
+	if (deviceId ~= 0) then
+		luup.variable_set(serviceId, name, value, deviceId)
 	end
 end
 
+--
+-- Put together a rudimentary status string for the Dashboard
+--
+local function getSimpleDIDLStatus(meta)
+	local title = ""
+	local artist = ""
+	local album = ""
+	local details = ""
+	local albumArt = ""
+	local desc = ""
+	local didl = nil
+	local didlTable = nil
+	local complement = ""
+	if (meta ~= nil and meta ~= "") then
+		didl, didlTable = upnp.parseDIDLItem(meta)
 
-function processProxySubscriptions()
-	if (#subscriptionQueue > 0) then
-		local subscription = table.remove(subscriptionQueue, 1)
-		
-		local sock = function()
-			local s = socket.tcp()
-			s:settimeout(2)
-			return s
-		end
-
-		local t = {}
-
-		local r = {
-			url = "http://localhost:2529/upnp/event/" .. url.escape(subscription.sid),
-			create = sock,
-			sink = ltn12.sink.table(t)
-		}
-		
-		if subscription.proxyRequestBody then
-			r.method = "PUT"
-			r.source = ltn12.source.string(subscription.proxyRequestBody)
-			r.headers = {
-				["Content-Type"] = "text/xml",
-				["Content-Length"] = subscription.proxyRequestBody:len()
-			}
-		else
-			r.method = "DELETE"
-			r.source = ltn12.source.empty()
-		end
-		
-        log("Send Proxy subscription request: " .. r.method .. " SID " .. subscription.sid )
-		local request, reason = http.request(r)
-			
-		if request == nil and reason == "timeout" then
-			log("Retry Proxy subscription request: " .. r.method .. " SID " .. subscription.sid )
-			table.insert(subscriptionQueue, subscription)
-		elseif request == nil then
-			log("Give up Proxy subscription request: " .. r.method .. " SID " .. subscription.sid )
-		elseif	reason ~= 200 then
-			local data = table.concat(t)
-			log("Invalid Proxy subscription request: " .. r.method .. " SID " .. subscription.sid .. " Response: " .. data )
-		else
-			log("Completed Proxy subscription request: " .. r.method .. " SID " .. subscription.sid )
+		desc = didlTable["desc"] or desc
+		if (didlTable["upnp:class"] == "object.item") then
+			title = upnp.decode(didlTable["dc:title"] or title)
+			details = upnp.decode(didlTable["r:streamContent"] or details)
+			if (details ~= "") then
+				if (string.sub(title, 1, 10) ~= "x-sonosapi") then
+					complement = ": "
+				end
+				complement = complement .. details
+			end
+			if (didlTable["upnp:albumArtURI"] ~= nil) then
+				albumArt = upnp.decode(didlTable["upnp:albumArtURI"])
+			end
+		elseif ((didlTable["upnp:class"] == "object.item.audioItem.musicTrack")
+				or (didlTable["upnp:class"] == "object.item.audioItem")) then
+			title = upnp.decode(didlTable["dc:title"] or title)
+			artist = upnp.decode(didlTable["r:albumArtist"] or didlTable["dc:creator"] or artist)
+			album = upnp.decode(didlTable["upnp:album"] or album)
+			details = upnp.decode(didlTable["r:streamContent"] or details)
+			local title2, artist2 = details:match(".*|TITLE ([^|]*)|ARTIST ([^|]*)")
+			if (title2 ~= nil) then
+				title = title2
+			end
+			if (artist2 ~= nil) then
+				artist = artist2
+			end
+			if (didlTable["upnp:albumArtURI"] ~= nil) then
+				albumArt = upnp.decode(didlTable["upnp:albumArtURI"])
+			end
+			if (artist ~= "" and album ~= "") then
+				complement = string.format(" (%s, %s)", artist, album)
+			elseif (artist ~= "") then
+				complement = string.format(" (%s)", artist)
+			elseif (album ~= "") then
+				complement = string.format(" (%s)", album)
+			end
+		elseif (didlTable["upnp:class"] == "object.item.audioItem.audioBroadcast") then
+			title = upnp.decode(didlTable["dc:title"] or title)
 		end
 	end
-	
-	if (#subscriptionQueue > 0) then
-	    luup.call_delay("processProxySubscriptions", 2, "Enqued:" .. #subscriptionQueue  )
-	end
-end  
-  
-  -- subscribeToUPnPEvent(device, veraIP, eventSubURL, eventVariable, actionServiceId, actionName, renewalSID)
-  -- Process a new subscription to an event for an UPnP device, or renew an active subscription
-  -- First send a subscription request to the UPnP device and then notify the proxy of this new subscription
-  -- Parameters:
-  --   device is the device id that the UPnP event proxy will notify
-  --   veraIP is the IP address of the VERA
-  --   eventSubURL is the URL to be used to subscribe to the UPnP device
-  --   eventVariable is the UPnP variable name we subscribe to
-  --   actionServiceId is the service id of the action to be called by the UPnP event proxy
-  --   actionName is the action name to be called by the UPnP event proxy
-  --   renewalSID is the subscription id to be renewed or nil if it is an initial subscription
-  -- Return values:
-  --   subscription id or nil if the subscribe process failed
-  --   expiry date of the new or renewed subscription; nil if the subscribe process failed
-  --   live duration of the new or renewed subscription; nil if the subscribe process failed 
-  function subscribeToUPnPEvent(device, veraIP, eventSubURL, eventVariable, actionServiceId, actionName, renewalSID)
-    log("Subscribing to event " .. eventSubURL .. " for variable " .. eventVariable .. " with SID " .. (renewalSID or "nil"))
+	return complement, title, artist, album, details, albumArt, desc, didl, didlTable
+end
 
-	-- Ask the device to inform the proxy about status changes.
-    local callbackURL = string.format("http://%s:2529/upnp/event", veraIP)
-	local expiry = nil
-	local sid, duration = UPnP_subscribe(eventSubURL, callbackURL, renewalSID)
-	if (sid) then
-		expiry = os.time() + duration
-
-		-- Tell proxy about this subscription and the variable we care about.
-		-- Volume is the variable we care about.
-		local proxyRequestBody = PROXY_REQUEST:format(expiry, eventVariable, device, actionServiceId, actionName, eventVariable)
-		equeueSubscription(sid, proxyRequestBody)
+--[[ currently unused
+local function parseSimple(value, tag)
+	local elts = {}
+	local eltsTable = {}
+	for tmp in value:gmatch("(<"..tag.."%s?.-</"..tag..">)") do
+		local elts0, eltsTable0 = upnp.parseFirstElt(tmp, tag, nil)
+		table.insert(elts, elts0)
+		table.insert(eltsTable, eltsTable0)
 	end
 
-	return sid, expiry, duration
-  end
+	return elts, eltsTable
+end
 
+local function getValueFromXML(xml, tag, subTag, value, tagResult)
+	local result = nil
+	local _, eltsTable = parseSimple(xml, tag)
+	for _, v in ipairs(eltsTable) do
+		if (v[subTag] == value and v[tagResult] ~= nil) then
+			result = v[tagResult]
+			break
+		end
+	end
+	return result
+end
+--]]
 
-  -- WeMo plugin contrib
-  -- cancelProxySubscription(sid)
-  -- Sends a DELETE /upnp/event/[sid] message to the UPnP event proxy,
-  function cancelProxySubscription(sid)
-    log("Cancelling subscription for sid " .. sid)
-	equeueSubscription(sid)
-  end
+local function getAttribute(xml, tag, attribute)
+	local value = xml:match("<"..tag.."%s?.-%s"..attribute..'="([^"]+)"[^>]->')
+	if (value ~= nil) then
+		value = upnp.decode(value)
+	end
+	return value
+end
 
+--[[ currently unused
+local function testParsing()
+	local coordinator, item, item2, id, zoneName, invisible, channelMapSet, isZoneBridge, location, HTSatChanMapSet
+	local tag = "ZoneGroup"
+	local subtag = "ZoneGroupMember"
+	for coordinator, item in groupsState:gmatch("<"..tag..'%sCoordinator="([^"]-)"[^>]->(.-)</'..tag..'>') do
+		log("testParsing: group coordinator=" .. coordinator)
+		for item2 in item:gmatch("(<"..subtag.."%s?[^>]->)") do
+			id = getAttribute(item2, subtag, "UUID")
+			zoneName = getAttribute(item2, subtag, "ZoneName")
+			invisible = getAttribute(item2, subtag, "Invisible")
+			channelMapSet = getAttribute(item2, subtag, "ChannelMapSet")
+			isZoneBridge = getAttribute(item2, subtag, "IsZoneBridge")
+			location = getAttribute(item2, subtag, "Location")
+			HTSatChanMapSet = getAttribute(item2, subtag, "HTSatChanMapSet")
+			log("testParsing: group member id=" .. id .. " zoneName=" .. zoneName .. " invisible=" .. (invisible or "nil") .. " isZoneBridge=" .. (isZoneBridge or "nil") .. " channelMapSet=" .. (channelMapSet or "nil") .. " HTSatChanMapSet=" .. (HTSatChanMapSet or "nil") .. " location=" .. (location or "nil"))
+		end
+	end
+end
+--]]
 
-  -- subscribeToEvents(device, veraIP, subscriptions, actionServiceId, uuid)
-  -- Process the subscription to several events for an UPnP device, or renew these subscriptions
-  -- The subscriptions are defined in a table (subscriptions).
-  -- Each element of this table is enhanced with subsciption data (id, expiry date, ...).
-  -- Before calling this function, the UPnP services for the UPnP device have to be loaded. Only
-  -- events associated to a loaded and registered service will be subscribed to.
-  -- If one event subscription fails, all subscriptions are finally cancelled.
-  -- A timer is set to call the function renewSubscriptions, so that all the subscritopns can be
-  -- renewed in time. So this function "renewSubscriptions" must be declared by the plugin.
-  -- Parameters:
-  --   device is the device id that the UPnP event proxy will notify
-  --   veraIP is the IP address of the VERA
-  --   subscriptions is a table defining the events to be subscribed to
-  --   actionServiceId is the service id for all actions to be called by the UPnP event proxy
-  --   uuid is the UUID of the UPnP device
-  -- Return value:
-  --   true if UPnP event proxy is not running or not used
-  --   true if the UPnP services are not yet loaded and registered
-  --   true if all subscriptions succeeded
-  --   false if subscriptions failed
-  function subscribeToEvents(device, veraIP, subscriptions, actionServiceId, uuid)
-    log("Subscribing to all events")
+local function getZoneNameFromUUID(uuid)
+	local result = nil
+	local tag = "ZoneGroup"
+	local subtag = "ZoneGroupMember"
+	local found = false
+	for _, item in groupsState:gmatch("<"..tag..'%sCoordinator="([^"]-)"[^>]->(.-)</'..tag..'>') do
+		for item2 in item:gmatch("(<"..subtag.."%s?[^>]->)") do
+			local id = getAttribute(item2, subtag, "UUID")
+			if id == uuid then
+				result = getAttribute(item2, subtag, "ZoneName")
+				found = true
+				break
+			end
+		end
+		if found then break end
+	end
+	return result
+end
 
-    if (proxyVersionAtLeast(1) == false) then
-	   log("Event subscription postponed, proxy is not running. " .. device )
---	   luup.call_delay("renewSubscriptions", 30, device .. ":" .. uuid)
-       return true
-    end
-    if (aresServicesLoaded(uuid) == false) then
-  	   log("Event subscription postponed, services are not loaded yet. " .. device )
---	   luup.call_delay("renewSubscriptions", 30, device .. ":" .. uuid)
-      return true
-    end
+local function getUUIDFromZoneName(name)
+	local result = nil
+	local tag = "ZoneGroup"
+	local subtag = "ZoneGroupMember"
+	local found = false
+	for _, item in groupsState:gmatch("<"..tag..'%sCoordinator="([^"]-)"[^>]->(.-)</'..tag..'>') do
+		for item2 in item:gmatch("(<"..subtag.."%s?[^>]->)") do
+			local zoneName = getAttribute(item2, subtag, "ZoneName")
+			local invisible = getAttribute(item2, subtag, "Invisible")
+			local channelMapSet = getAttribute(item2, subtag, "ChannelMapSet")
+			if zoneName == name and (channelMapSet == nil or invisible == "1") then
+				result = getAttribute(item2, subtag, "UUID")
+				found = true
+				break
+			end
+		end
+		if found then break end
+	end
+	return result
+end
 
-    local result = true
+local function getIPFromUUID(uuid)
+	local result = nil
+	local tag = "ZoneGroup"
+	local subtag = "ZoneGroupMember"
+	local found = false
+	for _, item in groupsState:gmatch("<"..tag..'%sCoordinator="([^"]-)"[^>]->(.-)</'..tag..'>') do
+	for item2 in item:gmatch("(<"..subtag.."%s?[^>]->)") do
+			local id = getAttribute(item2, subtag, "UUID")
+			if id == uuid then
+				local location = getAttribute(item2, subtag, "Location")
+				if (location ~= nil) then
+					result = location:match("http://(.-):.+")
+				end
+				found = true
+				break
+			end
+		end
+		if (found) then
+			break
+		end
+	end
+	return result
+end
 
-    local sid, expiry, duration
+local function deviceIsOnline(device)
+	local changed = setData("SonosOnline", "1", device, false)
+	if changed then
+		setVariableValue(HADEVICE_SID, "LastUpdate", os.time(), device)
+	end
+	return changed
+end
 
-    local nbSubscriptions = 0
-    local minDuration = 3600
+local function deviceIsOffline(device)
+	local changed = setData("SonosOnline", "0", device, false)
+	if changed then
+		groupsState = "<ZoneGroups></ZoneGroups>"
 
-    for i,subscription in ipairs(subscriptions) do
-        if (Services[uuid][subscription.service] ~= nil) then
-            sid = nil
-            if (subscription.id ~= "") then
-                sid = subscription.id
-            end
-            sid, expiry, duration = subscribeToUPnPEvent(device,
-                                                         veraIP,
-                                                         Services[uuid][subscription.service].eventSubURL,
-                                                         subscription.eventVariable,
-                                                         actionServiceId,
-                                                         subscription.actionName,
-                                                         sid)
-            if (sid ~= nil) then
-                log("Event subscription succeeded => SID " .. sid .. " duration " .. duration .. " expiry " .. expiry)
-                subscription.id = sid
-                subscription.expiry = expiry
-                nbSubscriptions = nbSubscriptions + 1
-                if (duration < minDuration) then
-                    minDuration = duration
-                end
-            else
-                error("Event subscription failed: " .. Services[uuid][subscription.service].eventSubURL)
-                cancelProxySubscriptions(subscriptions)
-                nbSubscriptions = 0
-                result = false
-                break
-            end
-        end
-    end
+		changed = setData("TransportState", "STOPPED",  device, changed)
+		changed = setData("TransportStatus", "KO",  device, changed)
+		changed = setData("TransportPlaySpeed", "1",  device, changed)
+		changed = setData("CurrentPlayMode", "NORMAL", device, changed)
+		changed = setData("CurrentCrossfadeMode", "0", device, changed)
+		changed = setData("CurrentTransportActions", "", device, changed)
+		changed = setData("NumberOfTracks", "NOT_IMPLEMENTED", device, changed)
+		changed = setData("CurrentMediaDuration", "NOT_IMPLEMENTED", device, changed)
+		changed = setData("AVTransportURI", "", device, changed)
+		changed = setData("AVTransportURIMetaData", "", device, changed)
+		changed = setData("CurrentRadio", "", device, changed)
+		changed = setData("CurrentService", "", device, changed)
+		changed = setData("CurrentTrack", "NOT_IMPLEMENTED", device, changed)
+		changed = setData("CurrentTrackDuration", "NOT_IMPLEMENTED", device, changed)
+		changed = setData("CurrentTrackURI", "", device, changed)
+		changed = setData("CurrentTrackMetaData", "", device, changed)
+		changed = setData("CurrentStatus", "Offline", device, changed)
+		changed = setData("CurrentTitle", "", device, changed)
+		changed = setData("CurrentArtist", "", device, changed)
+		changed = setData("CurrentAlbum", "", device, changed)
+		changed = setData("CurrentDetails", "", device, changed)
+		changed = setData("CurrentAlbumArt", PLUGIN_ICON, device, changed)
+		changed = setData("RelativeTimePosition", "NOT_IMPLEMENTED", device, changed)
+		changed = setData("Volume", "0", device, changed)
+		changed = setData("Mute", "0", device, changed)
+		changed = setData("SavedQueues", "", device, changed)
+		changed = setData("FavoritesRadios", "", device, changed)
+		changed = setData("Favorites", "", device, changed)
+		changed = setData("Queue", "", device, changed)
+		changed = setData("GroupCoordinator", "", device, changed)
+		changed = setData("ZonePlayerUUIDsInGroup", "", device, changed)
+		changed = setData("ZoneGroupState", groupsState, device, changed)
 
-    if (nbSubscriptions > 0) then
-        if (minDuration >= 600) then
-            minDuration = minDuration - 300
-        end
+		if changed then
+			setVariableValue(HADEVICE_SID, "LastUpdate", os.time(), device)
+		end
+
+		if device ~= 0 then
+			upnp.cancelProxySubscriptions(EventSubscriptions)
+		end
+	end
+end
+
+local function commsFailure(device, text)
+	debug("commsFailure: Device offline? status=" .. text)
+	deviceIsOffline(device)
+end
+
+local function getSonosServiceId(serviceName)
+	local serviceId = nil
+	for k, v in pairs(sonosServices) do
+		if (v == serviceName) then
+			serviceId = k
+			break
+		end
+	end
+	return serviceId
+end
+
+local function getServiceFromURI(transportUri, trackUri)
+	local serviceName = ""
+	local serviceId
+	local serviceCmd
+	if (transportUri == nil) then
+		serviceId = "-1"
+	elseif (transportUri:find("pndrradio:") == 1) then
+		serviceName = "Pandora"
+		serviceId = getSonosServiceId(serviceName)
+		if (serviceId == nil) then
+			serviceId = "-1"
+		end
 	else
-		minDuration = 60
-    end
+		serviceCmd, serviceId = transportUri:match("x%-sonosapi%-stream:([^%?]+%?sid=(%d+).*)")
+		if (serviceCmd == nil) then
+			serviceCmd, serviceId = transportUri:match("x%-sonosapi%-radio:([^%?]+%?sid=(%d+).*)")
+		end
+		if (serviceCmd == nil) then
+			serviceCmd, serviceId = transportUri:match("x%-sonosapi%-hls:([^%?]+%?sid=(%d+).*)")
+		end
+		if (serviceCmd == nil and trackUri ~= nil) then
+			serviceCmd, serviceId = trackUri:match("x%-sonosprog%-http:([^%?]+%?sid=(%d+).*)")
+		end
+		if (serviceCmd == nil and trackUri ~= nil) then
+			serviceCmd, serviceId = trackUri:match("x%-sonos%-http:([^%?]+%?sid=(%d+).*)")
+		end
+		if (serviceCmd ~= nil and serviceId ~= nil) then
+			serviceName = sonosServices[serviceId] or ""
+		end
+	end
+	return serviceName, serviceId
+end
 
-    luup.call_delay("renewSubscriptions", minDuration, device .. ":" .. uuid)
+local function updateServicesMetaDataKeys(device, id, key)
+	local uuid = UUIDs[device]
+	if (id ~= nil and key ~= "" and metaDataKeys[uuid][id] ~= key) then
+		metaDataKeys[uuid][id] = key
+		local data = ""
+		for k, v in pairs(metaDataKeys[uuid]) do
+			data = data .. string.format('%s=%s\n', k, v)
+		end
+		setVariableValue(SONOS_SID, "SonosServicesKeys", data, device)
+		setVariableValue(HADEVICE_SID, "LastUpdate", os.time(), device)
+	end
+end
 
-    return result
-  end
+local function loadServicesMetaDataKeys(device)
+	local keys = {}
+	local elts = luup.variable_get(SONOS_SID, "SonosServicesKeys", device) or ""
+	for token, value in elts:gmatch("([^=]+)=([^\n]+)\n") do
+		keys[token] = value
+	end
+	return keys
+end
+
+-- ??? rigpapa: more scoping problems here with info and others. study and clean up.
+local function extractDataFromMetaData(device, currentUri, currentUriMetaData, trackUri, trackUriMetaData)
+	local statusString, info, title, title2, artist, album, details, albumArt, desc
+	local uuid = UUIDs[device]
+	info, title, artist, album, details, albumArt, desc = getSimpleDIDLStatus(currentUriMetaData)
+	info, title2, artist, album, details, albumArt, _ = getSimpleDIDLStatus(trackUriMetaData)
+	local service, serviceId = getServiceFromURI(currentUri, trackUri)
+	updateServicesMetaDataKeys(device, serviceId, desc)
+	statusString = ""
+	if (service ~= "") then
+		statusString = statusString .. service
+	end
+	if (title ~= "") then
+		if (statusString ~= "") then
+			statusString = statusString .. ": "
+		end
+		statusString = statusString .. title
+	end
+	if (currentUri ~= nil and currentUri:find("x%-rincon%-stream:") == 1) then
+		if (title2 == "" or title2 == " ") then
+			title2 = "Line-In"
+		end
+		local zone = getZoneNameFromUUID(currentUri:match(".+:(.+)"))
+		if (zone ~= nil) then
+			title2 = title2 .. " (" .. zone .. ")"
+		end
+	end
+	if (currentUri ~= nil and currentUri:find("x%-rincon:") == 1) then
+		title2 = ""
+		info = "Group"
+		local zone = getZoneNameFromUUID(currentUri:match(".+:(.+)"))
+		if (zone ~= nil) then
+			info = info .. " driven by " .. zone
+		end
+	end
+	if (currentUri == "") then
+		info = "No music"
+	end
+	if (title ~= "" and title ~= title2 and string.sub(title2, 1, 10) == "x-sonosapi") then
+		title2 = title
+	end
+	if (title2 ~= "" and title2 ~= title) then
+		if (statusString ~= "") then
+			statusString = statusString .. ": "
+		end
+		statusString = statusString .. title2
+	end
+	if (info ~= "") then
+		if (statusString ~= "") then
+			statusString = statusString .. ": "
+		end
+		statusString = statusString .. info
+	end
+	if (albumArt ~= "") then
+		albumArt = url.absolute(string.format("http://%s:%s/", ip[uuid], port), albumArt)
+	elseif (serviceId ~= nil) then
+		albumArt = string.format("http://%s:%s/getaa?s=1&u=%s", ip[uuid], port, url.escape(currentUri))
+	else
+		albumArt = iconURL
+	end
+	return service, title, statusString, title2, artist, album, details, albumArt
+end
+
+local function getGroupInfos(uuid)
+	local grpMembers = ""
+	local grpCoordinator = ""
+	local tag = "ZoneGroup"
+	local subtag = "ZoneGroupMember"
+	local found = false
+	for coordinator, item in groupsState:gmatch("<"..tag..'%sCoordinator="([^"]-)"[^>]->(.-)</'..tag..'>') do
+		local members = ""
+		for item2 in item:gmatch("(<"..subtag.."%s?[^>]->)") do
+			local id = getAttribute(item2, subtag, "UUID")
+			if (id ~= nil) then
+				if (members ~= "") then
+					members = members .. ","
+				end
+				members = members .. id
+			end
+			if (uuid == id) then
+				found = true
+			end
+		end
+		if found then
+			grpCoordinator = coordinator
+			grpMembers = members
+			break
+		end
+	end
+	return grpMembers, grpCoordinator
+end
+
+local function getAllUUIDs()
+	local members = ""
+	local tag = "ZoneGroup"
+	local subtag = "ZoneGroupMember"
+	for _, item in groupsState:gmatch("<"..tag..'%sCoordinator="([^"]-)"[^>]->(.-)</'..tag..'>') do
+		for item2 in item:gmatch("(<"..subtag.."%s?[^>]->)") do
+			local id = getAttribute(item2, subtag, "UUID")
+			local invisible = getAttribute(item2, subtag, "Invisible")
+			local channelMapSet = getAttribute(item2, subtag, "ChannelMapSet")
+			local isZoneBridge = getAttribute(item2, subtag, "IsZoneBridge")
+			if (id ~= nil and isZoneBridge ~= "1" and (channelMapSet == nil or invisible == "1")) then
+				if (members ~= "") then
+					members = members .. ","
+				end
+				members = members .. id
+			end
+		end
+	end
+	return members
+end
+
+local function parseSavedQueues(xml)
+	local result = ""
+	for id, title in xml:gmatch('<container%s?.-id="([^"]-)"[^>]->.-<dc:title%s?[^>]->(.-)</dc:title>.-</container>') do
+		id = upnp.decode(id)
+		title = upnp.decode(title)
+		result = result .. id .. "@" .. title .. "\n"
+	end
+	return result
+end
+
+--[[ currentl unused
+local function parseFavoritesRadios(xml)
+	local result = ""
+	for title, res in xml:gmatch("<item%s?[^>]->.-<dc:title%s?[^>]->(.-)</dc:title>.-<res%s?[^>]->(.-)</res>.-</item>") do
+		title = upnp.decode(title)
+		result = result .. res .. "@" .. title .. "\n"
+	end
+	return result
+end
+--]]
+
+local function parseIdTitle(xml)
+	local result = ""
+	for id, title in xml:gmatch('<item%s?.-id="([^"]-)"[^>]->.-<dc:title%s?[^>]->(.-)</dc:title>.-</item>') do
+		id = upnp.decode(id)
+		title = upnp.decode(title)
+		result = result .. id .. "@" .. title .. "\n"
+	end
+	return result
+end
+
+local function parseQueue(xml)
+	local result = ""
+	for title in xml:gmatch("<item%s?[^>]->.-<dc:title%s?[^>]->(.-)</dc:title>.-</item>") do
+		title = upnp.decode(title)
+		result = result .. title .. "\n"
+	end
+	return result
+end
+
+local setup -- forward declaration
+local function refreshNow(device, force, refreshQueue)
+	debug("refreshNow: device=" .. device)
+
+	if upnp.proxyVersionAtLeast(1) and not force then
+		return ""
+	end
+
+	local uuid = UUIDs[device]
+	if (uuid == nil or uuid == "") then
+		return ""
+	end
+
+	local status, tmp
+	local changed = false
+	local statusString, info, title, title2, artist, album, details, albumArt
+	local currentUri, currentUriMetaData, trackUri, trackUriMetaData, service
+
+	-- Update network and group information
+	local ZoneGroupTopology = upnp.getService(uuid, UPNP_ZONEGROUPTOPOLOGY_SERVICE)
+	if (ZoneGroupTopology ~= nil) then
+		status, tmp = ZoneGroupTopology.GetZoneGroupState({})
+		if (status ~= true) then
+			commsFailure(device, tmp)
+			return ""
+		end
+		if (deviceIsOnline(device)) then
+			setup(device, true)
+		end
+		groupsState = upnp.extractElement("ZoneGroupState", tmp, "")
+		changed = setData("ZoneGroupState", groupsState, device, changed)
+		local members, coordinator = getGroupInfos(uuid)
+		changed = setData("ZonePlayerUUIDsInGroup", members, device, changed)
+		changed = setData("GroupCoordinator", coordinator, device, changed)
+	end
+
+	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
+	if AVTransport ~= nil then
+		-- GetCurrentTransportState  (PLAYING, STOPPED, etc)
+		status, tmp = AVTransport.GetTransportInfo({InstanceID="0"})
+		if (status ~= true) then
+			commsFailure(device, tmp)
+			return ""
+		end
+		changed = setData("TransportState", upnp.extractElement("CurrentTransportState", tmp, ""), device, changed)
+		changed = setData("TransportStatus", upnp.extractElement("CurrentTransportStatus", tmp, ""), device, changed)
+		changed = setData("TransportPlaySpeed", upnp.extractElement("CurrentSpeed", tmp, ""), device, changed)
+
+		-- Get Playmode (NORMAL, REPEAT_ALL, SHUFFLE_NOREPEAT, SHUFFLE)
+		_, tmp = AVTransport.GetTransportSettings({InstanceID="0"})
+		changed = setData("CurrentPlayMode", upnp.extractElement("PlayMode", tmp, ""), device, changed)
+
+		-- Get Crossfademode
+		_, tmp = AVTransport.GetCrossfadeMode({InstanceID="0"})
+		changed = setData("CurrentCrossfadeMode", upnp.extractElement("CrossfadeMode", tmp, ""), device, changed)
+
+		-- Get Current Transport Actions (a CSV of valid Transport Action/Transitions)
+		_, tmp = AVTransport.GetCurrentTransportActions({InstanceID="0"})
+		changed = setData("CurrentTransportActions", upnp.extractElement("Actions", tmp, ""), device, changed)
+
+		-- Get Media Information
+		_, tmp = AVTransport.GetMediaInfo({InstanceID="0"})
+		currentUri = upnp.extractElement("CurrentURI", tmp, "")
+		currentUriMetaData = upnp.extractElement("CurrentURIMetaData", tmp, "")
+		changed = setData("NumberOfTracks", upnp.extractElement("NrTracks", tmp, "NOT_IMPLEMENTED"), device, changed)
+		changed = setData("CurrentMediaDuration", upnp.extractElement("MediaDuration", tmp, "NOT_IMPLEMENTED"), device, changed)
+		changed = setData("AVTransportURI", currentUri, device, changed)
+		changed = setData("AVTransportURIMetaData", currentUriMetaData, device, changed)
+
+		-- Get Current URI - song or radio station etc
+		_, tmp = AVTransport.GetPositionInfo({InstanceID="0"})
+		trackUri = upnp.extractElement("TrackURI", tmp, "")
+		trackUriMetaData = upnp.extractElement("TrackMetaData", tmp, "")
+		changed = setData("CurrentTrack", upnp.extractElement("Track", tmp, "NOT_IMPLEMENTED"), device, changed)
+		changed = setData("CurrentTrackDuration", upnp.extractElement("TrackDuration", tmp, "NOT_IMPLEMENTED"), device, changed)
+		changed = setData("CurrentTrackURI", trackUri, device, changed)
+		changed = setData("CurrentTrackMetaData", trackUriMetaData, device, changed)
+		changed = setData("RelativeTimePosition", upnp.extractElement("RelTime", tmp, "NOT_IMPLEMENTED"), device, changed)
+
+		service, title, statusString, title2, artist, album, details, albumArt =
+			extractDataFromMetaData(device, currentUri, currentUriMetaData, trackUri, trackUriMetaData)
+
+		changed = setData("CurrentService", service, device, changed)
+		changed = setData("CurrentRadio", title, device, changed)
+		changed = setData("CurrentStatus", statusString, device, changed)
+		changed = setData("CurrentTitle", title2, device, changed)
+		changed = setData("CurrentArtist", artist, device, changed)
+		changed = setData("CurrentAlbum", album, device, changed)
+		changed = setData("CurrentDetails", details, device, changed)
+		changed = setData("CurrentAlbumArt", albumArt, device, changed)
+	end
+
+	local Rendering = upnp.getService(uuid, UPNP_RENDERING_CONTROL_SERVICE)
+	if (Rendering ~= nil) then
+		-- Get Mute status
+		status, tmp = Rendering.GetMute({OrderedArgs={"InstanceID=0", "Channel=Master"}})
+		if status ~= true then
+			commsFailure(device, tmp)
+			return ""
+		end
+		changed = setData("Mute", upnp.extractElement("CurrentMute", tmp, ""), device, changed)
+
+		-- Get Volume
+		status, tmp = Rendering.GetVolume({OrderedArgs={"InstanceID=0", "Channel=Master"}})
+		if status ~= true then
+			commsFailure(device, tmp)
+			return ""
+		end
+		changed = setData("Volume", upnp.extractElement("CurrentVolume", tmp, ""), device, changed)
+	end
+
+	-- Sonos queue
+	if (refreshQueue) then
+		if (fetchQueue) then
+			info = upnp.browseContent(uuid, UPNP_MR_CONTENT_DIRECTORY_SERVICE, "Q:0", false, "dc:title", parseQueue, BROWSE_TIMEOUT)
+		else
+			info = ""
+		end
+		changed = setData("Queue", info, device, changed)
+	end
+
+	if changed then
+		setVariableValue(HADEVICE_SID, "LastUpdate", os.time(), device)
+	end
+end
+
+local function refreshVolumeNow(device)
+	debug("refreshVolumeNow: start")
+
+	if upnp.proxyVersionAtLeast(1) then
+		return
+	end
+	local Rendering = upnp.getService(UUIDs[device], UPNP_RENDERING_CONTROL_SERVICE)
+	if (Rendering == nil) then
+		return
+	end
+
+	local status, tmp, changed
+
+	-- Get Volume
+	status, tmp = Rendering.GetVolume({OrderedArgs={"InstanceID=0", "Channel=Master"}})
+
+	if (status ~= true) then
+		commsFailure(device, tmp)
+		return
+	end
+
+	changed = setData("Volume", upnp.extractElement("CurrentVolume", tmp, ""), device, false)
+
+	if changed then
+		setVariableValue(HADEVICE_SID, "LastUpdate", os.time(), device)
+	end
+end
+
+local function refreshMuteNow(device)
+	debug("refreshMuteNow: start")
+
+	if upnp.proxyVersionAtLeast(1) then
+		return
+	end
+	local Rendering = upnp.getService(UUIDs[device], UPNP_RENDERING_CONTROL_SERVICE)
+	if (Rendering == nil) then
+		return
+	end
+
+	local status, tmp, changed
+
+	-- Get Mute status
+	status, tmp = Rendering.GetMute({OrderedArgs={"InstanceID=0", "Channel=Master"}})
+
+	if (status ~= true) then
+		commsFailure(device, tmp)
+		return
+	end
+
+	changed = setData("Mute", upnp.extractElement("CurrentMute", tmp, ""), device, false)
+
+	if changed then
+		setVariableValue(HADEVICE_SID, "LastUpdate", os.time(), device)
+	end
+end
+
+local function controlAnotherZone(targetUUID, sourceDevice)
+	debug("controlAnotherZone targetUUID=" .. targetUUID .. " sourceDevice=" .. sourceDevice)
+	local device = nil
+	local sourceUUID = UUIDs[sourceDevice]
+	if (targetUUID == sourceUUID) then
+		device = sourceDevice
+	else
+		local targetIP = getIPFromUUID(targetUUID)
+		if (targetIP ~= nil) then
+			device = 0
+			UUIDs[device] = targetUUID
+			ip[device] = targetIP
+			metaDataKeys[targetUUID] = metaDataKeys[sourceUUID]
+			dataTable[targetUUID] = {}
+			if (ip[targetUUID] == nil or ip[targetUUID] ~= targetIP) then
+				local descrURL = string.format(descriptionURL, targetIP, port)
+				upnp.resetServices(targetUUID)
+				local status = upnp.setup(descrURL,
+									"urn:schemas-upnp-org:device:ZonePlayer:1",
+									{ },
+									{ { "urn:schemas-upnp-org:device:ZonePlayer:1",
+										{ UPNP_MUSICSERVICES_SERVICE,
+										UPNP_ZONEGROUPTOPOLOGY_SERVICE } },
+									{ "urn:schemas-upnp-org:device:MediaRenderer:1",
+									 { UPNP_AVTRANSPORT_SERVICE,
+										UPNP_RENDERING_CONTROL_SERVICE,
+										UPNP_GROUP_RENDERING_CONTROL_SERVICE } },
+									{ "urn:schemas-upnp-org:device:MediaServer:1",
+										{ UPNP_MR_CONTENT_DIRECTORY_SERVICE } }})
+				if (status == true) then
+					ip[targetUUID] = targetIP
+				else
+					ip[targetUUID] = nil
+					device = nil
+				end
+			end
+		end
+	end
+	debug("controlAnotherZone result=" .. device)
+	return device
+end
+
+local function controlByCoordinator(device)
+	local resDevice = nil
+	local resUUID
+	local coordinator = dataTable[UUIDs[device]].GroupCoordinator or ""
+	if (coordinator ~= "") then
+		resDevice = controlAnotherZone(coordinator, device)
+		resUUID = coordinator
+	end
+	if (resDevice == nil) then
+		resDevice = device
+		resUUID = UUIDs[device]
+	end
+	return resDevice, resUUID
+end
+
+local function savePlaybackContexts(device, uuids)
+	debug("savePlaybackContexts: device=" .. device .. " uuids=" .. uuids)
+
+	local cxt = {}
+
+	for uuid in uuids:gmatch("RINCON_%x+") do
+		local device2 = controlAnotherZone(uuid, device)
+		if (device2 ~= nil) then
+			refreshNow(device2, true, false)
+			cxt[uuid] = {}
+			cxt[uuid].TransportState = dataTable[uuid].TransportState
+			cxt[uuid].TransportPlaySpeed = dataTable[uuid].TransportPlaySpeed
+			cxt[uuid].CurrentPlayMode = dataTable[uuid].CurrentPlayMode
+			cxt[uuid].CurrentCrossfadeMode = dataTable[uuid].CurrentCrossfadeMode
+			cxt[uuid].CurrentTransportActions = dataTable[uuid].CurrentTransportActions
+			cxt[uuid].AVTransportURI = dataTable[uuid].AVTransportURI
+			cxt[uuid].AVTransportURIMetaData = dataTable[uuid].AVTransportURIMetaData
+			cxt[uuid].CurrentTrack = dataTable[uuid].CurrentTrack
+			cxt[uuid].CurrentTrackDuration = dataTable[uuid].CurrentTrackDuration
+			cxt[uuid].RelativeTimePosition = dataTable[uuid].RelativeTimePosition
+			cxt[uuid].Mute = dataTable[uuid].Mute
+			cxt[uuid].Volume = dataTable[uuid].Volume
+			cxt[uuid].GroupCoordinator = dataTable[uuid].GroupCoordinator
+		end
+	end
+
+	-- ??? rigpapa: devices isn't even defined in this scope or globally
+	return { context = cxt, devices = devices }
+end
+
+local function restorePlaybackContext(device, uuid, cxt)
+	debug("restorePlaybackContext: device=" .. device .. " uuid=" .. uuid)
+	local instanceId="0"
+	local channel="Master"
+
+	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
+	local Rendering = upnp.getService(uuid, UPNP_RENDERING_CONTROL_SERVICE)
+
+	if AVTransport ~= nil then
+		AVTransport.Stop({InstanceID=instanceId})
+
+		AVTransport.SetAVTransportURI(
+			{OrderedArgs={"InstanceID=" .. instanceId,
+							"CurrentURI=" .. cxt.AVTransportURI,
+							"CurrentURIMetaData=" .. cxt.AVTransportURIMetaData}})
+
+		if (cxt.AVTransportURI ~= "") then
+			if (cxt.CurrentTransportActions:find("Seek") ~= nil) then
+				AVTransport.Seek(
+					{OrderedArgs={"InstanceID=" .. instanceId,
+									"Unit=TRACK_NR",
+									"Target=" .. cxt.CurrentTrack}})
+
+				if (cxt.CurrentTrackDuration ~= "0:00:00"
+						and cxt.CurrentTrackDuration ~= "NOT_IMPLEMENTED"
+						and cxt.RelativeTimePosition ~= "NOT_IMPLEMENTED") then
+					AVTransport.Seek(
+						{OrderedArgs={"InstanceID=" .. instanceId,
+										"Unit=REL_TIME",
+										"Target=" .. cxt.RelativeTimePosition}})
+				end
+			end
+
+			-- Restore repeat, shuffle and cross fade mode only on the group coordinator
+			if (cxt.GroupCoordinator == uuid) then
+				AVTransport.SetPlayMode(
+					{OrderedArgs={"InstanceID=" .. instanceId,
+									"NewPlayMode=" .. cxt.CurrentPlayMode}})
+
+				AVTransport.SetCrossfadeMode(
+					{OrderedArgs={"InstanceID=" .. instanceId,
+									"CrossfadeMode=" .. cxt.CurrentCrossfadeMode}})
+			end
+		end
+	end
+
+	if (Rendering ~= nil) then
+		Rendering.SetMute(
+			{OrderedArgs={"InstanceID=" .. instanceId,
+							"Channel=" .. channel,
+							"DesiredMute=" .. cxt.Mute}})
+
+		Rendering.SetVolume(
+			{OrderedArgs={"InstanceID=" .. instanceId,
+							"Channel=" .. channel,
+							"DesiredVolume=" .. cxt.Volume}})
+	end
+
+	if (AVTransport ~= nil
+			and cxt.AVTransportURI ~= ""
+			and (cxt.TransportState == "PLAYING"
+					 or cxt.TransportState == "TRANSITIONING")) then
+		AVTransport.Play(
+			{OrderedArgs={"InstanceID=" .. instanceId,
+							"Speed=" .. cxt.TransportPlaySpeed}})
+	end
+
+	if (device ~= 0) then
+		refreshNow(device, false, true)
+	end
+end
+
+local function restorePlaybackContexts(device, playCxt)
+	debug("restorePlaybackContexts: device=" .. device)
+	local instanceId="0"
+	-- local channel="Master"
+	local localUUID = UUIDs[device]
+	local device2
+
+	if (playCxt == nil) then
+		--warning("Please save the context before restoring it !")
+		return
+	end
+
+	-- First break the TTS group
+	for uuid in playCxt.grpMembers:gmatch("RINCON_%x+") do
+		local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
+		if AVTransport ~= nil then
+			AVTransport.BecomeCoordinatorOfStandaloneGroup({InstanceID=instanceId})
+		end
+	end
+
+	-- Then restore context for zone group coordinators
+	for uuid, cxt in pairs(playCxt.context) do
+		if (cxt.GroupCoordinator == uuid) then
+			device2 = 0
+			if (uuid == localUUID) then
+				device2 = device
+			end
+			restorePlaybackContext(device2, uuid, cxt)
+		end
+	end
+	-- Finally restore context for other zones
+	for uuid, cxt in pairs(playCxt.context) do
+		if (cxt.GroupCoordinator ~= uuid) then
+			device2 = 0
+			if (uuid == localUUID) then
+				device2 = device
+			end
+			restorePlaybackContext(device2, uuid, cxt)
+		end
+	end
+end
+
+-- ??? rigpapa: there is brokenness in the handling of the title variable throughout,
+--              with interior local redeclarations shadowing the exterior declaration, it's unclear
+--              if the inner values attained are needed in the outer scopes. This needs
+--              to be studied carefully before cleanup.
+local function decodeURI(device, coordinator, uri)
+	local uuid = nil
+	local track = nil
+	local uriMetaData = ""
+	local serviceId
+	local title = nil
+	local controlByGroup = true
+	local localUUID = UUIDs[device]
+	local requireQueuing = false
+
+	if (uri:sub(1, 2) == "Q:") then
+		track = uri:sub(3)
+		uri = QUEUE_URI:format(coordinator)
+	elseif (uri:sub(1, 3) == "AI:") then
+		if (#uri > 3) then
+			uuid = getUUIDFromZoneName(uri:sub(4))
+		else
+			uuid = localUUID
+		end
+		if (uuid ~= nil) then
+			uri = "x-rincon-stream:" .. uuid
+		else
+			uri = nil
+		end
+	elseif (uri:sub(1, 3) == "SQ:") then
+		local found = false
+		if (dataTable[localUUID].SavedQueues ~= nil) then
+			local id, title
+			for line in dataTable[localUUID].SavedQueues:gmatch("(.-)\n") do
+				id, title = line:match("^(.+)@(.-)$")
+				if (id ~= nil and title == uri:sub(4)) then
+					found = true
+					uri = "ID:" .. id
+					break
+				end
+			end
+		end
+		if (found == false) then
+			uri = nil
+		end
+	elseif (uri:sub(1, 3) == "FR:") then
+		title = uri:sub(4)
+		local found = false
+		if (dataTable[localUUID].FavoritesRadios ~= nil) then
+			local id, title
+			for line in dataTable[localUUID].FavoritesRadios:gmatch("(.-)\n") do
+				id, title = line:match("^(.+)@(.-)$")
+				if (id ~= nil and title == uri:sub(4)) then
+					found = true
+					uri = "ID:" .. id
+					break
+				end
+			end
+		end
+		if (found == false) then
+			uri = nil
+		end
+	elseif (uri:sub(1, 3) == "SF:") then
+		title = uri:sub(4)
+		local found = false
+		if (dataTable[localUUID].Favorites ~= nil) then
+			local id, title
+			for line in dataTable[localUUID].Favorites:gmatch("(.-)\n") do
+				id, title = line:match("^(.+)@(.-)$")
+				if (id ~= nil and title == uri:sub(4)) then
+					found = true
+					uri = "ID:" .. id
+					break
+				end
+			end
+		end
+		if (found == false) then
+			uri = nil
+		end
+	elseif (uri:sub(1, 3) == "TR:") then
+		title = uri:sub(4)
+		serviceId = getSonosServiceId("TuneIn") or "254"
+		uri = "x-sonosapi-stream:s" .. uri:sub(4) .. "?sid=" .. serviceId .. "&flags=32"
+	elseif (uri:sub(1, 3) == "SR:") then
+		title = uri:sub(4)
+		serviceId = getSonosServiceId("SiriusXM") or "37"
+		uri = "x-sonosapi-hls:r%3a" .. title .. "?sid=" .. serviceId .. "&flags=288"
+	elseif (uri:sub(1, 3) == "GZ:") then
+		controlByGroup = false
+		if (#uri > 3) then
+			uuid = getUUIDFromZoneName(uri:sub(4))
+		end
+		if (uuid ~= nil) then
+			uri = "x-rincon:" .. uuid
+		else
+			uri = nil
+		end
+	end
+
+	if (uri:sub(1, 3) == "ID:") then
+		local xml = upnp.browseContent(localUUID, UPNP_MR_CONTENT_DIRECTORY_SERVICE, uri:sub(4), true, nil, nil, nil)
+		debug("data from server: " .. (xml or "nil"))
+		if (xml == "") then
+			uri = nil
+		else
+			title, uri = xml:match("<DIDL%-Lite%s?[^>]-><item%s?[^>]->.-<dc:title%s?[^>]->(.-)</dc:title>.-<res%s?[^>]->(.*)</res>.-</item></DIDL%-Lite>")
+			if (uri ~= nil) then
+				uriMetaData = upnp.decode(xml:match("<DIDL%-Lite%s?[^>]-><item%s?[^>]->.-<r:resMD%s?[^>]->(.*)</r:resMD>.-</item></DIDL%-Lite>") or "")
+			else
+				title, uri = xml:match("<DIDL%-Lite%s?[^>]-><container%s?[^>]->.-<dc:title%s?[^>]->(.-)</dc:title>.-<res%s?[^>]->(.*)</res>.-</container></DIDL%-Lite>")
+				if (uri ~= nil) then
+					uriMetaData = upnp.decode(xml:match("<DIDL%-Lite%s?[^>]-><container%s?[^>]->.-<r:resMD%s?[^>]->(.*)</r:resMD>.-</container></DIDL%-Lite>") or "")
+				end
+			end
+		end
+	end
+
+	if (uri ~= nil and
+			 (uri:sub(1, 38) == "file:///jffs/settings/savedqueues.rsq#"
+				 or uri:sub(1, 18) == "x-rincon-playlist:"
+				 or uri:sub(1, 21) == "x-rincon-cpcontainer:")) then
+		requireQueuing = true
+	end
+
+	if (uri ~= nil and uri ~= "" and uriMetaData == "") then
+		_, serviceId = getServiceFromURI(uri, nil)
+		if serviceId ~= nil and metaDataKeys[localUUID][serviceId] ~= nil then
+			if title == nil then
+				uriMetaData = '<DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/">'
+								.. '<item><desc>' .. metaDataKeys[localUUID][serviceId] .. '</desc>'
+								.. '</item></DIDL-Lite>'
+			else
+				uriMetaData = '<DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/">'
+								.. '<item><dc:title>' .. title .. '</dc:title>'
+								.. '<desc>' .. metaDataKeys[localUUID][serviceId] .. '</desc>'
+								.. '</item></DIDL-Lite>'
+			end
+		elseif title ~= nil then
+			uriMetaData = '<DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/">'
+							.. '<item><dc:title>' .. title .. '</dc:title>'
+							.. '<upnp:class>object.item.audioItem.audioBroadcast</upnp:class>'
+							.. '</item></DIDL-Lite>'
+		end
+	end
+
+	debug("uri: " .. (uri or "nil"))
+	debug("uriMetaData: " .. (uriMetaData or "nil"))
+	return uri, uriMetaData, track, controlByGroup, requireQueuing
+end
+
+local groupDevices -- forward declaration
+local function playURI(device, instanceId, uri, speed, volume, uuids, sameVolumeForAll, enqueueMode, newGroup, controlByGroup)
+
+	uri = url.unescape(uri)
+
+	local uriMetaData, track, controlByGroup2, requireQueuing, uuid, status, tmp, position
+	local channel = "Master"
+
+	if (newGroup) then
+		controlByGroup = false
+	end
+
+	if (controlByGroup) then
+		_, uuid = controlByCoordinator(device)
+	else
+		uuid = UUIDs[device]
+	end
+
+	uri, uriMetaData, track, controlByGroup2, requireQueuing = decodeURI(device, uuid, uri)
+	if (controlByGroup and not controlByGroup2) then
+		-- ??? rigpapa ...and then what are the controlByGroup variables used for???
+		controlByGroup = false -- luacheck: ignore 311
+		uuid = UUIDs[device]
+	end
+	if (enqueueMode == nil and requireQueuing) then
+		enqueueMode = "REPLACE_QUEUE_AND_PLAY"
+	end
+
+	local onlyEnqueue = false
+	if (enqueueMode == "ENQUEUE" or enqueueMode == "REPLACE_QUEUE"
+		or enqueueMode == "ENQUEUE_AT_FIRST" or enqueueMode == "ENQUEUE_AT_NEXT_PLAY") then
+		onlyEnqueue = true
+	end
+
+	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
+	local Rendering = upnp.getService(uuid, UPNP_RENDERING_CONTROL_SERVICE)
+
+	-- Queue management
+	if (AVTransport ~= nil and enqueueMode ~= nil
+			 and (uri:sub(1, 12) == "x-file-cifs:"
+					 or uri:sub(1, 37) == "file:///jffs/settings/savedqueues.rsq"
+					 or uri:sub(1, 18) == "x-rincon-playlist:"
+					 or uri:sub(1, 21) == "x-rincon-cpcontainer:")) then
+		if (enqueueMode == "REPLACE_QUEUE" or enqueueMode == "REPLACE_QUEUE_AND_PLAY") then
+			AVTransport.RemoveAllTracksFromQueue({InstanceID=instanceId})
+		end
+
+		if (enqueueMode == "ENQUEUE_AT_FIRST" or enqueueMode == "ENQUEUE_AT_FIRST_AND_PLAY") then
+			status, tmp = AVTransport.AddURIToQueue(
+				 {OrderedArgs={"InstanceID=" .. instanceId,
+							 "EnqueuedURI=" .. uri,
+							 "EnqueuedURIMetaData=" .. uriMetaData,
+							 "DesiredFirstTrackNumberEnqueued=1",
+							 "EnqueueAsNext=false"}})
+		elseif (enqueueMode == "ENQUEUE_AT_NEXT_PLAY") then
+			position = "0"
+			status, tmp = AVTransport.GetMediaInfo({InstanceID="0"})
+			if (status == true and upnp.extractElement("CurrentURI", tmp, "") == QUEUE_URI:format(uuid)) then
+				status, tmp = AVTransport.GetPositionInfo({InstanceID="0"})
+				if (status == true) then
+					position = upnp.extractElement("Track", tmp, "")
+					position = tonumber(position)+1
+				end
+			end
+			status, tmp = AVTransport.AddURIToQueue(
+				 {OrderedArgs={"InstanceID=" .. instanceId,
+							 "EnqueuedURI=" .. uri,
+							 "EnqueuedURIMetaData=" .. uriMetaData,
+							 "DesiredFirstTrackNumberEnqueued=" .. position,
+							 "EnqueueAsNext=false"}})
+		elseif (enqueueMode == "ENQUEUE" or enqueueMode == "ENQUEUE_AND_PLAY"
+				or enqueueMode == "REPLACE_QUEUE" or enqueueMode == "REPLACE_QUEUE_AND_PLAY") then
+			status, tmp = AVTransport.AddURIToQueue(
+				 {OrderedArgs={"InstanceID=" .. instanceId,
+							 "EnqueuedURI=" .. uri,
+							 "EnqueuedURIMetaData=" .. uriMetaData,
+							 "DesiredFirstTrackNumberEnqueued=0",
+							 "EnqueueAsNext=true"}})
+		else
+			status = false
+		end
+		if (status == true) then
+			track = upnp.extractElement("FirstTrackNumberEnqueued", tmp, "")
+			uri = QUEUE_URI:format(uuid)
+		else
+			uri = nil
+		end
+	end
+
+	if (onlyEnqueue == false and AVTransport ~= nil and uri ~= nil and uri ~= "") then
+		if (newGroup) then
+			AVTransport.BecomeCoordinatorOfStandaloneGroup({InstanceID=instanceId})
+		end
+
+		AVTransport.SetAVTransportURI(
+			{OrderedArgs={"InstanceID=" .. instanceId,
+							"CurrentURI=" .. uri,
+							"CurrentURIMetaData=" .. uriMetaData}})
+
+		local volume2 = volume
+		if (sameVolumeForAll == false) then
+			volume2 = nil
+		end
+		groupDevices(device, instanceId, uuids, volume2)
+
+		if (track ~= nil and track ~= "" and tonumber(track) ~= nil) then
+			AVTransport.Seek(
+				 {OrderedArgs={"InstanceID=" .. instanceId,
+							 "Unit=TRACK_NR",
+							 "Target=" .. track}})
+		end
+
+		if (volume ~= nil and Rendering ~= nil) then
+			Rendering.SetVolume(
+				{OrderedArgs={"InstanceID=" .. instanceId,
+								"Channel=" .. channel,
+								"DesiredVolume=" .. volume}})
+		end
+
+		if (speed ~= nil) then
+			AVTransport.Play(
+				 {OrderedArgs={"InstanceID=" .. instanceId,
+							 "Speed=" .. speed}})
+		end
+	end
+end
+
+groupDevices = function(device, instanceId, uuids, volume)
+	uuids = uuids or ""
+	for uuid in uuids:gmatch("RINCON_%x+") do
+		local device2 = controlAnotherZone(uuid, device)
+		if (device2 ~= nil) then
+			playURI(device2, instanceId, "x-rincon:" .. UUIDs[device], "1", volume, nil, false, nil, false, false)
+		end
+	end
+end
 
 
-  -- cancelProxySubscriptions(subscriptions)
-  -- Sends a DELETE /upnp/event/[sid] message to the UPnP event proxy for all subscriptions
-  -- defined in the table subscriptions.
-  -- Subscription data for each element of this table are reset.
-  -- Parameters:
-  --   subscriptions is a table containing the current subscription data
-  -- Return value: none
-  function cancelProxySubscriptions(subscriptions)
-    log("Cancelling all event subscriptions")
+local function sayOrAlert(device, parameters, saveAndRestore)
+	local instanceId = defaultValue(parameters, "InstanceID", "0")
+	-- local channel = defaultValue(parameters, "Channel", "Master")
+	local volume = defaultValue(parameters, "Volume", nil)
+	local devices = defaultValue(parameters, "GroupDevices", "")
+	local zones = defaultValue(parameters, "GroupZones", "")
+	local uri = defaultValue(parameters, "URI", nil)
+	local duration = defaultValue(parameters, "Duration", "0")
+	local sameVolume = false
+	if (parameters.SameVolumeForAll == "true"
+		or parameters.SameVolumeForAll == "TRUE"
+		or parameters.SameVolumeForAll == "1") then
+		sameVolume = true
+	end
 
-    if (proxyVersionAtLeast(1) == false) then
-        return
-    end
+	if (uri == nil or uri == "") then
+		if (saveAndRestore == true) then
+			endSayAlert(device)
+		end
+		return
+	end
 
-    for i,subscription in ipairs(subscriptions) do
-        if (subscription.id ~= "") then
-            cancelProxySubscription(subscription.id)
-            subscription.id = ""
-            subscription.expiry = ""
-        end
-    end
-  end
+	local uuidListe = ""
+	local newGroup
+	local controlByGroup
+	local localUUID = UUIDs[device]
+	if (zones:upper() == "CURRENT") then
+		local coordinator = dataTable[localUUID].GroupCoordinator or ""
 
+		if (saveAndRestore == true and sayPlayback[device] == nil) then
+			sayPlayback[device] = savePlaybackContexts(device, coordinator)
+			sayPlayback[device].grpMembers = ""
+		end
 
-  -- isValidNotification(notifyAction, sid, subscriptions)
-  -- Check whether a proxy notification is valid (the subscription id has to be declared in the
-  -- table containing current subscription data)
-  -- If not, a delayed action cancelProxySubscription is called to unsubscribe this subscription.
-  -- So this function "cancelProxySubscription" must be declared by the plugin.
-  -- Parameters:
-  --   notifyAction is the action called by the UPnP event proxy
-  --   sid is the subscription id provided by the UPnP event proxy
-  --   subscriptions is a table containing the current subscription data
-  -- Return value:
-  --   true if the proxy notification is valid
-  --   false if the proxy notification is not valid
-  function isValidNotification(notifyAction, sid, subscriptions)
-    local valid = false
-    if (proxyVersionAtLeast(1) == false) then
-        warning("Call to " .. notifyAction .. " while proxy is not used")
-    else
-        for i,subscription in ipairs(subscriptions) do
-            if (subscription.id == sid) then
-                valid = true
-                break
-            end
-        end
-        if (not valid) then
-            warning("Call to " .. notifyAction .. " with bad SID " .. sid)
-        end
-    end
-    if (not valid) then
-        -- Try to shut the proxy up, we don't care about this SID.
-        luup.call_delay("cancelProxySubscription", 1, sid)
-    end
-    return valid
-  end
+		newGroup = false
+		controlByGroup = true
+	else
+		for id in devices:gmatch("%d+") do
+			local nid = tonumber(id)
+			if nid ~= device then
+				local uuid = UUIDs[nid]
+				if (uuid == nil) then
+					uuid = luup.variable_get(UPNP_DEVICE_PROPERTIES_SID, "SonosID", nid)
+				end
+				if (uuid ~= nil and uuid ~= "" and uuidListe:find(uuid) == nil) then
+					if (uuidListe ~= "") then
+						uuidListe = uuidListe .. ","
+					end
+					uuidListe = uuidListe .. uuid
+				end
+			end
+		end
+		if (zones:upper() == "ALL") then
+			local uuids = getAllUUIDs()
+			for uuid in uuids:gmatch("RINCON_%x+") do
+				if (uuid ~= localUUID and uuidListe:find(uuid) == nil) then
+					if (uuidListe ~= "") then
+						uuidListe = uuidListe .. ","
+					end
+					uuidListe = uuidListe .. uuid
+				end
+			end
+		else
+			for zone in zones:gmatch("[^,]+") do
+				local uuid = getUUIDFromZoneName(zone)
+				if (uuid ~= nil and uuid ~= "" and uuid ~= localUUID and uuidListe:find(uuid) == nil) then
+					if (uuidListe ~= "") then
+						uuidListe = uuidListe .. ","
+					end
+					uuidListe = uuidListe .. uuid
+				end
+			end
+		end
+
+		local members, coordinator
+
+		if (saveAndRestore == true and sayPlayback[device] == nil) then
+			local uuidListe2 = uuidListe
+			if (uuidListe2:find(localUUID) == nil) then
+				if (uuidListe2 == "") then
+					uuidListe2 = localUUID
+				else
+					uuidListe2 = localUUID .. "," .. uuidListe2
+				end
+			end
+
+			local uuidListe3 = uuidListe2
+			for uuid in uuidListe2:gmatch("RINCON_%x+") do
+				members, coordinator = getGroupInfos(uuid)
+				if (coordinator == uuid) then
+					for uuid2 in members:gmatch("RINCON_%x+") do
+						if (uuidListe3:find(uuid2) == nil) then
+							uuidListe3 = uuidListe3 .. "," .. uuid2
+						end
+					end
+				end
+			end
+			sayPlayback[device] = savePlaybackContexts(device, uuidListe3)
+			sayPlayback[device].grpMembers = uuidListe
+
+			-- Break all groups
+			for uuid, cxt in pairs(sayPlayback[device].context) do
+				if (cxt.GroupCoordinator ~= uuid) then
+					local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
+					if AVTransport ~= nil then
+						AVTransport.BecomeCoordinatorOfStandaloneGroup({InstanceID=instanceId})
+					end
+				end
+			end
+		end
+
+		coordinator = dataTable[localUUID].GroupCoordinator or ""
+		members = dataTable[localUUID].ZonePlayerUUIDsInGroup or ""
+		newGroup = false
+		if (coordinator ~= "" and coordinator == localUUID and members ~= localUUID) then
+			newGroup = true
+		end
+		controlByGroup = false
+	end
+
+	playURI(device, instanceId, uri, "1", volume, uuidListe, sameVolume, nil, newGroup, controlByGroup)
+
+	if (saveAndRestore == true) then
+		luup.call_delay("endSayAlert", duration, device)
+	end
+
+	refreshNow(device, false, false)
+end
+
+function endSayAlert(device)
+	device = tonumber(device)
+	local finished = tts.endPlayback(device)
+	if (finished == true) then
+		restorePlaybackContexts(device, sayPlayback[device])
+		sayPlayback[device] = nil
+	end
+end
+
+local function joinGroup(device, zone)
+	local localUUID = UUIDs[device]
+	local uuid = getUUIDFromZoneName(zone)
+	if uuid ~= nil then
+		local members, coordinator = getGroupInfos(uuid)
+		if (members:find(localUUID) == nil) then
+			playURI(device, "0", "x-rincon:" .. coordinator, "1", nil, nil, false, nil, false, false)
+		end
+	end
+end
+
+local function leaveGroup(device)
+	local AVTransport = upnp.getService(UUIDs[device], UPNP_AVTRANSPORT_SERVICE)
+	if AVTransport ~= nil then
+		AVTransport.BecomeCoordinatorOfStandaloneGroup({InstanceID="0"})
+	end
+end
+
+local function updateGroupMembers(device, members)
+	local prevMembers, coordinator = getGroupInfos(UUIDs[device])
+	local uuidListe = ""
+	local device2
+	if (members:upper() == "ALL") then
+		local uuids = getAllUUIDs()
+		for uuid in uuids:gmatch("RINCON_%x+") do
+			if (uuidListe:find(uuid) == nil) then
+				if (uuidListe ~= "") then
+					uuidListe = uuidListe .. ","
+				end
+				uuidListe = uuidListe .. uuid
+			end
+		end
+	else
+		for zone in members:gmatch("[^,]+") do
+			local uuid = getUUIDFromZoneName(zone)
+			if (uuid ~= nil and uuid ~= "" and uuidListe:find(uuid) == nil) then
+				if (uuidListe ~= "") then
+					uuidListe = uuidListe .. ","
+				end
+				uuidListe = uuidListe .. uuid
+			end
+		end
+	end
+	-- Adding new members
+	for uuid in uuidListe:gmatch("RINCON_%x+") do
+		if (prevMembers:find(uuid) == nil) then
+			device2 = controlAnotherZone(uuid, device)
+			if (device2 ~= nil) then
+				playURI(device2, "0", "x-rincon:" .. coordinator, "1", nil, nil, false, nil, false, false)
+			end
+		end
+	end
+	-- Removing members
+	for uuid in prevMembers:gmatch("RINCON_%x+") do
+		if (uuidListe:find(uuid) == nil) then
+			device2 = controlAnotherZone(uuid, device)
+			if (device2 ~= nil) then
+				local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
+				if AVTransport ~= nil then
+					AVTransport.BecomeCoordinatorOfStandaloneGroup({InstanceID="0"})
+				end
+			end
+		end
+	end
+end
+
+local function pauseAll(device)
+	local uuids = getAllUUIDs()
+	for uuid in uuids:gmatch("RINCON_%x+") do
+		local device2 = controlAnotherZone(uuid, device)
+		if (device2 ~= nil) then
+			local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
+			if AVTransport ~= nil then
+				AVTransport.Pause({InstanceID="0"})
+			end
+		end
+	end
+end
+
+local function setupTTSSettings(device)
+	local lang = luup.variable_get(SONOS_SID, "DefaultLanguageTTS", device)
+	if (lang == nil) then
+		lang = "en"
+		luup.variable_set(SONOS_SID, "DefaultLanguageTTS", lang, device)
+	end
+	local engine = luup.variable_get(SONOS_SID, "DefaultEngineTTS", device)
+	if (engine == nil) then
+		engine = "GOOGLE"
+		luup.variable_set(SONOS_SID, "DefaultEngineTTS", engine, device)
+	end
+	local googleURL = luup.variable_get(SONOS_SID, "GoogleTTSServerURL", device)
+	if (googleURL == nil) then
+		googleURL = "https://translate.google.com"
+		luup.variable_set(SONOS_SID, "GoogleTTSServerURL", googleURL, device)
+	end
+	local serverURL = luup.variable_get(SONOS_SID, "OSXTTSServerURL", device)
+	if (serverURL == nil) then
+		serverURL = ""
+		luup.variable_set(SONOS_SID, "OSXTTSServerURL", serverURL, device)
+	end
+	local maryURL = luup.variable_get(SONOS_SID, "MaryTTSServerURL", device)
+	if (maryURL == nil) then
+		maryURL = ""
+		luup.variable_set(SONOS_SID, "MaryTTSServerURL", maryURL, device)
+	end
+	local rvURL = luup.variable_get(SONOS_SID, "ResponsiveVoiceTTSServerURL", device) or ""
+	if "" == rvURL then
+		rvURL = "https://code.responsivevoice.org"
+		luup.variable_set(SONOS_SID, "ResponsiveVoiceTTSServerURL", rvURL, device)
+	end
+	local clientId = luup.variable_get(SONOS_SID, "MicrosoftClientId", device)
+	if (clientId == nil) then
+		clientId = ""
+		luup.variable_set(SONOS_SID, "MicrosoftClientId", clientId, device)
+	end
+	local clientSecret = luup.variable_get(SONOS_SID, "MicrosoftClientSecret", device)
+	if (clientSecret == nil) then
+		clientSecret = ""
+		luup.variable_set(SONOS_SID, "MicrosoftClientSecret", clientSecret, device)
+	end
+	local option = luup.variable_get(SONOS_SID, "MicrosoftOption", device)
+	if (option == nil) then
+		option = ""
+		luup.variable_set(SONOS_SID, "MicrosoftOption", option, device)
+	end
+	local rate = luup.variable_get(SONOS_SID, "TTSRate", device)
+	if (rate == nil) then
+		rate = "0.5"
+		luup.variable_set(SONOS_SID, "TTSRate", rate, device)
+	end
+	local pitch = luup.variable_get(SONOS_SID, "TTSPitch", device)
+	if (pitch == nil) then
+		pitch = "0.5"
+		luup.variable_set(SONOS_SID, "TTSPitch", pitch, device)
+	end
+	local baseURL = luup.variable_get(SONOS_SID, "TTSBaseURL", device) or ""
+	if "" == baseURL then
+		baseURL = string.format("http://%s/port_3480", VERA_IP)
+		luup.variable_set(SONOS_SID, "TTSBaseURL", baseURL, device)
+	end
+	local basePath = luup.variable_get(SONOS_SID, "TTSBasePath", device) or ""
+	if "" == basePath then
+		basePath = "/etc/cmh-ludl"
+		luup.variable_set(SONOS_SID, "TTSBasePath", basePath, device)
+	end
+	tts.setup(lang, engine, sayOrAlert, baseURL, basePath, googleURL, serverURL, maryURL, rvURL, clientId, clientSecret, option, rate, pitch)
+end
+
+function updateWithoutProxy(device)
+	local dn = tonumber(device) or _G.error "updateWithoutProxy() invalid device: "..tostring(device)
+	refreshNow(dn, true, true)
+	if not upnp.proxyVersionAtLeast(1) then
+		local ts = luup.variable_get( UPNP_AVTRANSPORT_SID, "TransportState", dn ) or "STOPPED"
+		local rp,rs = ( luup.variable_get( SONOS_SID, "PollDelays", dn ) or "15,60" ):match( '^(%S+)%,%s*(.*)$' )
+		rp = tonumber(rp) or 15
+		rs = tonumber(rs) or 60
+		luup.call_delay("updateWithoutProxy", ( ts == "STOPPED" ) and rs or rp, device)
+		debug("Scheduled update for no proxy, state "..tostring(ts))
+		return
+	end
+	debug("Proxy found, skipping poll reschedule")
+end
+
+local function getAvailableServices(uuid)
+	debug("getAvailableServices: start")
+	local services = {}
+	local MusicServices = upnp.getService(uuid, UPNP_MUSICSERVICES_SERVICE)
+	if MusicServices == nil then
+		return services
+	end
+	local tag = "Service"
+	local status, tmp = MusicServices.ListAvailableServices({})
+	if status == true then
+		tmp = upnp.extractElement("AvailableServiceDescriptorList", tmp, "")
+		for item in tmp:gmatch("(<"..tag.."%s.-</"..tag..">)") do
+			local id = item:match("<"..tag..'%s?.-%sId="([^"]+)"[^>]->.-</'..tag..">")
+			local name = item:match("<"..tag..'%s?.-%sName="([^"]+)"[^>]->.-</'..tag..">")
+			if (id ~= nil and name ~= nil) then
+				debug("getAvailableServices: " .. string.format('%s => %s', id, name))
+				services[id] = name
+			end
+		end
+	end
+	return services
+end
+
+-- Return true if file exists; optionally returns handle to open file if exists.
+local function file_exists( fpath, leaveOpen )
+	local f = io.open( fpath, "r" )
+	if not f then return false end
+	if not leaveOpen then f:close() f=nil end
+	return true, f
+end
+
+-- Return true if plain file or file with lzo suffix exists.
+local function file_exists_LZO( fpath )
+	if file_exists( fpath ) then return true end
+	return file_exists( fpath .. ".lzo" )
+end
+
+local function file_dtm( fpath )
+	local f = io.popen( "stat -c %Y "..fpath )
+	if not f then return 0 end
+	local ts = tonumber( f:read("*a") ) or 0
+	f:close()
+	return ts
+end
+
+-- Fix the locations of the legacy icons. This can eventually go away.
+local function fixLegacyIcons()
+	function moveIcon( p )
+		if not file_exists( "/etc/cmh-ludl/"..p ) then
+			if file_exists( "/etc/cmh-ludl/" .. p .. ".lzo" ) then
+				-- Decompress
+				os.execute( "pluto-lzo d /etc/cmh-ludl/"..p..".lzo /etc/cmh-ludl/"..p )
+			elseif file_exists( "/www/cmh/skins/default/icons/" .. p ) then
+				os.execute( "mv /www/cmh/skins/default/icons/"..p.." /etc/cmh-ludl/" )
+			end
+		elseif file_exists( "/etc/cmh-ludl/" .. p .. ".lzo" ) then
+			-- Both compress and uncompressed exist.
+			if file_dtm( "/etc/cmh-ludl/"..p..".lzo" ) > file_dtm( "/etc/cmh-ludl/"..p ) then
+				-- Decompress newer file
+				os.execute( "pluto-lzo d /etc/cmh-ludl/"..p..".lzo /etc/cmh-ludl/"..p )
+			end
+		end
+		if file_exists( "/etc/cmh-ludl/"..p ) and not file_exists( "/www/cmh/skins/default/img/devices/device_states/"..p ) then
+			os.execute( "ln -s /etc/cmh-ludl/"..p.." /www/cmh/skins/default/img/devices/device_states/" )
+		end
+	end
+	moveIcon( "Sonos.png" )
+	for k=0,150,25 do moveIcon( "Sonos_"..tostring(k)..".png" ) end
+end
+
+-- Set up custom icon for device. The icon is retrieved from the device
+-- itself to a local copy, then a custom static JSON file is generated and
+-- assigned to the device.
+local function setDeviceIcon( device, icon, model, udn )
+	-- Set up local copy of icon from device and static JSON pointing to it
+	-- (so icon works both locally and remote)
+	local installPath = "/etc/cmh-ludl/" -- Vera default
+	if isOpenLuup then -- ??? FIXME
+		local loader = require "openLuup.loader"
+		if loader.find_file == nil then
+			warning("This version of the Sonos plugin requires openLuup 2018.11.21 or higher")
+			installPath = "./" -- punt
+		else
+			installPath = loader.find_file( "D_Sonos1.json" ):gsub( "D_Sonos1.json$", "" )
+		end
+	else
+		-- Always (re)link default icon path. This is UI7.
+		os.execute( "ln -sf "..installPath.."Sonos.png /www/cmh/skins/default/img/devices/device_states/" )
+	end
+	-- See if there's a local copy of the icon
+	local iconFile = string.format( "Sonos_%s%s", model, icon:match( "[^/]+$" ):match( "%..+$" ) )
+	local s = file_exists( installPath..iconFile )
+	if not s then
+		log( string.format("fetching device icon from %s to %s%s", iconURL, installPath, iconFile ) )
+		os.execute( "curl -s -o "..installPath..iconFile.." '"..iconURL.."'" )
+		if not isOpenLuup then
+			-- Link icon to UI7 default icon path
+			os.execute( "ln -sf "..installPath..iconFile.." /www/cmh/skins/default/img/devices/device_states/" )
+		end
+	end
+	-- See if we've already created a custom static JSON for this UDN or model.
+	local staticJSONFile
+	if udn then
+		staticJSONFile = string.format( "D_Sonos1_%s.json", tostring( udn ):lower():gsub( "^uuid:", "" ):gsub( "[^a-z0-9_]", "_" ) )
+		s = file_exists_LZO( installPath .. staticJSONFile )
+		if s then
+			log( string.format( "using device-specific UI %s", staticJSONFile ) )
+		else
+			staticJSONFile = nil
+		end
+	end
+	if not staticJSONFile then
+		staticJSONFile = string.format( "D_Sonos1_%s.json", tostring( model or "GENERIC" ):upper():gsub( "[^A-Z0-9_]", "_" ) )
+	end
+	s = file_exists_LZO( installPath .. staticJSONFile )
+	if not s then
+		-- No. Create model-specific version
+		log("Creating static JSON in "..staticJSONFile)
+		local f
+		s,f = file_exists( installPath.."D_Sonos1.json", true )
+		if not s then
+			os.execute( 'pluto-lzo d '..installPath..'D_Sonos1.json.lzo /tmp/D_Sonos1.json.tmp' )
+			f = io.open( '/tmp/D_Sonos1.json.tmp', 'r' )
+			if not f then
+				warning("Failed to open /tmp/D_Sonos1.json.tmp")
+				staticJSONFile = nil
+			end
+		end
+		if f then -- explicit, two paths above
+			-- Read default static JSON
+			s = f:read("*a")
+			f:close()
+			local json = require "dkjson"
+			local d = json.decode( s )
+			if not d then _G.error "Can't parse generic static JSON file" end
+			-- Modify to new icon in default path
+			d.default_icon = iconFile
+			d.flashicon = iconFile
+			d.state_icons = { iconFile }
+			d._comment = "AUTOMATICALLY GENERATED -- DO NOT MODIFY THIS FILE"
+			-- Save custom.
+			f = io.open( installPath .. staticJSONFile, "w" )
+			if not f then
+				error( string.format("can't write %s%s", installPath, staticJSONFile), 1)
+				staticJSONFile = nil
+			else
+				f:write( json.encode( d ) )
+				f:close()
+			end
+		end
+	end
+	-- Is this device using the right static JSON file?
+	local cj = luup.attr_get( 'device_json', device ) or ""
+	if not staticJSONFile then staticJSONFile = "D_Sonos1.json" end -- for safety
+	if staticJSONFile and cj ~= staticJSONFile then
+		-- No. Switch it out.
+		warning(string.format("device_json currently %s, swapping to %s (and reloading)", cj, staticJSONFile ))
+		luup.attr_set( 'device_json', staticJSONFile, device )
+		-- rigpapa: by using a delay here, we increase the changes that changes
+		-- for multiple players can be captured in one reload, rather than one per.
+		luup.call_delay( 'SonosReload', 15, "" )
+	end
+end
+
+setup = function(device, init)
+	device = tonumber(device)
+
+	local changed = false
+	local info
+
+	local newDevice = false
+	local newIP
+	 if (device == 0) then
+		newIP = ip[device]
+	else
+		newIP = luup.attr_get("ip", device)
+	end
+	if (newIP ~= ip[device]) then
+		newDevice = true
+		upnp.resetServices(UUIDs[device])
+		upnp.cancelProxySubscriptions(EventSubscriptions)
+		UUIDs[device] = ""
+		ip[device] = newIP
+		changed = setData("ZoneName", "", device, changed)
+		changed = setData("SonosID", "", device, changed)
+		changed = setData("SonosModelName", "", device, changed)
+		changed = setData("SonosModel", "", device, changed)
+		changed = setData("SonosOnline", "0", device, changed)
+	end
+
+	if (ip[device] == nil or ip[device] == "") then
+		setData("ZoneName", "", device, changed)
+		setData("SonosID", "", device, changed)
+		setData("SonosModelName", "", device, changed)
+		setData("SonosModel", "", device, changed)
+		setData("ProxyUsed", "", device, changed)
+		deviceIsOffline(device)
+		return
+	end
+
+	local descrURL = string.format(descriptionURL, ip[device], port)
+	local status, _, values, icon =
+							 upnp.setup(descrURL,
+										"urn:schemas-upnp-org:device:ZonePlayer:1",
+										{ "UDN", "roomName", "modelName", "modelNumber" },
+										{ { "urn:schemas-upnp-org:device:ZonePlayer:1",
+											{ UPNP_MUSICSERVICES_SERVICE,
+											UPNP_ZONEGROUPTOPOLOGY_SERVICE } },
+										{ "urn:schemas-upnp-org:device:MediaRenderer:1",
+											{ UPNP_AVTRANSPORT_SERVICE,
+											UPNP_RENDERING_CONTROL_SERVICE,
+											UPNP_GROUP_RENDERING_CONTROL_SERVICE } },
+										{ "urn:schemas-upnp-org:device:MediaServer:1",
+											{ UPNP_MR_CONTENT_DIRECTORY_SERVICE } }})
+	if (status == false) then
+		deviceIsOffline(device)
+		return
+	end
+
+	local newOnline = deviceIsOnline(device)
+
+	local uuid = values.UDN:match("uuid:(.+)") or ""
+	UUIDs[device] = uuid
+	ip[uuid] = ip[device]
+	if (dataTable[uuid] == nil) then
+		dataTable[uuid] = {}
+	end
+	local roomName = values.roomName
+	if (roomName ~= nil) then
+		roomName = upnp.decode(roomName)
+	end
+	changed = setData("ZoneName", roomName or "", device, changed)
+	changed = setData("SonosID", uuid, device, changed)
+	local modelName = values.modelName
+	if (modelName ~= nil) then
+		modelName = upnp.decode(modelName)
+	end
+	changed = setData("SonosModelName", modelName or "", device, changed)
+	changed = setData("SonosModelNumber", values.modelNumber or "", device, changed)
+	local model = 0
+	if (values.modelNumber == "S3") then
+		model = 1
+	elseif (values.modelNumber == "S5") then
+		model = 2
+	elseif (values.modelNumber == "ZP80") then
+		model = 3
+	elseif (values.modelNumber == "ZP90") then
+		model = 3
+	elseif (values.modelNumber == "ZP100") then
+		model = 4
+	elseif (values.modelNumber == "ZP120") then
+		model = 4
+	elseif (values.modelNumber == "S9") then
+		model = 5
+	elseif (values.modelNumber == "S1") then
+		model = 6
+	elseif values.modelNumber == "S12" then
+		-- Newer hardware revision of Play 1
+		model = 6 -- 2019-07-05 rigpapa; from @cranb https://community.getvera.com/t/version-1-4-3-development/209171/11
+	end
+	changed = setData("SonosModel", string.format("%d", model), device, changed)
+
+	log( string.format("#%s at %s is %q, %s (%s) %s",
+		tostring( device ),
+		tostring( ip[device] ),
+		tostring( modelName ),
+		tostring( values.modelNumber ), model,
+		tostring( values.UDN )
+		)
+	)
+
+	if icon then
+		iconURL = icon
+		-- Use pcall so any issue setting up icon does not interfere with initialization and operation
+		pcall( setDeviceIcon, device, icon, values.modelNumber, values.UDN )
+	else
+		iconURL = PLUGIN_ICON
+	end
+
+	if (device ~= 0 and (init or newDevice or newOnline)) then
+		upnp.subscribeToEvents(device, VERA_IP, EventSubscriptions, SONOS_SID, uuid)
+	end
+
+	if upnp.proxyVersionAtLeast(1) then
+		changed = setData("ProxyUsed", "proxy is in use", device, changed)
+		BROWSE_TIMEOUT = 30
+	else
+		changed = setData("ProxyUsed", "proxy is not in use", device, changed)
+		BROWSE_TIMEOUT = 5
+	end
+
+	if (init or newDevice or newOnline) then
+		sonosServices = getAvailableServices(uuid)
+		metaDataKeys[uuid] = loadServicesMetaDataKeys(device)
+	end
+
+	if (init or newDevice or newOnline or not upnp.proxyVersionAtLeast(1) ) then
+		-- Sonos playlists
+		info = upnp.browseContent(uuid, UPNP_MR_CONTENT_DIRECTORY_SERVICE, "SQ:", false, "dc:title", parseSavedQueues, BROWSE_TIMEOUT)
+		changed = setData("SavedQueues", info, device, changed)
+
+		-- Favorites radio stations
+		info = upnp.browseContent(uuid, UPNP_MR_CONTENT_DIRECTORY_SERVICE, "R:0/0", false, "dc:title", parseIdTitle, BROWSE_TIMEOUT)
+		changed = setData("FavoritesRadios", info, device, changed)
+
+		-- Sonos favorites
+		info = upnp.browseContent(uuid, UPNP_MR_CONTENT_DIRECTORY_SERVICE, "FV:2", false, "dc:title", parseIdTitle, BROWSE_TIMEOUT)
+		changed = setData("Favorites", info, device, changed)
+	end
+
+	if changed then
+		setVariableValue(HADEVICE_SID, "LastUpdate", os.time(), device)
+	end
+
+	if (newDevice or newOnline) then
+		refreshNow(device, true, true)
+	end
+end
+
+local function getCheckStateRate(device)
+	local rate = luup.variable_get(SONOS_SID, "CheckStateRate", device)
+	if (rate == nil or tonumber(rate) == nil) then
+		rate = "0"
+		luup.variable_set(SONOS_SID, "CheckStateRate", rate, device)
+	end
+	return tonumber(rate) * 60
+end
+
+function checkDeviceState(data)
+	debug("checkDeviceState " .. data)
+	local cpt, device = data:match("(%d+):(%d+)")
+	if (cpt ~= nil and device ~= nil) then
+		cpt = tonumber(cpt)
+		if (cpt == nil or cpt ~= idConfRefresh) then
+			return
+		end
+		device = tonumber(device)
+		local rate = getCheckStateRate(device)
+		if (rate > 0) then
+			luup.call_delay("checkDeviceState", rate, idConfRefresh .. ":" .. device)
+			setup(device, false)
+		end
+	end
+end
+
+local function setCheckStateRate(device, rate)
+	debug("setCheckStateRate rate=" .. (rate or "nil"))
+	if (rate == nil or tonumber(rate) == nil) then
+		rate = "0"
+	end
+	luup.variable_set(SONOS_SID, "CheckStateRate", rate, device)
+
+	idConfRefresh = idConfRefresh + 1
+
+	checkDeviceState(idConfRefresh .. ":" .. device)
+end
+
+local function handleRenderingChange(device, event)
+	debug("handleRenderingChange for device " .. device .. " value " .. event)
+	local changed = false
+	local tmp = event:match("<Event%s?[^>]-><InstanceID%s?[^>]->(.+)</InstanceID></Event>")
+	if tmp ~= nil then
+		for token, attributes in tmp:gmatch('<([a-zA-Z0-9:]+)(%s?.-)/>') do
+			local attrTable = {}
+			for attr, value in attributes:gmatch('%s(.-)="(.-)"') do
+				attrTable[attr] = value
+			end
+			if (attrTable.val ~= nil and
+					(attrTable.channel == "Master" or attrTable.channel == nil)) then
+				changed = setData(token, upnp.decode(attrTable.val), device, changed)
+			end
+		end
+	end
+	if changed then
+		setVariableValue(HADEVICE_SID, "LastUpdate", os.time(), device)
+	end
+end
+
+local function handleAVTransportChange(device, uuid, event)
+	debug("handleAVTransportChange for device " .. device .. " UUID " .. uuid .. " value " .. event)
+	local statusString, title, title2, artist, album, details, albumArt, desc
+	local currentUri, currentUriMetaData, trackUri, trackUriMetaData, service, serviceId
+	local changed = false
+	local tmp = event:match("<Event%s?[^>]-><InstanceID%s?[^>]->(.+)</InstanceID></Event>")
+	if tmp ~= nil then
+		local found = false
+		local found2 = false
+		for token, attributes in tmp:gmatch('<([a-zA-Z0-9:]+)(%s?.-)/>') do
+			if (token == "RelativeTimePosition") then
+				found = true
+			elseif (token == "r:EnqueuedTransportURIMetaData") then
+				found2 = true
+			end
+			local attrTable = {}
+			for attr, value in attributes:gmatch('%s(.-)="(.-)"') do
+				attrTable[attr] = value
+			end
+			if (attrTable.val ~= nil) then
+				changed = setData(token, upnp.decode(attrTable.val), device, changed)
+			end
+		end
+
+		currentUri = dataTable[uuid].AVTransportURI
+		currentUriMetaData = dataTable[uuid].AVTransportURIMetaData
+		trackUri = dataTable[uuid].CurrentTrackURI
+		trackUriMetaData = dataTable[uuid].CurrentTrackMetaData
+		service, title, statusString, title2, artist, album, details, albumArt =
+			extractDataFromMetaData(device, currentUri, currentUriMetaData, trackUri, trackUriMetaData)
+		changed = setData("CurrentService", service, device, changed)
+		changed = setData("CurrentRadio", title, device, changed)
+		changed = setData("CurrentStatus", statusString, device, changed)
+		changed = setData("CurrentTitle", title2, device, changed)
+		changed = setData("CurrentArtist", artist, device, changed)
+		changed = setData("CurrentAlbum", album, device, changed)
+		changed = setData("CurrentDetails", details, device, changed)
+		changed = setData("CurrentAlbumArt", albumArt, device, changed)
+
+		if not found then
+			local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
+			if AVTransport ~= nil then
+				local _, tmp2 = AVTransport.GetPositionInfo({InstanceID="0"})
+				changed = setData("RelativeTimePosition", upnp.extractElement("RelTime", tmp2, "NOT_IMPLEMENTED"), device, changed)
+			end
+		end
+
+		if found2 then
+			_, title, artist, album, details, albumArt, desc = -- luacheck: ignore 311
+				getSimpleDIDLStatus(dataTable[uuid]["r:EnqueuedTransportURIMetaData"])
+			_, serviceId = getServiceFromURI(currentUri, trackUri)
+			updateServicesMetaDataKeys(device, serviceId, desc)
+		end
+	end
+	if changed then
+		setVariableValue(HADEVICE_SID, "LastUpdate", os.time(), device)
+	end
+end
+
+local function handleContentDirectoryChange(device, uuid, id)
+	debug("handleContentDirectoryChange for device " .. device .. " UUID " .. uuid .. " value " .. id)
+	local info
+	local changed = false
+
+	if (id:find("SQ:,") == 1) then
+		-- Sonos playlists
+		info = upnp.browseContent(uuid, UPNP_MR_CONTENT_DIRECTORY_SERVICE, "SQ:", false, "dc:title", parseSavedQueues, BROWSE_TIMEOUT)
+		changed = setData("SavedQueues", info, device, changed)
+	elseif (id:find("R:0,") == 1) then
+		-- Favorites radio stations
+		info = upnp.browseContent(uuid, UPNP_MR_CONTENT_DIRECTORY_SERVICE, "R:0/0", false, "dc:title", parseIdTitle, BROWSE_TIMEOUT)
+		changed = setData("FavoritesRadios", info, device, changed)
+	elseif (id:find("FV:2,") == 1) then
+		-- Sonos favorites
+		info = upnp.browseContent(uuid, UPNP_MR_CONTENT_DIRECTORY_SERVICE, "FV:2", false, "dc:title", parseIdTitle, BROWSE_TIMEOUT)
+		changed = setData("Favorites", info, device, changed)
+	elseif (id:find("Q:0,") == 1) then
+		-- Sonos queue
+		if (fetchQueue) then
+			info = upnp.browseContent(uuid, UPNP_MR_CONTENT_DIRECTORY_SERVICE, "Q:0", false, "dc:title", parseQueue, BROWSE_TIMEOUT)
+		else
+			info = ""
+		end
+		changed = setData("Queue", info, device, changed)
+	end
+	if changed then
+		setVariableValue(HADEVICE_SID, "LastUpdate", os.time(), device)
+	end
+end
+
+-- N.B. called via call_delay from L_SonosUPnP
+function processProxySubscriptions(info)
+	debug("Processing UPnP Event Proxy subscriptions: " .. info)
+	upnp.processProxySubscriptions()
+end
+
+-- N.B. called via call_delay from L_SonosUPnP
+function renewSubscriptions(data)
+	local device, uuid = data:match("(%d+):(.*)")
+	if (device ~= nil and uuid ~= nil) then
+		device = tonumber(device)
+		debug("Renewal of all event subscriptions for device " .. device)
+		if (uuid ~= UUIDs[device]) then
+			debug("Renewal ignored for uuid " .. uuid)
+		elseif (upnp.subscribeToEvents(device, VERA_IP, EventSubscriptions, SONOS_SID, UUIDs[device]) == false) then
+			setup(device, true)
+		end
+	end
+end
+
+-- N.B. called via call_delay from L_SonosUPnP
+function cancelProxySubscription(sid)
+	upnp.cancelProxySubscription(sid)
+end
+
+local function setDebugLogs(device, enable)
+	debug("setDebugLogs " .. (enable or "nil"))
+
+	if ((enable == "true") or (enable == "yes"))
+	then
+		enable = "1"
+	elseif ((enable == "false") or (enable == "no"))
+	then
+		enable = "0"
+	end
+	if ((enable ~= "0") and (enable ~= "1"))
+	then
+		task("SetDebugLogs: invalid argument", TASK_ERROR)
+		return
+	end
+
+	luup.variable_set(SONOS_SID, "DebugLogs", enable, device)
+	if (enable == "1")
+	then
+		DEBUG_MODE = true
+	else
+		DEBUG_MODE = false
+	end
+end
+
+local function setReadQueueContent(device, enable)
+	debug("setReadQueueContent " .. (enable or "nil"))
+
+	if ((enable == "true") or (enable == "yes"))
+	then
+		enable = "1"
+	elseif ((enable == "false") or (enable == "no"))
+	then
+		enable = "0"
+	end
+	if ((enable ~= "0") and (enable ~= "1"))
+	then
+		task("SetReadQueueContent: invalid argument", TASK_ERROR)
+		return
+	end
+
+	luup.variable_set(SONOS_SID, "FetchQueue", enable, device)
+	if (enable == "1")
+	then
+		fetchQueue = true
+	else
+		fetchQueue = false
+	end
+	handleContentDirectoryChange(device, UUIDs[device], "Q:0,")
+end
+
+function SonosReload()
+	log( 'Requesting luup reload...' )
+	luup.reload()
+end
+
+-- Check that the proxy is running.
+function checkProxy(data)
+	local proxy = false
+	local version = upnp.getProxyApiVersion()
+	if version then
+		log("UPnP Event Proxy identified - API version " .. version)
+		proxy = true
+	else
+		warning("UPnP Event Proxy plugin could not be contacted; polling for status will be used. This is inefficient; please consider installing the plugin from the marketplace.")
+	end
+
+	if ( not proxy ) then
+		upnp.unuseProxy()
+	end
+
+	luup.call_delay("checkProxy", 300)
+end
+
+function deferredStartup(device)
+	debug("deferredStartup: start " .. device)
+	device = tonumber(device)
+
+	-- Check that the proxy is running.
+	checkProxy(device)
+
+	-- the next line has to be uncommented to force the old mode without the UPnP event proxy
+	-- upnp.unuseProxy()
+
+	if (luup.devices[device].device_type == SONOS_DEVICE_TYPE) then
+		UUIDs[device] = ""
+		ip[device] = luup.attr_get("ip", device)
+
+		setupTTSSettings(device)
+
+		idConfRefresh = 0
+		local rate = getCheckStateRate(device)
+		if (rate > 0) then
+			luup.call_delay("checkDeviceState", rate, idConfRefresh .. ":" .. device)
+		end
+		setup(device, true)
+		updateWithoutProxy(device)
+	end
+end
+
+function startup(lul_device)
+	log("version " .. PLUGIN_VERSION .. " starting up #" .. lul_device .. " ("
+		.. luup.devices[lul_device].description .. ")")
+
+	pcall( fixLegacyIcons )
+
+	setData( "PluginVersion", PLUGIN_VERSION, lul_device, false )
+	initData( "PollDelays", "15,60", lul_device )
+
+	local enabled = initData( "Enabled", "1", lul_device )
+	if "0" == enabled then
+		warning("#"..lul_device.." disabled via state variable config; start aborting.")
+		deviceIsOffline( lul_device )
+		return
+	end
+
+	if (luup.variable_get(SONOS_SID, "DiscoveryResult", lul_device) == nil
+			or luup.variable_get(SONOS_SID, "DiscoveryResult", lul_device) == "scanning") then
+		luup.variable_set(SONOS_SID, "DiscoveryResult", "", lul_device)
+	end
+
+	local routerIp = luup.variable_get(SONOS_SID, "RouterIp", lul_device)
+	if (routerIp == nil) then
+		routerIp = ""
+		luup.variable_set(SONOS_SID, "RouterIp", routerIp, lul_device)
+	end
+	local routerPort = luup.variable_get(SONOS_SID, "RouterPort", lul_device)
+	if (routerPort == nil) then
+		routerPort = ""
+		luup.variable_set(SONOS_SID, "RouterPort", routerPort, lul_device)
+	end
+
+	local rate = luup.variable_get(SONOS_SID, "CheckStateRate", lul_device)
+	if (rate == nil or tonumber(rate) == nil) then
+		luup.variable_set(SONOS_SID, "CheckStateRate", "0", lul_device)
+	end
+
+	local debugLogs = luup.variable_get(SONOS_SID, "DebugLogs", lul_device)
+	if (debugLogs == nil or tonumber(debugLogs) == nil) then
+		luup.variable_set(SONOS_SID, "DebugLogs", "0", lul_device)
+	end
+	if (luup.variable_get(SONOS_SID, "DebugLogs", lul_device) == "1") then
+		DEBUG_MODE = true
+	end
+
+	local fetch = luup.variable_get(SONOS_SID, "FetchQueue", lul_device)
+	if (fetch == nil or tonumber(fetch) == nil) then
+		luup.variable_set(SONOS_SID, "FetchQueue", "1", lul_device)
+	end
+	if (luup.variable_get(SONOS_SID, "FetchQueue", lul_device) == "0") then
+		fetchQueue = false
+	end
+
+	--
+	-- Acquire the IP Address of Vera itself, needed for the Say method later on.
+	-- Note: We're assuming Vera is connected via it's WAN Port to the Sonos devices
+	--
+	local stdout = io.popen("GetNetworkState.sh ip_wan")
+	VERA_LOCAL_IP = stdout:read("*a")
+	stdout:close()
+	debug("sonosStartup: Vera IP Address=" .. VERA_LOCAL_IP)
+
+	if (routerIp == "") then
+		VERA_IP = VERA_LOCAL_IP
+	else
+		VERA_IP = routerIp
+	end
+
+	if routerPort ~= "" then
+		VERA_WEB_PORT = tonumber(routerPort)
+	end
+
+	ip, playbackCxt, sayPlayback, UUIDs, metaDataKeys, dataTable = upnp.initialize(debug, warning, error)
+
+	tts.initialize(debug, warning, error)
+
+	port = 1400
+	descriptionURL = "http://%s:%s/xml/device_description.xml"
+	iconURL = PLUGIN_ICON
+
+	if (upnp.isDiscoveryPatchInstalled(VERA_LOCAL_IP)) then
+		luup.variable_set(SONOS_SID, "DiscoveryPatchInstalled", "1", lul_device)
+	else
+		luup.variable_set(SONOS_SID, "DiscoveryPatchInstalled", "0", lul_device)
+	end
+
+	luup.call_delay("deferredStartup", 1, lul_device)
+end
+
+--[[
+
+	IMPLEMENTATIONS FOR ACTIONS IN urn:micasaverde-com:serviceId:Sonos1
+
+--]]
+
+function actionSonosSay( lul_device, lul_settings )
+	debug("Say: " .. (lul_settings.Text or "nil"))
+	tts.queueAlert( lul_device, lul_settings )
+end
+
+function actionSonosSetupTTS( lul_device, lul_settings )
+	luup.variable_set(SONOS_SID, "DefaultLanguageTTS"   			, lul_settings.DefaultLanguage or "en", lul_device)
+	luup.variable_set(SONOS_SID, "DefaultEngineTTS"     			, lul_settings.DefaultEngine or "GOOGLE", lul_device)
+	luup.variable_set(SONOS_SID, "OSXTTSServerURL"      			, url.unescape(lul_settings.OSXTTSServerURL       		or ""), lul_device)
+	luup.variable_set(SONOS_SID, "GoogleTTSServerURL"   			, url.unescape(lul_settings.GoogleTTSServerURL    		or "https://translate.google.com"), lul_device)
+	luup.variable_set(SONOS_SID, "MaryTTSServerURL"     			, url.unescape(lul_settings.MaryTTSServerURL      		or ""), lul_device)
+	luup.variable_set(SONOS_SID, "MicrosoftClientId"    			, url.unescape(lul_settings.MicrosoftClientId     		or ""), lul_device)
+	luup.variable_set(SONOS_SID, "MicrosoftClientSecret"			, url.unescape(lul_settings.MicrosoftClientSecret 		or ""), lul_device)
+	luup.variable_set(SONOS_SID, "MicrosoftOption"      			, url.unescape(lul_settings.MicrosoftOption      		or ""), lul_device)
+	luup.variable_set(SONOS_SID, "ResponsiveVoiceTTSServerURL"    , url.unescape(lul_settings.ResponsiveVoiceTTSServerURL	or "https://code.responsivevoice.org"), lul_device)
+	luup.variable_set(SONOS_SID, "TTSRate"      					, url.unescape(lul_settings.Rate      		or "0.5"), lul_device)
+	luup.variable_set(SONOS_SID, "TTSPitch"      					, url.unescape(lul_settings.Pitch      		or "0.5"), lul_device)
+	setupTTSSettings(lul_device)
+end
+
+function actionSonosSetURIToPlay( lul_device, lul_settings )
+	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
+	local uri = defaultValue(lul_settings, "URIToPlay", "")
+
+	playURI(lul_device, instanceId, uri, nil, nil, nil, false, nil, false, true)
+
+	refreshNow(lul_device, false, true)
+
+	-- URI must include protocol as prefix.
+	-- x-file-cifs:
+	-- file:
+	-- x-rincon:
+	-- x-rincon-mp3radio:
+	-- x-rincon-playlist:
+	-- x-rincon-queue:
+	-- x-rincon-stream:
+	-- example is DR Jazz Radio: x-rincon-mp3radio://live-icy.gss.dr.dk:8000/Channel22_HQ.mp3
+end
+
+function actionSonosPlayURI( lul_device, lul_settings )
+	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
+	local uri = defaultValue(lul_settings, "URIToPlay", "")
+	local volume = defaultValue(lul_settings, "Volume", nil)
+	local speed = defaultValue(lul_settings, "Speed", "1")
+
+	playURI(lul_device, instanceId, uri, speed, volume, nil, false, nil, false, true)
+
+	refreshNow(lul_device, false, true)
+
+	-- URI must include protocol as prefix.
+	-- x-file-cifs:
+	-- file:
+	-- x-rincon:
+	-- x-rincon-mp3radio:
+	-- x-rincon-playlist:
+	-- x-rincon-queue:
+	-- x-rincon-stream:
+	-- example is DR Jazz Radio: x-rincon-mp3radio://live-icy.gss.dr.dk:8000/Channel22_HQ.mp3
+end
+
+function actionSonosEnqueueURI( lul_device, lul_settings )
+	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
+	local uri = defaultValue(lul_settings, "URIToEnqueue", "")
+	local enqueueMode = defaultValue(lul_settings, "EnqueueMode", "ENQUEUE_AND_PLAY")
+
+	playURI(lul_device, instanceId, uri, "1", nil, nil, false, enqueueMode, false, true)
+
+	refreshNow(lul_device, false, true)
+end
+
+function actionSonosAlert( lul_device, lul_settings )
+	local duration = tonumber(defaultValue(lul_settings, "Duration", "0")) or 0
+	if (duration > 0) then
+		tts.queueAlert(lul_device, lul_settings)
+	else
+		sayOrAlert(lul_device, lul_settings, false)
+	end
+end
+
+function actionSonosPauseAll( lul_device, lul_settings )
+	pauseAll(lul_device)
+end
+
+function actionSonosJoinGroup( lul_device, lul_settings )
+	local zone = defaultValue(lul_settings, "Zone", "")
+	joinGroup(lul_device, zone)
+end
+
+function actionSonoLeaveGroup( lul_device, lul_settings )
+	leaveGroup(lul_device)
+end
+
+function actionSonosUpdateGroupMembers( lul_device, lul_settings )
+	local zones = url.unescape(defaultValue(lul_settings, "Zones", ""))
+	updateGroupMembers(lul_device, zones)
+end
+
+function actionSonosSavePlaybackContext( lul_device, lul_settings )
+	local devices = defaultValue(lul_settings, "GroupDevices", "")
+	local zones = defaultValue(lul_settings, "GroupZones", "")
+
+	local uuidListe = UUIDs[lul_device]
+	for id in devices:gmatch("%d+") do
+		id = tonumber(id)
+		if (id ~= lul_device) then
+			local uuid = UUIDs[id]
+			if (uuid == nil) then
+				uuid = luup.variable_get(UPNP_DEVICE_PROPERTIES_SID, "SonosID", id)
+			end
+			if (uuid ~= nil and uuid ~= "" and uuidListe:find(uuid) == nil) then
+				uuidListe = uuidListe .. ","
+				uuidListe = uuidListe .. uuid
+			end
+		end
+	end
+	if (zones:upper() == "ALL") then
+		local uuids = getAllUUIDs()
+		for uuid in uuids:gmatch("RINCON_%x+") do
+			if (uuid ~= UUIDs[lul_device] and uuidListe:find(uuid) == nil) then
+				uuidListe = uuidListe .. ","
+				uuidListe = uuidListe .. uuid
+			end
+		end
+	else
+		for zone in zones:gmatch("[^,]+") do
+			local uuid = getUUIDFromZoneName(zone)
+			if (uuid ~= nil and uuid ~= "" and uuid ~= UUIDs[lul_device] and uuidListe:find(uuid) == nil) then
+				uuidListe = uuidListe .. ","
+				uuidListe = uuidListe .. uuid
+			 end
+		end
+	end
+
+	playbackCxt[lul_device] = savePlaybackContexts(lul_device, uuidListe)
+	playbackCxt[lul_device].grpMembers = ""
+	return 4,0
+end
+
+function actionSonosRestorePlaybackContext( lul_device, lul_settings )
+	restorePlaybackContexts(lul_device, playbackCxt[lul_device])
+	return 4,0
+end
+
+function actionSonosStartDiscovery( lul_device, lul_settings )
+	setVariableValue(SONOS_SID, "DiscoveryResult", "scanning", lul_device)
+	local xml = upnp.scanUPnPDevices("urn:schemas-upnp-org:device:ZonePlayer:1", { "modelName", "friendlyName", "roomName" })
+	setVariableValue(SONOS_SID, "DiscoveryResult", xml, lul_device)
+	return 4,0
+end
+
+function actionSonosSelectDevice( lul_device, lul_settings )
+	local newDescrURL = url.unescape( lul_settings.URL or "" )
+	local newIP, newPort = newDescrURL:match("http://([%d%.]-):(%d+)/.-")
+	if (newIP ~= nil and newPort ~= nil) then
+		luup.attr_set("ip", newIP, lul_device)
+		luup.attr_set("mac", "", lul_device)
+		setup(lul_device, false)
+	end
+end
+
+function actionSonosSearchAndSelect( lul_device, lul_settings )
+	if (lul_settings.Name == nil or lul_settings.Name == "") then
+		return 2,0
+	end
+
+	local descrURL = upnp.searchUPnPDevices("urn:schemas-upnp-org:device:ZonePlayer:1",
+											lul_settings.Name,
+											lul_settings.IP)
+	if (descrURL ~= nil) then
+		local newIP, newPort = descrURL:match("http://([%d%.]-):(%d+)/.-")
+	    if (newIP ~= nil and newPort ~= nil) then
+			luup.attr_set("ip", newIP, lul_device)
+			luup.attr_set("mac", "", lul_device)
+			setup(lul_device, false)
+		end
+	end
+	return 4,0
+end
+
+function actionSonosSetCheckStateRate( lul_device, lul_settings )
+	setCheckStateRate(lul_device, lul_settings.rate)
+end
+
+function actionSonosSetDebugLogs( lul_device, lul_settings )
+	setDebugLogs(lul_device, lul_settings.enable)
+end
+
+function actionSonosSetReadQueueContent( lul_device, lul_settings )
+	setReadQueueContent(lul_device, lul_settings.enable)
+end
+
+function actionSonosInstallDiscoveryPatch( lul_device, lul_settings )
+	local reload = false
+	if (upnp.installDiscoveryPatch(VERA_LOCAL_IP)) then
+		reload = true
+		log("Discovery patch now installed")
+	else
+		log("Discovery patch installation failed")
+	end
+	if (upnp.isDiscoveryPatchInstalled(VERA_LOCAL_IP)) then
+		luup.variable_set(SONOS_SID, "DiscoveryPatchInstalled", "1", lul_device)
+	else
+		luup.variable_set(SONOS_SID, "DiscoveryPatchInstalled", "0", lul_device)
+	end
+	if reload then
+		luup.call_delay("SonosReload", 2, "")
+	end
+end
+
+function actionSonosUninstallDiscoveryPatch( lul_device, lul_settings )
+	local reload = false
+	if (upnp.uninstallDiscoveryPatch(VERA_LOCAL_IP)) then
+		reload = true
+		log("Discovery patch now uninstalled")
+	else
+		log("Discovery patch uninstallation failed")
+	end
+	if (upnp.isDiscoveryPatchInstalled(VERA_LOCAL_IP)) then
+		luup.variable_set(SONOS_SID, "DiscoveryPatchInstalled", "1", lul_device)
+	else
+		luup.variable_set(SONOS_SID, "DiscoveryPatchInstalled", "0", lul_device)
+	end
+	if reload then
+		luup.call_delay("SonosReload", 2, "")
+	end
+end
+
+function actionSonosNotifyRenderingChange( lul_device, lul_settings )
+	if (upnp.isValidNotification("NotifyRenderingChange", lul_settings.sid, EventSubscriptions)) then
+		handleRenderingChange(lul_device, lul_settings.LastChange or "")
+		return 4,0
+	end
+	return 2,0
+end
+
+function actionSonosNotifyAVTransportChange( lul_device, lul_settings )
+	if (upnp.isValidNotification("NotifyAVTransportChange", lul_settings.sid, EventSubscriptions)) then
+		handleAVTransportChange(lul_device, UUIDs[lul_device], lul_settings.LastChange or "")
+		return 4,0
+	end
+	return 2,0
+end
+
+function actionSonosNotifyMusicServicesChange( lul_device, lul_settings )
+	if (upnp.isValidNotification("NotifyMusicServicesChange", lul_settings.sid, EventSubscriptions)) then
+		-- log("NotifyMusicServicesChange for device " .. lul_device .. " SID " .. lul_settings.sid .. " with value " .. (lul_settings.LastChange or "nil"))
+		return 4,0
+	end
+	return 2,0
+end
+
+function actionSonosNotifyZoneGroupTopologyChange( lul_device, lul_settings )
+	if (upnp.isValidNotification("NotifyZoneGroupTopologyChange", lul_settings.sid, EventSubscriptions)) then
+		groupsState = lul_settings.ZoneGroupState or ""
+
+		local changed = setData("ZoneGroupState", groupsState, lul_device, false)
+
+		local members, coordinator = getGroupInfos(UUIDs[lul_device])
+		changed = setData("ZonePlayerUUIDsInGroup", members, lul_device, changed)
+		changed = setData("GroupCoordinator", coordinator, lul_device, changed)
+
+		if changed then
+			setVariableValue(HADEVICE_SID, "LastUpdate", os.time(), lul_device)
+		end
+		return 4,0
+	end
+	return 2,0
+end
+
+function actionSonosNotifyContentDirectoryChange( lul_device, lul_settings )
+	if (upnp.isValidNotification("NotifyContentDirectoryChange", lul_settings.sid, EventSubscriptions)) then
+		handleContentDirectoryChange(lul_device, UUIDs[lul_device], lul_settings.ContainerUpdateIDs or "")
+		return 4,0
+	end
+	return 2,0
+end
+
+--[[
+
+	IMPLEMENTATIONS FOR ACTIONS IN urn:micasaverde-com:serviceId:Volume1
+
+--]]
+
+function actionVolumeMute( lul_device, lul_settings )
+	-- Toggle Mute
+	local Rendering = upnp.getService(UUIDs[lul_device], UPNP_RENDERING_CONTROL_SERVICE)
+	if (Rendering == nil) then
+		return
+	end
+
+	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
+	local channel = defaultValue(lul_settings, "Channel", "Master")
+	local isMuted = luup.variable_get(UPNP_RENDERING_CONTROL_SID, "Mute", lul_device)
+	local desiredMute = 1 - (tonumber(isMuted) or 0)
+
+	Rendering.SetMute(
+		 {OrderedArgs={"InstanceID=" .. instanceId,
+					 "Channel=" .. channel,
+					 "DesiredMute=" .. desiredMute}})
+
+	refreshMuteNow(lul_device)
+end
+
+function actionVolumeUp( lul_device, lul_settings )
+	-- Volume up
+	local Rendering = upnp.getService(UUIDs[lul_device], UPNP_RENDERING_CONTROL_SERVICE)
+	if (Rendering == nil) then
+		return
+	end
+
+	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
+	local channel = defaultValue(lul_settings, "Channel", "Master")
+
+	Rendering.SetRelativeVolume(
+		 {OrderedArgs={"InstanceID=" .. instanceId,
+					 "Channel=" .. channel,
+					 "Adjustment=3"}})
+
+	refreshVolumeNow(lul_device)
+end
+
+function actionVolumeDown( lul_device, lul_settings )
+	-- Volume down
+	local Rendering = upnp.getService(UUIDs[lul_device], UPNP_RENDERING_CONTROL_SERVICE)
+	if (Rendering == nil) then
+		return
+	end
+
+	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
+	local channel = defaultValue(lul_settings, "Channel", "Master")
+
+	Rendering.SetRelativeVolume(
+		 {OrderedArgs={"InstanceID=" .. instanceId,
+					 "Channel=" .. channel,
+					 "Adjustment=-3"}})
+
+	refreshVolumeNow(lul_device)
+end
+
+--[[
+
+	IMPLEMENTATIONS FOR ACTIONS IN urn:micasaverde-com:serviceId:MediaNavigation1
+
+--]]
+
+function actionMediaNavigationSkipDown( lul_device, lul_settings )
+	local device, uuid = controlByCoordinator(lul_device)
+	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
+	if (AVTransport == nil) then
+		return
+	end
+
+	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
+
+	AVTransport.Next({InstanceID=instanceId})
+
+	-- Force a refresh when current service is Pandora due to a bug (missing notification)
+	local force = false
+	local currentUri = dataTable[uuid].AVTransportURI
+	if (currentUri ~= nil and currentUri:find("pndrradio:") == 1) then
+		force = true
+	end
+	if (device ~= 0) then
+		refreshNow(device, force, false)
+	end
+end
+
+function actionMediaNavigationSkipUp( lul_device, lul_settings )
+	local device, uuid = controlByCoordinator(lul_device)
+	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
+	if (AVTransport == nil) then
+		return
+	end
+
+	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
+
+	AVTransport.Previous({InstanceID=instanceId})
+
+	if (device ~= 0) then
+		refreshNow(device, false, false)
+	end
+end
+
+--[[
+
+	IMPLEMENTATIONS FOR ACTIONS IN urn:upnp-org:serviceId:AVTransport
+
+--]]
+
+function actionAVTransportPlayMedia( lul_device, lul_settings )
+	local device, uuid = controlByCoordinator(lul_device)
+	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
+	if (AVTransport == nil) then
+		return
+	end
+
+	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
+	local speed = defaultValue(lul_settings, "Speed", "1")
+
+	AVTransport.Play(
+		{OrderedArgs={"InstanceID=" .. instanceId,
+						"Speed=" ..speed}})
+
+	-- Force a refresh when current service is Pandora due to a bug (missing notification)
+	local force = false
+	local currentUri = dataTable[uuid].AVTransportURI
+	if (currentUri ~= nil and currentUri:find("pndrradio:") == 1) then
+		force = true
+	end
+	if (device ~= 0) then
+		refreshNow(device, force, false)
+	end
+end
+
+function actionAVTransportSeek( lul_device, lul_settings )
+	local _, uuid = controlByCoordinator(lul_device)
+	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
+	if (AVTransport == nil) then
+		return
+	end
+
+	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
+	local unit = defaultValue(lul_settings, "Unit", "")
+	local target = defaultValue(lul_settings, "Target", "")
+
+	AVTransport.Seek(
+		{OrderedArgs={"InstanceID=" ..instanceId,
+					"Unit=" .. unit,
+					"Target=" .. target}})
+end
+
+function actionAVTransportPause( lul_device, lul_settings )
+	local device, uuid = controlByCoordinator(lul_device)
+	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
+	if (AVTransport == nil) then
+		return
+	end
+
+	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
+
+	AVTransport.Pause({InstanceID=instanceId})
+
+	-- Force a refresh when current service is Pandora due to a bug (missing notification)
+	local force = false
+	local currentUri = dataTable[uuid].AVTransportURI
+	if (currentUri ~= nil and currentUri:find("pndrradio:") == 1) then
+		force = true
+	end
+	if (device ~= 0) then
+		refreshNow(device, force, false)
+	end
+end
+
+function actionAVTransportStop( lul_device, lul_settings )
+	local device, uuid = controlByCoordinator(lul_device)
+	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
+	if (AVTransport == nil) then
+		return
+	end
+
+	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
+
+	AVTransport.Stop({InstanceID=instanceId})
+
+	if (device ~= 0) then
+		refreshNow(device, false, false)
+	end
+end
+
+function actionAVTransportNext( lul_device, lul_settings )
+	local _, uuid = controlByCoordinator(lul_device)
+	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
+	if (AVTransport == nil) then
+		return
+	end
+
+	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
+
+	AVTransport.Next({InstanceID=instanceId})
+end
+
+function actionAVTransportPrevious( lul_device, lul_settings )
+	local _, uuid = controlByCoordinator(lul_device)
+	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
+	if (AVTransport == nil) then
+		return
+	end
+
+	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
+
+	AVTransport.Previous({InstanceID=instanceId})
+end
+
+function actionAVTransportNextSection( lul_device, lul_settings )
+	local _, uuid = controlByCoordinator(lul_device)
+	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
+	if (AVTransport == nil) then
+		return
+	end
+
+	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
+
+	AVTransport.NextSection({InstanceID=instanceId})
+end
+
+function actionAVTransportPreviousSection( lul_device, lul_settings )
+	local _, uuid = controlByCoordinator(lul_device)
+	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
+	if (AVTransport == nil) then
+		return
+	end
+
+	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
+
+	AVTransport.PreviousSection({InstanceID=instanceId})
+end
+
+function actionAVTransportNextProgrammedRadioTracks( lul_device, lul_settings )
+	local _, uuid = controlByCoordinator(lul_device)
+	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
+	if (AVTransport == nil) then
+		return
+	end
+
+	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
+
+	AVTransport.NextProgrammedRadioTracks({InstanceID=instanceId})
+end
+
+function actionAVTransportGetPositionInfo( lul_device, lul_settings )
+	local device, uuid = controlByCoordinator(lul_device)
+	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
+	if (AVTransport == nil) then
+		return
+	end
+
+	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
+
+	local _, tmp = AVTransport.GetPositionInfo({InstanceID=instanceId})
+	setData("RelativeTimePosition", upnp.extractElement("RelTime", tmp, "NOT_IMPLEMENTED"), device, false)
+end
+
+function actionAVTransportSetPlayMode( lul_device, lul_settings )
+	local _, uuid = controlByCoordinator(lul_device)
+	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
+	if (AVTransport == nil) then
+		return
+	end
+
+	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
+	local newPlayMode = defaultValue(lul_settings, "NewPlayMode", "NORMAL")
+
+	-- NORMAL, SHUFFLE, SHUFFLE_NOREPEAT, REPEAT_ONE, REPEAT_ALL, RANDOM, DIRECT_1, INTRO
+	AVTransport.SetPlayMode(
+		{OrderedArgs={"InstanceID=" .. instanceId,
+						"NewPlayMode=" .. newPlayMode}})
+end
+
+function actionAVTransportSetURI( lul_device, lul_settings )
+	local AVTransport = upnp.getService(UUIDs[lul_device], UPNP_AVTRANSPORT_SERVICE)
+	if (AVTransport == nil) then
+		return
+	end
+
+	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
+	local currentURI = defaultValue(lul_settings, "CurrentURI", "")
+	local currentURIMetaData = defaultValue(lul_settings, "CurrentURIMetaData", "")
+
+	AVTransport.SetAVTransportURI(
+		{OrderedArgs={"InstanceID=" .. instanceId,
+						"CurrentURI=" .. currentURI,
+						"CurrentURIMetaData=" .. currentURIMetaData}})
+end
+
+function actionAVTransportSetNextURI( lul_device, lul_settings )
+	local AVTransport = upnp.getService(UUIDs[lul_device], UPNP_AVTRANSPORT_SERVICE)
+	if (AVTransport == nil) then
+		return
+	end
+
+	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
+	local nextURI = defaultValue(lul_settings, "NextURI", "")
+	local nextURIMetaData = defaultValue(lul_settings, "NextURIMetaData", "")
+
+	AVTransport.SetNextAVTransportURI(
+		{OrderedArgs={"InstanceID=" .. instanceId,
+						"NextURI=" .. nextURI,
+						"NextURIMetaData=" .. nextURIMetaData}})
+end
+
+function actionAVTransportAddMultipleURIs( lul_device, lul_settings )
+	local _, uuid = controlByCoordinator(lul_device)
+	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
+	if (AVTransport == nil) then
+		return
+	end
+
+	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
+	local updateID = defaultValue(lul_settings, "UpdateID", "")
+	local numberOfURIs = defaultValue(lul_settings, "NumberOfURIs", "")
+	local enqueuedURIs = defaultValue(lul_settings, "EnqueuedURIs", "")
+	local enqueuedURIsMetaData = defaultValue(lul_settings, "EnqueuedURIsMetaData", "")
+	local containerURI = defaultValue(lul_settings, "ContainerURI", "")
+	local containerMetaData = defaultValue(lul_settings, "ContainerMetaData", "")
+	local desiredFirstTrackNumberEnqueued = defaultValue(lul_settings, "DesiredFirstTrackNumberEnqueued", 1)
+	local enqueueAsNext = defaultValue(lul_settings, "EnqueueAsNext", true)
+
+	AVTransport.AddMultipleURIsToQueue(
+		{OrderedArgs={"InstanceID=" .. instanceId,
+						"UpdateID=" .. updateID,
+						"NumberOfURIs=" .. numberOfURIs,
+						"EnqueuedURIs=" .. enqueuedURIs,
+						"EnqueuedURIsMetaData=" .. enqueuedURIsMetaData,
+						"ContainerURI=" .. containerURI,
+						"ContainerMetaData=" .. containerMetaData,
+					 "DesiredFirstTrackNumberEnqueued=" .. desiredFirstTrackNumberEnqueued,
+						"EnqueueAsNext=" .. enqueueAsNext}})
+end
+
+function actionAVTransportAddURI( lul_device, lul_settings )
+	local _, uuid = controlByCoordinator(lul_device)
+	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
+	if (AVTransport == nil) then
+		return
+	end
+
+	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
+	local enqueuedURI = defaultValue(lul_settings, "EnqueuedURI", "")
+	local enqueuedURIMetaData = defaultValue(lul_settings, "EnqueuedURIMetaData", "")
+	local desiredFirstTrackNumberEnqueued = defaultValue(lul_settings, "DesiredFirstTrackNumberEnqueued", 1)
+	local enqueueAsNext = defaultValue(lul_settings, "EnqueueAsNext", true)
+
+	AVTransport.AddURIToQueue(
+		{OrderedArgs={"InstanceID=" .. instanceId,
+						"EnqueuedURI=" .. enqueuedURI,
+						"EnqueuedURIMetaData=" .. enqueuedURIMetaData,
+						"DesiredFirstTrackNumberEnqueued=" .. desiredFirstTrackNumberEnqueued,
+						"EnqueueAsNext=" .. enqueueAsNext}})
+end
+
+function actionAVTransportCreateSavedQueue( lul_device, lul_settings )
+	local _, uuid = controlByCoordinator(lul_device)
+	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
+	if (AVTransport == nil) then
+		return
+	end
+
+	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
+	local title = defaultValue(lul_settings, "Title", "")
+	local enqueuedURI = defaultValue(lul_settings, "EnqueuedURI", "")
+	local enqueuedURIMetaData = defaultValue(lul_settings, "EnqueuedURIMetaData", "")
+
+	AVTransport.CreateSavedQueue(
+		{OrderedArgs={"InstanceID=" .. instanceId,
+						"Title=" .. title,
+						"EnqueuedURI=" .. enqueuedURI,
+						"EnqueuedURIMetaData=" .. enqueuedURIMetaData}})
+end
+
+function actionAVTransportAddURItoSaved( lul_device, lul_settings )
+	local _, uuid = controlByCoordinator(lul_device)
+	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
+	if (AVTransport == nil) then
+		return
+	end
+
+	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
+	local objectID = defaultValue(lul_settings, "ObjectID", "")
+	local updateID = defaultValue(lul_settings, "UpdateID", "")
+	local enqueuedURI = defaultValue(lul_settings, "EnqueuedURI", "")
+	local enqueuedURIMetaData = defaultValue(lul_settings, "EnqueuedURIMetaData", "")
+	local addAtIndex = defaultValue(lul_settings, "AddAtIndex", 1)
+
+	AVTransport.AddURIToSavedQueue(
+		{OrderedArgs={"InstanceID=" .. instanceId,
+						"ObjectID=" .. objectID,
+						"UpdateID=" .. updateID,
+						"EnqueuedURI=" .. enqueuedURI,
+						"EnqueuedURIMetaData=" .. enqueuedURIMetaData,
+						"AddAtIndex=" .. addAtIndex}})
+end
+
+function actionAVTransportReorderQueue( lul_device, lul_settings )
+	local _, uuid = controlByCoordinator(lul_device)
+	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
+	if (AVTransport == nil) then
+		return
+	end
+
+	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
+
+	AVTransport.ReorderTracksInQueue(
+		{OrderedArgs={"InstanceID=" .. instanceId,
+						"StartingIndex=" .. lul_settings.StartingIndex,
+						"NumberOfTracks=" .. lul_settings.NumberOfTracks,
+						"InsertBefore=" .. lul_settings.InsertBefore,
+						"UpdateID=" .. lul_settings.UpdateID}})
+end
+
+function actionAVTransportReorderSaved( lul_device, lul_settings )
+	local _, uuid = controlByCoordinator(lul_device)
+	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
+	if (AVTransport == nil) then
+		return
+	end
+
+	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
+
+	AVTransport.ReorderTracksInSavedQueue(
+		{OrderedArgs={"InstanceID=" .. instanceId,
+						"ObjectID=" .. lul_settings.ObjectID,
+						"UpdateID=" .. lul_settings.UpdateID,
+						"TrackList=" .. lul_settings.TrackList,
+						"NewPositionList=" .. lul_settings.NewPositionList}})
+end
+
+function actionAVTransportRemoveTrackFromQueue( lul_device, lul_settings )
+	local _, uuid = controlByCoordinator(lul_device)
+	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
+	if (AVTransport == nil) then
+		return
+	end
+
+	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
+
+	AVTransport.RemoveTrackFromQueue(
+		{OrderedArgs={"InstanceID=" .. instanceId,
+						"ObjectID=" .. lul_settings.ObjectID,
+						"UpdateID=" .. lul_settings.UpdateID}})
+end
+
+function actionAVTransportRemoveTrackRangeFromQueue( lul_device, lul_settings )
+	local _, uuid = controlByCoordinator(lul_device)
+	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
+	if (AVTransport == nil) then
+		return
+	end
+
+	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
+
+	AVTransport.RemoveTrackRangeFromQueue(
+		{OrderedArgs={"InstanceID=" .. instanceId,
+						"UpdateID=" .. lul_settings.UpdateID,
+						"StartingIndex=" .. lul_settings.StartingIndex,
+						"NumberOfTracks=" .. lul_settings.NumberOfTracks}})
+end
+
+function actionAVTransportRemoveAllTracksFromQueue( lul_device, lul_settings )
+	local _, uuid = controlByCoordinator(lul_device)
+	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
+	if (AVTransport == nil) then
+		return
+	end
+
+	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
+
+	AVTransport.RemoveAllTracksFromQueue({InstanceID=instanceId})
+end
+
+function actionAVTransportSaveQueue( lul_device, lul_settings )
+	local _, uuid = controlByCoordinator(lul_device)
+	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
+	if (AVTransport == nil) then
+		return
+	end
+
+	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
+
+	AVTransport.SaveQueue(
+		{OrderedArgs={"InstanceID=" .. instanceId,
+						"Title=" .. lul_settings.Title,
+						"ObjectID=" .. lul_settings.ObjectID}})
+end
+
+function actionAVTransportBackupQueue( lul_device, lul_settings )
+	local _, uuid = controlByCoordinator(lul_device)
+	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
+	if (AVTransport == nil) then
+		return
+	end
+
+	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
+
+	AVTransport.BackupQueue({InstanceID=instanceId})
+end
+
+function actionAVTransportChangeTransportSettings( lul_device, lul_settings )
+	local _, uuid = controlByCoordinator(lul_device)
+	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
+	if (AVTransport == nil) then
+		return
+	end
+
+	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
+
+	AVTransport.ChangeTransportSettings(
+		{OrderedArgs={"InstanceID=" .. instanceId,
+						"NewTransportSettings=" .. lul_settings.NewTransportSettings,
+						"CurrentAVTransportURI=" .. lul_settings.CurrentAVTransportURI}})
+end
+
+function actionAVTransportConfigureSleepTimer( lul_device, lul_settings )
+	local AVTransport = upnp.getService(UUIDs[lul_device], UPNP_AVTRANSPORT_SERVICE)
+	if (AVTransport == nil) then
+		return
+	end
+
+	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
+
+	AVTransport.ConfigureSleepTimer(
+		{OrderedArgs={"InstanceID=" .. instanceId,
+						"NewSleepTimerDuration=" .. lul_settings.NewSleepTimerDuration}})
+end
+
+function actionAVTransportRunAlarm( lul_device, lul_settings )
+	local AVTransport = upnp.getService(UUIDs[lul_device], UPNP_AVTRANSPORT_SERVICE)
+	if (AVTransport == nil) then
+		return
+	end
+
+	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
+
+	AVTransport.RunAlarm(
+		{OrderedArgs={"InstanceID=" .. instanceId,
+						"AlarmID=" .. lul_settings.AlarmID,
+						"LoggedStartTime=" .. lul_settings.LoggedStartTime,
+						"Duration=" .. lul_settings.Duration,
+						"ProgramURI=" .. lul_settings.ProgramURI,
+						"ProgramMetaData=" .. lul_settings.ProgramMetaData,
+						"PlayMode=" .. lul_settings.PlayMode,
+						"Volume=" .. lul_settings.Volume,
+						"IncludeLinkedZones=" .. lul_settings.IncludeLinkedZones}})
+end
+
+function actionAVTransportStartAutoplay( lul_device, lul_settings )
+	local _, uuid = controlByCoordinator(lul_device)
+	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
+	if (AVTransport == nil) then
+		return
+	end
+
+	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
+
+	AVTransport.StartAutoplay(
+		{OrderedArgs={"InstanceID=" .. instanceId,
+						"ProgramURI=" .. lul_settings.ProgramURI,
+						"ProgramMetaData=" .. lul_settings.ProgramMetaData,
+						"Volume=" .. lul_settings.Volume,
+						"IncludeLinkedZones=" .. lul_settings.IncludeLinkedZones,
+						"ResetVolumeAfter=" .. lul_settings.ResetVolumeAfter}})
+end
+
+function actionAVTransportSnoozeAlarm( lul_device, lul_settings )
+	local AVTransport = upnp.getService(UUIDs[lul_device], UPNP_AVTRANSPORT_SERVICE)
+	if (AVTransport == nil) then
+		return
+	end
+
+	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
+
+	AVTransport.SnoozeAlarm(
+		{OrderedArgs={"InstanceID=" .. instanceId,
+						"Duration=" .. lul_settings.Duration}})
+end
+
+function actionAVTransportSetCrossfadeMode( lul_device, lul_settings )
+	local device, uuid = controlByCoordinator(lul_device)
+	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
+	if (AVTransport == nil) then
+		return
+	end
+
+	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
+	local desiredMode = tonumber(defaultValue(lul_settings, "CrossfadeMode", nil))
+
+	-- If parameter is nill, we consider the callback as a toggle
+	if (desiredMode == nil and device ~= 0) then
+		local currentMode = luup.variable_get(UPNP_AVTRANSPORT_SID, "CurrentCrossfadeMode", device)
+		desiredMode = 1 - (tonumber(currentMode) or 0)
+	end
+
+	AVTransport.SetCrossfadeMode(
+		{OrderedArgs={"InstanceID=" .. instanceId,
+						"CrossfadeMode=" .. desiredMode}})
+
+	if (device ~= 0) then
+		refreshNow(device, false, false)
+	end
+end
+
+function actionAVTransportNotifyDeletedURI( lul_device, lul_settings )
+	local AVTransport = upnp.getService(UUIDs[lul_device], UPNP_AVTRANSPORT_SERVICE)
+	if (AVTransport == nil) then
+		return
+	end
+
+	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
+
+	AVTransport.NotifyDeletedURI(
+		{OrderedArgs={"InstanceID=" .. instanceId,
+						"DeletedURI=" .. lul_settings.DeletedURI}})
+end
+
+function actionAVTransportBecomeCoordinatorSG( lul_device, lul_settings )
+	local AVTransport = upnp.getService(UUIDs[lul_device], UPNP_AVTRANSPORT_SERVICE)
+	if (AVTransport == nil) then
+		return
+	end
+
+	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
+
+	AVTransport.BecomeCoordinatorOfStandaloneGroup({InstanceID=instanceId})
+end
+
+function actionAVTransportBecomeGroupCoordinator( lul_device, lul_settings )
+	local AVTransport = upnp.getService(UUIDs[lul_device], UPNP_AVTRANSPORT_SERVICE)
+	if (AVTransport == nil) then
+		return
+	end
+
+	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
+
+	AVTransport.BecomeGroupCoordinator(
+		{OrderedArgs={"InstanceID=" .. instanceId,
+						"CurrentCoordinator=" .. lul_settings.CurrentCoordinator,
+						"CurrentGroupID=" .. lul_settings.CurrentGroupID,
+						"OtherMembers=" .. lul_settings.OtherMembers,
+						"TransportSettings=" .. lul_settings.TransportSettings,
+						"CurrentURI=" .. lul_settings.CurrentURI,
+						"CurrentURIMetaData=" .. lul_settings.CurrentURIMetaData,
+						"SleepTimerState=" .. lul_settings.SleepTimerState,
+						"AlarmState=" .. lul_settings.AlarmState,
+						"StreamRestartState=" .. lul_settings.StreamRestartState,
+						"CurrentQueueTrackList=" .. lul_settings.CurrentQueueTrackList}})
+end
+
+function actionAVTransportBecomeGCAndSource( lul_device, lul_settings )
+	local AVTransport = upnp.getService(UUIDs[lul_device], UPNP_AVTRANSPORT_SERVICE)
+	if (AVTransport == nil) then
+		return
+	end
+
+	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
+
+	AVTransport.BecomeGroupCoordinatorAndSource(
+		{OrderedArgs={"InstanceID=" .. instanceId,
+						"CurrentCoordinator=" .. lul_settings.CurrentCoordinator,
+						"CurrentGroupID=" .. lul_settings.CurrentGroupID,
+						"OtherMembers=" .. lul_settings.OtherMembers,
+						"CurrentURI=" .. lul_settings.CurrentURI,
+						"CurrentURIMetaData=" .. lul_settings.CurrentURIMetaData,
+						"SleepTimerState=" .. lul_settings.SleepTimerState,
+						"AlarmState=" .. lul_settings.AlarmState,
+						"StreamRestartState=" .. lul_settings.StreamRestartState,
+						"CurrentAVTTrackList=" .. lul_settings.CurrentAVTrackList,
+						"CurrentQueueTrackList=" .. lul_settings.CurrentAVTTrackList,
+						"CurrentSourceState=" .. lul_settings.CurrentSourceState,
+						"ResumePlayback=" .. lul_settings.ResumePlayback}})
+end
+
+function actionAVTransportChangeCoordinator( lul_device, lul_settings )
+	local AVTransport = upnp.getService(UUIDs[lul_device], UPNP_AVTRANSPORT_SERVICE)
+	if (AVTransport == nil) then
+		return
+	end
+
+	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
+
+	AVTransport.ChangeCoordinator(
+		{OrderedArgs={"InstanceID=" .. instanceId,
+						"CurrentCoordinator=" .. lul_settings.CurrentCoordinator,
+						"NewCoordinator=" .. lul_settings.NewCoordinator,
+						"NewTransportSettings=" .. lul_settings.NewTransportSettings}})
+end
+
+function actionAVTransportDelegateGCTo( lul_device, lul_settings )
+	local AVTransport = upnp.getService(UUIDs[lul_device], UPNP_AVTRANSPORT_SERVICE)
+	if (AVTransport == nil) then
+		return
+	end
+
+	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
+
+	AVTransport.DelegateGroupCoordinationTo(
+		{OrderedArgs={"InstanceID=" .. instanceId,
+						"NewCoordinator=" .. lul_settings.NewCoordinator,
+						"RejoinGroup=" .. lul_settings.RejoinGroup}})
+end
+
+--[[
+
+	IMPLEMENTATIONS FOR ACTIONS IN urn:upnp-org:serviceId:RenderingControl
+
+--]]
+
+function actionRCSetMute( lul_device, lul_settings )
+	local Rendering = upnp.getService(UUIDs[lul_device], UPNP_RENDERING_CONTROL_SERVICE)
+	if (Rendering == nil) then
+		return
+	end
+
+	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
+	local desiredMute = defaultValue(lul_settings, "DesiredMute", nil)
+	local channel = defaultValue(lul_settings, "Channel", "Master")
+
+	-- If parameter is nill, we consider the callback as a toggle
+	if (desiredMute == nil) then
+		local isMuted = luup.variable_get(UPNP_RENDERING_CONTROL_SID, "Mute", lul_device)
+		desiredMute = 1 - (tonumber(isMuted) or 0)
+	end
+
+	Rendering.SetMute(
+		 {OrderedArgs={"InstanceID=" .. instanceId,
+					 "Channel=" .. channel,
+					 "DesiredMute=" .. desiredMute}})
+
+	refreshMuteNow(lul_device)
+end
+
+function actionRCResetBasicEQ( lul_device, lul_settings )
+	local Rendering = upnp.getService(UUIDs[lul_device], UPNP_RENDERING_CONTROL_SERVICE)
+	if (Rendering == nil) then
+		return
+	end
+
+	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
+
+	Rendering.ResetBasicEQ({InstanceID=instanceId})
+end
+
+function actionRCResetExtEQ( lul_device, lul_settings )
+	local Rendering = upnp.getService(UUIDs[lul_device], UPNP_RENDERING_CONTROL_SERVICE)
+	if (Rendering == nil) then
+		return
+	end
+
+	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
+
+	Rendering.ResetExtEQ(
+		 {OrderedArgs={"InstanceID=" .. instanceId,
+					 "EQType=" .. lul_settings.EQType}})
+end
+
+function actionRCSetVolume( lul_device, lul_settings )
+	local Rendering = upnp.getService(UUIDs[lul_device], UPNP_RENDERING_CONTROL_SERVICE)
+	if (Rendering == nil) then
+		return
+	end
+
+	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
+	local desiredVolume = tonumber(defaultValue(lul_settings, "DesiredVolume", "5"))
+	local channel = defaultValue(lul_settings, "Channel", "Master")
+
+	Rendering.SetVolume(
+		 {OrderedArgs={"InstanceID=" .. instanceId,
+					 "Channel=" .. channel,
+					 "DesiredVolume=" .. desiredVolume}})
+
+	refreshVolumeNow(lul_device)
+end
+
+function actionRCSetRelativeVolume( lul_device, lul_settings )
+	local Rendering = upnp.getService(UUIDs[lul_device], UPNP_RENDERING_CONTROL_SERVICE)
+	if (Rendering == nil) then
+		return
+	end
+
+	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
+	local channel = defaultValue(lul_settings, "Channel", "Master")
+
+	Rendering.SetRelativeVolume(
+		 {OrderedArgs={"InstanceID=" .. instanceId,
+					 "Channel=" .. channel,
+					 "Adjustment=" .. lul_settings.Adjustment}})
+
+	refreshVolumeNow(lul_device)
+end
+
+function actionRCSetVolumeDB( lul_device, lul_settings )
+	local Rendering = upnp.getService(UUIDs[lul_device], UPNP_RENDERING_CONTROL_SERVICE)
+	if (Rendering == nil) then
+		return
+	end
+
+	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
+	local channel = defaultValue(lul_settings, "Channel", "Master")
+	local desiredVolume = defaultValue(lul_settings, "DesiredVolume", "0")
+
+	Rendering.SetVolumeDB(
+		 {OrderedArgs={"InstanceID=" .. instanceId,
+					 "Channel=" .. channel,
+					 "DesiredVolume=" .. desiredVolume}})
+end
+
+function actionRCSetBass( lul_device, lul_settings )
+	local Rendering = upnp.getService(UUIDs[lul_device], UPNP_RENDERING_CONTROL_SERVICE)
+	if (Rendering == nil) then
+		return
+	end
+
+	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
+
+	Rendering.SetBass(
+		 {OrderedArgs={"InstanceID=" .. instanceId,
+					 "DesiredBass=" .. lul_settings.DesiredBass}})
+end
+
+function actionRCSetTreble( lul_device, lul_settings )
+	local Rendering = upnp.getService(UUIDs[lul_device], UPNP_RENDERING_CONTROL_SERVICE)
+	if (Rendering == nil) then
+		return
+	end
+
+	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
+
+	Rendering.SetTreble(
+		 {OrderedArgs={"InstanceID=" .. instanceId,
+					 "DesiredTreble=" .. lul_settings.DesiredTreble}})
+end
+
+function actionRCSetEQ( lul_device, lul_settings )
+	local Rendering = upnp.getService(UUIDs[lul_device], UPNP_RENDERING_CONTROL_SERVICE)
+	if (Rendering == nil) then
+		return
+	end
+
+	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
+
+	Rendering.SetEQ(
+		 {OrderedArgs={"InstanceID=" .. instanceId,
+					 "EQType=" .. lul_settings.EQType,
+					 "DesiredValue=" .. lul_settings.DesiredValue}})
+end
+
+function actionRCSetLoudness( lul_device, lul_settings )
+	local Rendering = upnp.getService(UUIDs[lul_device], UPNP_RENDERING_CONTROL_SERVICE)
+	if (Rendering == nil) then
+		return
+	end
+
+	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
+
+	Rendering.SetLoudness(
+		 {OrderedArgs={"InstanceID=" .. instanceId,
+					 "Channel=" .. lul_settings.Channel,
+					 "DesiredLoudness=" .. lul_settings.DesiredLoudness}})
+end
+
+function actionRCSetOutputFixed( lul_device, lul_settings )
+	local Rendering = upnp.getService(UUIDs[lul_device], UPNP_RENDERING_CONTROL_SERVICE)
+	if (Rendering == nil) then
+		return
+	end
+
+	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
+
+	Rendering.SetOutputFixed(
+		 {OrderedArgs={"InstanceID=" .. instanceId,
+					 "DesiredFixed=" .. lul_settings.DesiredFixed}})
+end
+
+function actionRCRampToVolume( lul_device, lul_settings )
+	local Rendering = upnp.getService(UUIDs[lul_device], UPNP_RENDERING_CONTROL_SERVICE)
+	if (Rendering == nil) then
+		return
+	end
+
+	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
+
+	Rendering.RampToVolume(
+		 {OrderedArgs={"InstanceID=" .. instanceId,
+					 "Channel=" .. lul_settings.Channel,
+					 "RampType=" .. lul_settings.RampType,
+					 "DesiredVolume=" .. lul_settings.DesiredVolume,
+					 "ResetVolumeAfter=" .. lul_settings.ResetVolumeAfter,
+					 "ProgramURI=" .. lul_settings.ProgramURI}})
+end
+
+function actionRCRestoreVolumePriorToRamp( lul_device, lul_settings )
+	local Rendering = upnp.getService(UUIDs[lul_device], UPNP_RENDERING_CONTROL_SERVICE)
+	if (Rendering == nil) then
+		return
+	end
+
+	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
+
+	Rendering.RestoreVolumePriorToRamp(
+		 {OrderedArgs={"InstanceID=" .. instanceId,
+					 "Channel=" .. lul_settings.Channel}})
+end
+
+function actionRCSetChannelMap( lul_device, lul_settings )
+	local Rendering = upnp.getService(UUIDs[lul_device], UPNP_RENDERING_CONTROL_SERVICE)
+	if (Rendering == nil) then
+		return
+	end
+
+	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
+
+	Rendering.SetChannelMap(
+		 {OrderedArgs={"InstanceID=" .. instanceId,
+					 "ChannelMap=" .. lul_settings.ChannelMap}})
+end
+
+--[[
+
+	IMPLEMENTATIONS FOR ACTIONS IN urn:upnp-org:serviceId:GroupRenderingControl
+
+--]]
+
+function actionGRCSetGroupMute( lul_device, lul_settings )
+	local _, uuid = controlByCoordinator(lul_device)
+	local GroupRendering = upnp.getService(uuid, UPNP_GROUP_RENDERING_CONTROL_SERVICE)
+	if (GroupRendering == nil) then
+		return
+	end
+
+	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
+	local desiredMute = defaultValue(lul_settings, "DesiredMute", "0")
+
+	GroupRendering.SetGroupMute(
+		 {OrderedArgs={"InstanceID=" .. instanceId,
+					 "DesiredMute=" .. desiredMute}})
+end
+
+function actionGRCSetGroupVolume( lul_device, lul_settings )
+	local _, uuid = controlByCoordinator(lul_device)
+	local GroupRendering = upnp.getService(uuid, UPNP_GROUP_RENDERING_CONTROL_SERVICE)
+	if (GroupRendering == nil) then
+		return
+	end
+
+	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
+	local desiredVolume = tonumber(defaultValue(lul_settings, "DesiredVolume", "5"))
+
+	GroupRendering.SetGroupVolume(
+		 {OrderedArgs={"InstanceID=" .. instanceId,
+					 "DesiredVolume=" .. desiredVolume}})
+end
+
+function actionGRCSetRelativeGroupVolume( lul_device, lul_settings )
+	local _, uuid = controlByCoordinator(lul_device)
+	local GroupRendering = upnp.getService(uuid, UPNP_GROUP_RENDERING_CONTROL_SERVICE)
+	if (GroupRendering == nil) then
+		return
+	end
+
+	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
+
+	GroupRendering.SetRelativeGroupVolume(
+		 {OrderedArgs={"InstanceID=" .. instanceId,
+					 "Adjustment=" .. lul_settings.Adjustment}})
+end
+
+function actionGRCSnapshotGroupVolume( lul_device, lul_settings )
+	local _, uuid = controlByCoordinator(lul_device)
+	local GroupRendering = upnp.getService(uuid, UPNP_GROUP_RENDERING_CONTROL_SERVICE)
+	if (GroupRendering == nil) then
+		return
+	end
+
+	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
+
+	GroupRendering.SnapshotGroupVolume(
+		 {InstanceID=instanceId})
+end
+
+--[[
+
+	IMPLEMENTATIONS FOR ACTIONS IN urn:micasaverde-com:serviceId:HaDevice1
+
+--]]
+
+function actionPoll( lul_device, lul_settings )
+	refreshNow( lul_device, true, true )
+	return 4,0
+end

@@ -16,7 +16,7 @@ local ltn12 = require("ltn12")
 
 local log = print
 local warning = print
-local error = print
+local error = print	--luacheck: ignore 231
 
 local play = nil
 local localBaseURL
@@ -262,7 +262,7 @@ local function getMicrosoftAccessToken(force)
 		}
 		if (status ~= nil and statusMsg == 200) then
 			local data = ""
-			for i, v in ipairs(resultTable) do
+			for _, v in ipairs(resultTable) do
 				data = data .. v
 			end
 			local token, expires = data:match('"access_token":"([^"]-)".-"expires_in":"([^"]-)"')
@@ -304,7 +304,7 @@ local function getMicrosoftLanguages()
 		}
 		if (status ~= nil and statusMsg == 200) then
 			languages = ""
-			for i, v in ipairs(resultTable) do
+			for _, v in ipairs(resultTable) do
 				languages = languages .. v
 			end
 		end
