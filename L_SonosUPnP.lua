@@ -8,6 +8,9 @@ Modified by:
 
 ]]
 
+VERSION = 19191
+DEBUG_MODE = false
+
 local url = require("socket.url")
 local socket = require("socket")
 local http = require("socket.http")
@@ -59,6 +62,10 @@ local UUIDs = {}
 -- Shared tables indexed by Sonos UUIDs
 local metaDataKeys = {}
 local dataTable = {}
+
+local function debug( stuff )
+	if DEBUG_MODE then log( "L_SonosUPnP debug: "..tostring(stuff) ) end
+end
 
 function initialize(logger, warningLogger, errorLogger, ct)
   log = logger
@@ -155,7 +162,7 @@ function UPnP_subscribe(eventSubURL, callbackURL, renewalSID)
         return nil, code
     else
         local duration = respHeaders["timeout"]:match("Second%-(%d+)")
-        log("Subscription confirmed, SID = " .. respHeaders["sid"] .. " with timeout " .. duration)
+        debug("Subscription confirmed, SID = " .. respHeaders["sid"] .. " with timeout " .. duration)
         return respHeaders["sid"], tonumber(duration)
     end
 end
@@ -215,7 +222,7 @@ function UPnP_request(controlURL, action, servicetype, args)
   end
 
   local postBody = string.format(UPNP_REQUEST, action, servicetype, table2XML(args), action)
-  log(string.format("UPnP_request: url=[%s], body=[%s]", controlURL, postBody))
+  debug(string.format("UPnP_request: url=[%s], body=[%s]", controlURL, postBody))
 
   --
   -- Execute the resulting URL, and collect the results as a Table
@@ -250,7 +257,7 @@ function UPnP_request(controlURL, action, servicetype, args)
     --
     -- Handle SUCCESS
     --
-    log(string.format("UPnP_request: status=%s statusMsg=%s result=[%s]", status or "no status",
+    debug(string.format("UPnP_request: status=%s statusMsg=%s result=[%s]", status or "no status",
                       statusMsg or "no message",
                       data or "no result"))
 
@@ -298,11 +305,11 @@ function service(controlURL, servicetype, actions)
     local mt = {}
 
     mt.__index = function(table, key)
-        log("service.__index: Accessing non-existing function " .. key)
+        debug("service.__index: Accessing non-existing function " .. key)
 
         local fn = function(...)
             if (actions[key]) then
-                log(string.format("%s('%s', '%s') Called with parameter count=%d", key, controlURL, servicetype, select("#", ...)))
+                debug(string.format("%s('%s', '%s') Called with parameter count=%d", key, controlURL, servicetype, select("#", ...)))
                 return UPnP_request(controlURL, key, servicetype, ...)
             else
                 return false, "action not available"
@@ -691,7 +698,7 @@ end
     end
 
     for k,v in pairs(Services[uuid]) do
-        log(k .. " " .. v.serviceId .. " " .. v.controlURL .. " " .. v.eventSubURL .. " " .. v.scpdURL)
+        debug(k .. " " .. v.serviceId .. " " .. v.controlURL .. " " .. v.eventSubURL .. " " .. v.scpdURL)
         if (v.object == nil) then
             v.object = service(v.controlURL, k, v.actions)
         end
@@ -904,7 +911,7 @@ end
       if (result ~= "" and transformFct == nil) then
           result = result .. "</DIDL-Lite>"
       end
-      log("browseContent " .. browseObj .. " - duration: " .. (os.clock() - t0) .. " s - " .. fetched .. " fetched elements - size result " .. #result .. " - timeout " .. (timeout or "nil"))
+      debug("browseContent " .. browseObj .. " - duration: " .. (os.clock() - t0) .. " s - " .. fetched .. " fetched elements - size result " .. #result .. " - timeout " .. (timeout or "nil"))
       return result
   end
 
@@ -1020,19 +1027,19 @@ function processProxySubscriptions()
             r.source = ltn12.source.empty()
         end
 
-        log("Send Proxy subscription request: " .. r.method .. " SID " .. subscription.sid )
+        debug("Send Proxy subscription request: " .. r.method .. " SID " .. subscription.sid )
         local request, reason = http.request(r)
 
         if request == nil and reason == "timeout" then
-            log("Retry Proxy subscription request: " .. r.method .. " SID " .. subscription.sid )
+            debug("Retry Proxy subscription request: " .. r.method .. " SID " .. subscription.sid )
             table.insert(subscriptionQueue, subscription)
         elseif request == nil then
-            log("Give up Proxy subscription request: " .. r.method .. " SID " .. subscription.sid )
+            debug("Give up Proxy subscription request: " .. r.method .. " SID " .. subscription.sid )
         elseif  reason ~= 200 then
             local data = table.concat(t)
-            log("Invalid Proxy subscription request: " .. r.method .. " SID " .. subscription.sid .. " Response: " .. data )
+            debug("Invalid Proxy subscription request: " .. r.method .. " SID " .. subscription.sid .. " Response: " .. data )
         else
-            log("Completed Proxy subscription request: " .. r.method .. " SID " .. subscription.sid )
+            debug("Completed Proxy subscription request: " .. r.method .. " SID " .. subscription.sid )
         end
     end
 
@@ -1057,7 +1064,7 @@ end
   --   expiry date of the new or renewed subscription; nil if the subscribe process failed
   --   live duration of the new or renewed subscription; nil if the subscribe process failed
   function subscribeToUPnPEvent(device, veraIP, eventSubURL, eventVariable, actionServiceId, actionName, renewalSID)
-    log("Subscribing to event " .. eventSubURL .. " for variable " .. eventVariable .. " with SID " .. (renewalSID or "nil"))
+    debug("Subscribing to event " .. eventSubURL .. " for variable " .. eventVariable .. " with SID " .. (renewalSID or "nil"))
 
     -- Ask the device to inform the proxy about status changes.
     local callbackURL = string.format("http://%s:2529/upnp/event", veraIP)
@@ -1080,7 +1087,7 @@ end
   -- cancelProxySubscription(sid)
   -- Sends a DELETE /upnp/event/[sid] message to the UPnP event proxy,
   function cancelProxySubscription(sid)
-    log("Cancelling subscription for sid " .. sid)
+    debug("Cancelling subscription for sid " .. sid)
     equeueSubscription(sid)
   end
 
@@ -1106,15 +1113,15 @@ end
   --   true if all subscriptions succeeded
   --   false if subscriptions failed
   function subscribeToEvents(device, veraIP, subscriptions, actionServiceId, uuid)
-    log("Subscribing to all events")
+    debug("Subscribing to all events")
 
     if (proxyVersionAtLeast(1) == false) then
-       log("Event subscription postponed, proxy is not running. " .. device )
+       debug("Event subscription postponed, proxy is not running. " .. device )
 --     luup.call_delay("renewSubscriptions", 30, device .. ":" .. uuid)
        return true
     end
     if (aresServicesLoaded(uuid) == false) then
-       log("Event subscription postponed, services are not loaded yet. " .. device )
+       debug("Event subscription postponed, services are not loaded yet. " .. device )
 --     luup.call_delay("renewSubscriptions", 30, device .. ":" .. uuid)
       return true
     end
@@ -1140,7 +1147,7 @@ end
                                                          subscription.actionName,
                                                          sid)
             if (sid ~= nil) then
-                log("Event subscription succeeded => SID " .. sid .. " duration " .. duration .. " expiry " .. expiry)
+                debug("Event subscription succeeded => SID " .. sid .. " duration " .. duration .. " expiry " .. expiry)
                 subscription.id = sid
                 subscription.expiry = expiry
                 nbSubscriptions = nbSubscriptions + 1
@@ -1179,7 +1186,7 @@ end
   --   subscriptions is a table containing the current subscription data
   -- Return value: none
   function cancelProxySubscriptions(subscriptions)
-    log("Cancelling all event subscriptions")
+    debug("Cancelling all event subscriptions")
 
     if (proxyVersionAtLeast(1) == false) then
         return

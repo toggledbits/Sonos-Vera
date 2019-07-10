@@ -1,15 +1,16 @@
 module( "L_Sonos1", package.seeall )
 
-local PLUGIN_VERSION = "1.4.3-19191"
+PLUGIN_VERSION = "1.5-19191"
 
-local url = require("socket.url")
+local DEBUG_MODE = false	-- Don't hardcode true--use state variable config
+
+local MIN_UPNP_VERSION = 19191	-- Minimum version of L_SonosUPnP that works
+local MIN_TTS_VERSION = 19191	-- Minimum version of L_SonosTTS that works
 
 local MSG_CLASS = "Sonos"
-
-local DEBUG_MODE = true
 local isOpenLuup = false -- ??? rigpapa: needs implementation
-local taskHandle = -1
 
+local taskHandle = -1
 local TASK_ERROR = 2
 local TASK_ERROR_PERM = -2
 local TASK_SUCCESS = 4
@@ -43,8 +44,12 @@ end
 package.loaded.L_SonosUPnP = nil
 package.loaded.L_SonosTTS = nil
 
-local upnp = require "L_SonosUPnP"
-local tts = require "L_SonosTTS"
+local _,upnp = pcall( require, "L_SonosUPnP" )
+if type( upnp ) ~= "table" then _G.error "Sonos: invalid installation; the L_SonosUPnP module could not be loaded." end
+local _,tts = pcall( require, "L_SonosTTS" )
+if type( tts ) ~= "table" then tts = nil end
+
+local url = require "socket.url"
 
 -- Table of Sonos IP addresses indexed by Vera devices
 local ip = {}
@@ -1496,6 +1501,7 @@ local function sayOrAlert(device, parameters, saveAndRestore)
 end
 
 function endSayAlert(device)
+	if not tts then return end
 	device = tonumber(device)
 	local finished = tts.endPlayback(device)
 	if (finished == true) then
@@ -1584,6 +1590,7 @@ local function pauseAll(device)
 end
 
 local function setupTTSSettings(device)
+	if not tts then return end
 	local lang = luup.variable_get(SONOS_SID, "DefaultLanguageTTS", device)
 	if (lang == nil) then
 		lang = "en"
@@ -2260,9 +2267,35 @@ function deferredStartup(device)
 	end
 end
 
-function startup(lul_device)
+function startup( lul_device )
 	log("version " .. PLUGIN_VERSION .. " starting up #" .. lul_device .. " ("
 		.. luup.devices[lul_device].description .. ")")
+
+	local debugLogs = luup.variable_get(SONOS_SID, "DebugLogs", lul_device)
+	if (debugLogs == nil or tonumber(debugLogs) == nil) then
+		debugLogs = "0"
+		luup.variable_set(SONOS_SID, "DebugLogs", debugLogs, lul_device)
+	end
+	debugLogs = tonumber( debugLogs )
+	if debugLogs and debugLogs ~= 0 then
+		DEBUG_MODE = true
+		if math.floor( debugLogs / 2 ) % 2 == 1 then upnp.DEBUG_MODE = true end
+		if math.floor( debugLogs / 4 ) % 2 == 1 then tts.DEBUG_MODE = true end
+	end
+
+	debug("UPnP module is "..tostring(upnp.VERSION))
+	if ( upnp.VERSION or 0 ) < MIN_UPNP_VERSION then
+		error "The L_SonosUPNP module installed is not compatible with this version of the plugin core."
+		return
+	end
+	if not tts then
+		log("TTS module is not installed (it's optional)")
+	else
+		debug("TTS module is "..tostring(tts.VERSION))
+		if ( tts.VERSION or 0 ) < MIN_TTS_VERSION then
+			warning "The L_SonosTTS module installed may not be compatible with this version of the plugin core."
+		end
+	end
 
 	pcall( fixLegacyIcons )
 
@@ -2297,14 +2330,6 @@ function startup(lul_device)
 		luup.variable_set(SONOS_SID, "CheckStateRate", "0", lul_device)
 	end
 
-	local debugLogs = luup.variable_get(SONOS_SID, "DebugLogs", lul_device)
-	if (debugLogs == nil or tonumber(debugLogs) == nil) then
-		luup.variable_set(SONOS_SID, "DebugLogs", "0", lul_device)
-	end
-	if (luup.variable_get(SONOS_SID, "DebugLogs", lul_device) == "1") then
-		DEBUG_MODE = true
-	end
-
 	local fetch = luup.variable_get(SONOS_SID, "FetchQueue", lul_device)
 	if (fetch == nil or tonumber(fetch) == nil) then
 		luup.variable_set(SONOS_SID, "FetchQueue", "1", lul_device)
@@ -2332,9 +2357,11 @@ function startup(lul_device)
 		VERA_WEB_PORT = tonumber(routerPort)
 	end
 
-	ip, playbackCxt, sayPlayback, UUIDs, metaDataKeys, dataTable = upnp.initialize(debug, warning, error)
+	ip, playbackCxt, sayPlayback, UUIDs, metaDataKeys, dataTable = upnp.initialize(log, warning, error)
 
-	tts.initialize(debug, warning, error)
+	if tts then
+		tts.initialize(debug, warning, error)
+	end
 
 	port = 1400
 	descriptionURL = "http://%s:%s/xml/device_description.xml"
@@ -2356,7 +2383,11 @@ end
 --]]
 
 function actionSonosSay( lul_device, lul_settings )
+	if not tts then return end
 	debug("Say: " .. (lul_settings.Text or "nil"))
+	if ( tts.VERSION or 0 ) < MIN_TTS_VERSION then
+		warning "The L_SonosTTS module installed may not be compatible with this version of the plugin core."
+	end
 	tts.queueAlert( lul_device, lul_settings )
 end
 
@@ -2426,8 +2457,12 @@ function actionSonosEnqueueURI( lul_device, lul_settings )
 end
 
 function actionSonosAlert( lul_device, lul_settings )
+	if not tts then return end
+	if ( tts.VERSION or 0 ) < MIN_TTS_VERSION then
+		warning "The L_SonosTTS module installed may not be compatible with this version of the plugin core."
+	end
 	local duration = tonumber(defaultValue(lul_settings, "Duration", "0")) or 0
-	if (duration > 0) then
+	if duration > 0 then
 		tts.queueAlert(lul_device, lul_settings)
 	else
 		sayOrAlert(lul_device, lul_settings, false)

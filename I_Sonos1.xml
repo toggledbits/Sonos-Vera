@@ -11,6 +11,11 @@ Modified by:
 <functions>
 	function sonosStartup( dev )
 		require "L_Sonos1"
+		-- Sanity check installation
+		if ( L_Sonos1.PLUGIN_VERSION or "" ) == "" then
+			luup.log( "Sonos: installation failure; the L_Sonos1 module has not been correctly updated to match the implementation file. Please re-install the entire plugin.", 1 )
+			return false, "Invalid install", "Sonos"
+		end
 		-- Promote callbacks to global
 		SonosReload = L_Sonos1.SonosReload
 		clearTask = L_Sonos1.clearTask
