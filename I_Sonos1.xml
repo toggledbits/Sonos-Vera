@@ -14,7 +14,7 @@ Modified by:
 
   local MSG_CLASS = "Sonos"
 
-  local PLUGIN_VERSION = "1.4.3-19188"
+  local PLUGIN_VERSION = "1.4.3-19191"
 
   local DEBUG_MODE = false
   local taskHandle = -1
@@ -1709,6 +1709,18 @@ Modified by:
 	for k=0,150,25 do moveIcon( "Sonos_"..tostring(k)..".png" ) end
   end
 
+  function file_exists( fpath, leaveOpen )
+	local f = io.open( fpath, "r" )
+	if not f then return false end
+	if not leaveOpen then f:close() f=nil end
+	return true, f
+  end
+
+  function file_exists_LZO( fpath )
+	if file_exists( fpath ) then return true end
+	return file_exists( fpath .. ".lzo" )
+  end
+
   function setup(device, init)
 	device = tonumber(device)
 
@@ -1807,6 +1819,15 @@ Modified by:
 	end
 	changed = setData("SonosModel", string.format("%d", model), device, changed)
 
+	log( string.format("#%s at %s is %q, %s (%s) %s",
+		tostring( device ),
+		tostring( ip[device] ),
+		tostring( modelName ),
+		tostring( values.modelNumber ), model,
+		tostring( values.UDN )
+		)
+	)
+
 	if icon then
 		iconURL = icon
 		-- Set up local copy of icon from device and static JSON pointing to it
@@ -1825,10 +1846,9 @@ Modified by:
 			os.execute( "ln -sf "..installPath.."Sonos.png /www/cmh/skins/default/img/devices/device_states/" )
 		end
 		-- See if there's a local copy of the icon
-		local f
 		local iconFile = string.format( "Sonos_%s%s", values.modelNumber, icon:match( "[^/]+$" ):match( "%..+$" ) )
-		local f = io.open( installPath .. iconFile, "r" )
-		if f then f:close() else
+		local s = file_exists( installPath..iconFile )
+		if not s then
 			log( string.format("fetching device icon from %s to %s%s", iconURL, installPath, iconFile ) )
 			os.execute( "curl -s -o "..installPath..iconFile.." '"..iconURL.."'" )
 			if not isOpenLuup then
@@ -1840,10 +1860,9 @@ Modified by:
 		local staticJSONFile
 		if values.UDN then
 			staticJSONFile = string.format( "D_Sonos1_%s.json", tostring( values.UDN ):gsub( "^uuid:", "" ):gsub( "[^a-zA-Z0-9_]", "_" ) )
-			f = io.open( installPath .. staticJSONFile, "r" )
-			if f then
+			local s = file_exists_LZO( installPath .. staticJSONFile )
+			if s then
 				log( string.format( "using device-specific UI %s", staticJSONFile ) )
-				f:close()
 			else
 				staticJSONFile = nil
 			end
@@ -1851,52 +1870,55 @@ Modified by:
 		if not staticJSONFile then
 			staticJSONFile = string.format( "D_Sonos1_%s.json", tostring( values.modelNumber or "generic" ):gsub( "[^a-zA-Z0-9_]", "_" ) )
 		end
-		f = io.open( installPath .. staticJSONFile, "r" )
-		if not f then
+		s = file_exists_LZO( installPath .. staticJSONFile )
+		if not s then
 			-- No. Create model-specific version
-			f = io.open( installPath .. "D_Sonos1.json", "r" )
-			if not f then _G.error "Can't read generic static JSON file" end
-			local s = f:read("*a")
-			f:close()
-			local json = require "dkjson"
-			local d = json.decode( s )
-			if not d then _G.error "Can't parse generic static JSON file" end
-			-- Modify to new icon in default path
-			d.default_icon = iconFile
-			d.flashicon = iconFile
-			d.state_icons = { iconFile }
-			d._comment = "AUTOMATICALLY GENERATED -- DO NOT MODIFY THIS FILE"
-			-- Save it.
-			f = io.open( installPath .. staticJSONFile, "w" )
-			if not f then
-				error( string.format("can't write %s%s", installPath, staticJSONFile), 1)
-				staticJSONFile = nil
-			else
-				f:write( json.encode( d ) )
-				-- note we're leaving f open for later close
+			log("Creating static JSON in "..staticJSONFile)
+			local f
+			s,f = file_exists( installPath.."D_Sonos1.json", true )
+			if not s then
+				os.execute( 'pluto-lzo d '..installPath..'D_Sonos1.json.lzo /tmp/D_Sonos1.json.tmp' )
+				f = io.open( '/tmp/D_Sonos1.json.tmp', 'r' )
+				if not f then
+					warning("Failed to open /tmp/D_Sonos1.json.tmp")
+					staticJSONFile = nil
+				end
+			end
+			if f then -- explicit, two paths above
+				-- Read default static JSON
+				s = f:read("*a")
+				f:close()
+				local json = require "dkjson"
+				local d = json.decode( s )
+				if not d then _G.error "Can't parse generic static JSON file" end
+				-- Modify to new icon in default path
+				d.default_icon = iconFile
+				d.flashicon = iconFile
+				d.state_icons = { iconFile }
+				d._comment = "AUTOMATICALLY GENERATED -- DO NOT MODIFY THIS FILE"
+				-- Save custom.
+				f = io.open( installPath .. staticJSONFile, "w" )
+				if not f then
+					error( string.format("can't write %s%s", installPath, staticJSONFile), 1)
+					staticJSONFile = nil
+				else
+					f:write( json.encode( d ) )
+					-- note we're leaving f open for later close
+				end
 			end
 		end
-		if f then f:close() end
 		-- Is this device using the right static JSON file?
 		local cj = luup.attr_get( 'device_json', device ) or ""
+		if not staticJSONFile then staticJSONFile = "D_Sonos1.json" end -- for safety
 		if staticJSONFile and cj ~= staticJSONFile then
 			-- No. Switch it out.
-			warning(string.format("device_json currently %s, swapping to %s (and reloading)", MSG_CLASS, cj, staticJSONFile ))
+			warning(string.format("device_json currently %s, swapping to %s (and reloading)", cj, staticJSONFile ))
 			luup.attr_set( 'device_json', staticJSONFile, device )
 			luup.reload()
 		end
 	else
 		iconURL = PLUGIN_ICON
 	end
-
-	log( string.format("#%s at %s is %q, %s (%s) %s",
-		tostring( device ),
-		tostring( ip[device] ),
-		tostring( modelName ),
-		tostring( values.modelNumber ), model,
-		tostring( values.UDN )
-		)
-	)
 
 	if (device ~= 0 and (init or newDevice or newOnline)) then
 		upnp.subscribeToEvents(device, VERA_IP, EventSubscriptions, SONOS_SID, uuid)
