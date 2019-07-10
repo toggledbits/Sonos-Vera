@@ -1836,7 +1836,7 @@ Modified by:
 		if isOpenLuup then -- ??? FIXME
 			local loader = require "openLuup.loader"
 			if loader.find_file == nil then
-				warning("This version of the Sonos plugin requires openLuup 2018.11 or higher")
+				warning("This version of the Sonos plugin requires openLuup 2018.11.21 or higher")
 				installPath = "./" -- punt
 			else
 				installPath = loader.find_file( "D_Sonos1.json" ):gsub( "D_Sonos1.json$", "" )
@@ -1860,7 +1860,7 @@ Modified by:
 		local staticJSONFile
 		if values.UDN then
 			staticJSONFile = string.format( "D_Sonos1_%s.json", tostring( values.UDN ):gsub( "^uuid:", "" ):gsub( "[^a-zA-Z0-9_]", "_" ) )
-			local s = file_exists_LZO( installPath .. staticJSONFile )
+			s = file_exists_LZO( installPath .. staticJSONFile )
 			if s then
 				log( string.format( "using device-specific UI %s", staticJSONFile ) )
 			else
