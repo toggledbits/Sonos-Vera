@@ -1,0 +1,9 @@
+As of 1.4.3-19191, these icon files are not used. Most users will no
+longer need to install these. Icons are now derived from the player
+itself, which has it in firmware, and the device UI is customized
+by the plugin to use the correct icon for the device. This means that
+any new players released by Sonos will immediately display the correct
+icon, without modification of the plugin, as long as the new player's
+firmware continues to include the icon embedded.
+
+Last updated by rigpapa 2019-07-10
