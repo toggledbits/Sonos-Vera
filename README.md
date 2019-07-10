@@ -24,7 +24,7 @@ Release in the Vera plugin marketplace is planned for later.
 1. Go to [the Github repository for the project](https://github.com/toggledbits/Sonos-Vera).
 2. Click the green "Clone or download" button and choose "Download ZIP". Save the ZIP file somewhere.
 3. Unzip the ZIP file.
-4. Select the files (except the `.md` files and the `services` and `icons` directories--these are no longer required) as a group and drag them to the upload tool at *Apps > Develop apps > Luup files*. This will upload all the files as a single batch and then restart Luup.
+4. Select the files (except the `.md` files and the `services` and `icons` directories and their contents--these are no longer required) as a group and drag them to the upload tool at *Apps > Develop apps > Luup files*. This will upload all the files as a single batch and then restart Luup.
 5. After the Luup restart, go to *Apps > Develop apps > Create device*, enter and submit:
   * Description: `Sonos` (or whatever you choose)
   * Device UPnP Filename: `D_Sonos1.xml` (exactly as shown)
