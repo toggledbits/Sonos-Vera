@@ -1702,10 +1702,10 @@ Modified by:
 		local f = io.open( "/etc/cmh-ludl/" .. p, "r" )
 		if not f then
 			os.execute( "cp /www/cmh/skins/default/icons/"..p.." /etc/cmh-ludl/" )
+			os.execute( "ln -s /etc/cmh-ludl/"..p.." /www/cmh/skins/default/img/devices/device_states/" )
 		else
 			f:close()
 		end
-		os.execute( "ln -s /etc/cmh-ludl/"..p.." /www/cmh/skins/default/img/devices/device_states/" )
 	end
 	moveIcon( "Sonos.png" )
 	for k=0,150,25 do moveIcon( "Sonos_"..tostring(k)..".png" ) end
