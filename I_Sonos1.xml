@@ -14,7 +14,7 @@ Modified by:
 
   local MSG_CLASS = "Sonos"
 
-  local PLUGIN_VERSION = "1.4.3-19191"
+  local PLUGIN_VERSION = "1.4.3-19192"
 
   local DEBUG_MODE = false
   local taskHandle = -1
@@ -1699,10 +1699,12 @@ Modified by:
 
   function fixLegacyIcons()
 	function moveIcon( p )
-		local f = io.open( "/www/cmh/skins/default/icons/" .. p, "r" )
-		if not f then return end
-		f:close()
-		os.execute( "mv /www/cmh/skins/default/icons/"..p.." /etc/cmh-ludl/" )
+		local f = io.open( "/etc/cmh-ludl/" .. p, "r" )
+		if not f then
+			os.execute( "cp /www/cmh/skins/default/icons/"..p.." /etc/cmh-ludl/" )
+		else
+			f:close()
+		end
 		os.execute( "ln -s /etc/cmh-ludl/"..p.." /www/cmh/skins/default/img/devices/device_states/" )
 	end
 	moveIcon( "Sonos.png" )
