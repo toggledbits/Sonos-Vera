@@ -21,6 +21,8 @@ Release in the Vera plugin marketplace is planned for later.
 
 ### Installation on Vera (manually)
 
+**If you have the Sonos plugin version 1.4 installed from the Vera App/Plugin Marketplace (with or without patches), you must uninstall the plugin first. See "Uninstalling the Last Released Version" below.**
+
 1. Go to [the Github repository for the project](https://github.com/toggledbits/Sonos-Vera).
 2. Click the green "Clone or download" button and choose "Download ZIP". Save the ZIP file somewhere.
 3. Unzip the ZIP file.
@@ -278,6 +280,25 @@ If you're not sure, try setting `TTSBasePath` to the full directory path of the 
 ### `PollDelays`
 
 If the UPnP Event Proxy is not installed or cannot be contacted, the Sonos plugin will poll players for status. As of 1.4.3-19188, the `PollDelays` state variable contains a pair of numbers, which are the delays to be used for polling when active and inactive (player stopped), respectively. The default is 15 seconds for active players, and 60 seconds on stopped players. This reduces network traffic somewhat, but it's still not as good as using the UPnP Event Proxy, so the proxy remains the recommended solution.
+
+## Uninstalling the Last Released Version
+
+These instructions are only to be used to uninstall the plugin if it was previously installed from the Vera App/Plugin Marketplace. If you are not sure, go to *Apps > My apps* and page through your officially-installed plugins. If Sonos is listed there, **you must uninstall it using the instructions below** before installing the Github version of the plugin.
+
+1. Copy-paste the following into *Apps > Develop apps > Test Luup code (Lua)*:
+```
+for n,d in pairs( luup.devices ) do
+    if luup.attr_get( 'plugin', n ) == "4226" then
+        luup.attr_set( "plugin", "", n )
+    end
+end
+luup.reload()
+```
+2. Run the above code by hitting the "GO" button (if you've already hit GO in the previous step, fine, but once is enough and a second click might generate a harmless error).
+3. Uninstall the Sonos plugin by going to *Apps > My apps*, locating the plugin, going into "Details", and hitting "Uninstall".
+4. Install the Github version of the plugin per the instructions above. 
+
+The first two steps detach your existing Sonos devices from the plugin, so that they are not deleted when the Sonos plugin is uninstalled. They will become invisible, but should re-appear after you install the Github version.
 
 ## User Support
 
