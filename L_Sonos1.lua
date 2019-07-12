@@ -1,6 +1,7 @@
 module( "L_Sonos1", package.seeall )
 
 PLUGIN_VERSION = "1.5-19191"
+PLUGIN_ID = 4226
 
 local DEBUG_MODE = false	-- Don't hardcode true--use state variable config
 
@@ -43,7 +44,6 @@ if (package.path:find("/etc/cmh-ludl/?.lua;/etc/cmh-lu/?.lua", 1, true) == nil) 
 end
 package.loaded.L_SonosUPnP = nil
 package.loaded.L_SonosTTS = nil
-
 local _,upnp = pcall( require, "L_SonosUPnP" )
 if type( upnp ) ~= "table" then _G.error "Sonos: invalid installation; the L_SonosUPnP module could not be loaded." end
 local _,tts = pcall( require, "L_SonosTTS" )
@@ -1727,7 +1727,8 @@ local function fixLegacyIcons()
 				-- Decompress
 				os.execute( "pluto-lzo d /etc/cmh-ludl/"..p..".lzo /etc/cmh-ludl/"..p )
 			elseif file_exists( "/www/cmh/skins/default/icons/" .. p ) then
-				os.execute( "mv /www/cmh/skins/default/icons/"..p.." /etc/cmh-ludl/" )
+				-- cp instead of mv so Luup doesn't complain about missing plugin files
+				os.execute( "cp -p /www/cmh/skins/default/icons/"..p.." /etc/cmh-ludl/" )
 			end
 		elseif file_exists( "/etc/cmh-ludl/" .. p .. ".lzo" ) then
 			-- Both compress and uncompressed exist.
@@ -2583,17 +2584,14 @@ end
 
 function actionSonosInstallDiscoveryPatch( lul_device, lul_settings )
 	local reload = false
-	if (upnp.installDiscoveryPatch(VERA_LOCAL_IP)) then
+	if upnp.installDiscoveryPatch(VERA_LOCAL_IP) then
 		reload = true
 		log("Discovery patch now installed")
 	else
 		log("Discovery patch installation failed")
 	end
-	if (upnp.isDiscoveryPatchInstalled(VERA_LOCAL_IP)) then
-		luup.variable_set(SONOS_SID, "DiscoveryPatchInstalled", "1", lul_device)
-	else
-		luup.variable_set(SONOS_SID, "DiscoveryPatchInstalled", "0", lul_device)
-	end
+	luup.variable_set(SONOS_SID, "DiscoveryPatchInstalled", 
+		upnp.isDiscoveryPatchInstalled(VERA_LOCAL_IP) and "1" or "0", lul_device)
 	if reload then
 		luup.call_delay("SonosReload", 2, "")
 	end
@@ -2601,17 +2599,14 @@ end
 
 function actionSonosUninstallDiscoveryPatch( lul_device, lul_settings )
 	local reload = false
-	if (upnp.uninstallDiscoveryPatch(VERA_LOCAL_IP)) then
+	if upnp.uninstallDiscoveryPatch(VERA_LOCAL_IP) then
 		reload = true
 		log("Discovery patch now uninstalled")
 	else
 		log("Discovery patch uninstallation failed")
 	end
-	if (upnp.isDiscoveryPatchInstalled(VERA_LOCAL_IP)) then
-		luup.variable_set(SONOS_SID, "DiscoveryPatchInstalled", "1", lul_device)
-	else
-		luup.variable_set(SONOS_SID, "DiscoveryPatchInstalled", "0", lul_device)
-	end
+	luup.variable_set(SONOS_SID, "DiscoveryPatchInstalled", 
+		upnp.isDiscoveryPatchInstalled(VERA_LOCAL_IP) and "1" or "0", lul_device)
 	if reload then
 		luup.call_delay("SonosReload", 2, "")
 	end
