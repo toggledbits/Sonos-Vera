@@ -1,6 +1,6 @@
 module( "L_Sonos1", package.seeall )
 
-PLUGIN_VERSION = "1.5-19191"
+PLUGIN_VERSION = "1.5-19193"
 PLUGIN_ID = 4226
 
 local DEBUG_MODE = false	-- Don't hardcode true--use state variable config
