@@ -2287,7 +2287,7 @@ function startup( lul_device )
 	debug("UPnP module is "..tostring(upnp.VERSION))
 	if ( upnp.VERSION or 0 ) < MIN_UPNP_VERSION then
 		error "The L_SonosUPNP module installed is not compatible with this version of the plugin core."
-		return
+		return false, "Invalid installation", MSG_CLASS
 	end
 	if not tts then
 		log("TTS module is not installed (it's optional)")
@@ -2307,7 +2307,7 @@ function startup( lul_device )
 	if "0" == enabled then
 		warning("#"..lul_device.." disabled via state variable config; start aborting.")
 		deviceIsOffline( lul_device )
-		return
+		return true, "Offline", MSG_CLASS
 	end
 
 	if (luup.variable_get(SONOS_SID, "DiscoveryResult", lul_device) == nil

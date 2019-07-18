@@ -14,6 +14,7 @@ Modified by:
 		-- Sanity check installation
 		if ( L_Sonos1.PLUGIN_VERSION or "" ) == "" then
 			luup.log( "Sonos: installation failure; the L_Sonos1 module has not been correctly updated to match the implementation file. Please re-install the entire plugin.", 1 )
+			luup.set_failure( 1, dev )
 			return false, "Invalid install", "Sonos"
 		end
 		-- Promote callbacks to global
