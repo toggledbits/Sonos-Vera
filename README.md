@@ -21,7 +21,7 @@ Release in the Vera plugin marketplace is planned for later.
 
 ### Installation on Vera (manually)
 
-**If you have the Sonos plugin version 1.4 installed from the Vera App/Plugin Marketplace (with or without patches), you must uninstall the plugin first. See "Uninstalling the Last Released Version" below.**
+**If you have the Sonos plugin version 1.4 or earlier installed from the Vera App/Plugin Marketplace (with or without additional patches), you must uninstall the plugin first. See "Uninstalling the Last Released Version" below.** If you're not sure, go there for instructions on how to check.
 
 1. Go to [the Github repository for the project](https://github.com/toggledbits/Sonos-Vera).
 2. Click the green "Clone or download" button and choose "Download ZIP". Save the ZIP file somewhere.
@@ -294,7 +294,7 @@ for n,d in pairs( luup.devices ) do
 end
 luup.reload()
 ```
-2. Run the above code by hitting the "GO" button (if you've already hit GO in the previous step, fine, but once is enough and a second click might generate a harmless error).
+2. Run the above code by hitting the "GO" button (if you've already hit GO in the previous step, fine, but once is enough and a second click might generate a harmless error). The code performs a Luup reload, so wait a minute before continuing.
 3. Uninstall the Sonos plugin by going to *Apps > My apps*, locating the plugin, going into "Details", and hitting "Uninstall".
 4. Install the Github version of the plugin per the instructions above. 
 
