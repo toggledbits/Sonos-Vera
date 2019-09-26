@@ -1,15 +1,20 @@
+--[[ Sonos Plugin for Vera and openLuup
+     Current maintainer: rigpapa (patrick@toggledbits.com)
+	 Github repository: https://github.com/toggledbits/Sonos-Vera
+--]]
+
 module( "L_Sonos1", package.seeall )
 
-PLUGIN_VERSION = "1.5-19193"
+PLUGIN_VERSION = "1.5-19269"
 PLUGIN_ID = 4226
 
-local DEBUG_MODE = false	-- Don't hardcode true--use state variable config
+local DEBUG_MODE = true	-- Don't hardcode true--use state variable config
 
 local MIN_UPNP_VERSION = 19191	-- Minimum version of L_SonosUPnP that works
 local MIN_TTS_VERSION = 19191	-- Minimum version of L_SonosTTS that works
 
 local MSG_CLASS = "Sonos"
-local isOpenLuup = false -- ??? rigpapa: needs implementation
+local isOpenLuup = false
 
 local taskHandle = -1
 local TASK_ERROR = 2
@@ -171,6 +176,61 @@ end
 
 local function debug(stuff)
 	if DEBUG_MODE then log("debug: " .. tostring(stuff)) end
+end
+
+-- Initialize a variable if it does not already exist.
+local function initVar( name, dflt, dev, sid )
+	assert( dev ~= nil )
+	sid = sid or SONOS_SID
+	local currVal = luup.variable_get( sid, name, dev )
+	if currVal == nil then
+		luup.variable_set( sid, name, tostring(dflt), dev )
+	end
+	return currVal
+end
+
+-- Set variable, only if value has changed.
+local function setVar( sid, name, val, dev )
+	assert( dev ~= nil )
+	sid = sid or SONOS_SID
+	val = (val == nil) and "" or tostring(val)
+	local s = luup.variable_get( sid, name, dev ) or ""
+	-- D("setVar(%1,%2,%3,%4) old value %5", sid, name, val, dev, s )
+	if s ~= val then
+		luup.variable_set( sid, name, val, dev )
+	end
+	return s
+end
+
+-- Get variable or default
+local function getVar( name, dflt, dev, sid, doinit )
+	assert( name ~= nil )
+	assert( dev ~= nil )
+	local s = luup.variable_get( sid or SONOS_SID, name, dev )
+	if s == nil and doinit then
+		luup.variable_set( sid, name, tostring(dflt), dev )
+		return dflt
+	end
+	return (s or "") == "" and dflt or s
+end
+
+-- Get numeric variable, or return default value if not set or blank
+local function getVarNumeric( name, dflt, dev, sid, doinit )
+	local s = getVar( name, dflt, dev, sid, doinit )
+	if s == "" then return dflt end
+	return tonumber(s) or dflt
+end
+
+local function getInstallPath()
+	if isOpenLuup then
+		local loader = require "openLuup.loader"
+		if loader.find_file == nil then
+			warning("This version of the Sonos plugin requires openLuup 2018.11.21 or higher")
+			return "./" -- punt
+		end
+		return loader.find_file( "L_Sonos1.lua" ):gsub( "L_Sonos1.lua$", "" )
+	end
+	return "/etc/cmh-ludl/"
 end
 
 local function task(text, mode)
@@ -541,18 +601,17 @@ end
 
 local function loadServicesMetaDataKeys(device)
 	local keys = {}
-	local elts = luup.variable_get(SONOS_SID, "SonosServicesKeys", device) or ""
+	local elts = getVar("SonosServicesKeys", "", device)
 	for token, value in elts:gmatch("([^=]+)=([^\n]+)\n") do
 		keys[token] = value
 	end
 	return keys
 end
 
--- ??? rigpapa: more scoping problems here with info and others. study and clean up.
 local function extractDataFromMetaData(device, currentUri, currentUriMetaData, trackUri, trackUriMetaData)
 	local statusString, info, title, title2, artist, album, details, albumArt, desc
 	local uuid = UUIDs[device]
-	info, title, artist, album, details, albumArt, desc = getSimpleDIDLStatus(currentUriMetaData)
+	_, title, _, _, _, _, desc = getSimpleDIDLStatus(currentUriMetaData)
 	info, title2, artist, album, details, albumArt, _ = getSimpleDIDLStatus(trackUriMetaData)
 	local service, serviceId = getServiceFromURI(currentUri, trackUri)
 	updateServicesMetaDataKeys(device, serviceId, desc)
@@ -1115,7 +1174,7 @@ local function decodeURI(device, coordinator, uri)
 	elseif (uri:sub(1, 3) == "SQ:") then
 		local found = false
 		if (dataTable[localUUID].SavedQueues ~= nil) then
-			local id, title
+			local id
 			for line in dataTable[localUUID].SavedQueues:gmatch("(.-)\n") do
 				id, title = line:match("^(.+)@(.-)$")
 				if (id ~= nil and title == uri:sub(4)) then
@@ -1132,7 +1191,7 @@ local function decodeURI(device, coordinator, uri)
 		title = uri:sub(4)
 		local found = false
 		if (dataTable[localUUID].FavoritesRadios ~= nil) then
-			local id, title
+			local id
 			for line in dataTable[localUUID].FavoritesRadios:gmatch("(.-)\n") do
 				id, title = line:match("^(.+)@(.-)$")
 				if (id ~= nil and title == uri:sub(4)) then
@@ -1149,7 +1208,7 @@ local function decodeURI(device, coordinator, uri)
 		title = uri:sub(4)
 		local found = false
 		if (dataTable[localUUID].Favorites ~= nil) then
-			local id, title
+			local id
 			for line in dataTable[localUUID].Favorites:gmatch("(.-)\n") do
 				id, title = line:match("^(.+)@(.-)$")
 				if (id ~= nil and title == uri:sub(4)) then
@@ -1591,71 +1650,80 @@ end
 
 local function setupTTSSettings(device)
 	if not tts then return end
-	local lang = luup.variable_get(SONOS_SID, "DefaultLanguageTTS", device)
-	if (lang == nil) then
+	local ttsrev = getVarNumeric("_ttsrev", 0, device)
+	local lang = getVar("DefaultLanguageTTS", "", device, SONOS_SID, true)
+	if lang == "" then
 		lang = "en"
-		luup.variable_set(SONOS_SID, "DefaultLanguageTTS", lang, device)
+	elseif lang == "en" then
+		setVar(SONOS_SID, "DefaultLanguageTTS", "", device) -- restore default
 	end
-	local engine = luup.variable_get(SONOS_SID, "DefaultEngineTTS", device)
-	if (engine == nil) then
+	local engine = getVar("DefaultEngineTTS", "", device, SONOS_SID, true)
+	if engine == "" then
 		engine = "GOOGLE"
-		luup.variable_set(SONOS_SID, "DefaultEngineTTS", engine, device)
+	elseif engine == "GOOGLE" then
+		setVar(SONOS_SID, "DefaultEngineTTS", "", device) -- restore default
 	end
-	local googleURL = luup.variable_get(SONOS_SID, "GoogleTTSServerURL", device)
-	if (googleURL == nil) then
+	local googleURL = getVar("GoogleTTSServerURL", "", device, SONOS_SID, true)
+	if googleURL == "" then
 		googleURL = "https://translate.google.com"
-		luup.variable_set(SONOS_SID, "GoogleTTSServerURL", googleURL, device)
+	elseif googleURL == "https://translate.google.com" then
+		setVar(SONOS_SID, "GoogleTTSServerURL", "", device) -- restore default
 	end
-	local serverURL = luup.variable_get(SONOS_SID, "OSXTTSServerURL", device)
-	if (serverURL == nil) then
-		serverURL = ""
-		luup.variable_set(SONOS_SID, "OSXTTSServerURL", serverURL, device)
-	end
-	local maryURL = luup.variable_get(SONOS_SID, "MaryTTSServerURL", device)
-	if (maryURL == nil) then
-		maryURL = ""
-		luup.variable_set(SONOS_SID, "MaryTTSServerURL", maryURL, device)
-	end
-	local rvURL = luup.variable_get(SONOS_SID, "ResponsiveVoiceTTSServerURL", device) or ""
+	local serverURL = getVar("OSXTTSServerURL", "", device, SONOS_SID, true)
+	local maryURL = getVar("MaryTTSServerURL", "", device, SONOS_SID, true)
+	local rvURL = getVar("ResponsiveVoiceTTSServerURL", "", device, SONOS_SID, true)
 	if "" == rvURL then
 		rvURL = "https://code.responsivevoice.org"
-		luup.variable_set(SONOS_SID, "ResponsiveVoiceTTSServerURL", rvURL, device)
+	elseif rvURL:match("^http:") or rvURL == "https://code.responsivevoice.org" then
+		rvURL = "https://code.responsivevoice.org"
+		setVar(SONOS_SID, "ResponsiveVoiceTTSServerURL", "", device)
 	end
-	local clientId = luup.variable_get(SONOS_SID, "MicrosoftClientId", device)
-	if (clientId == nil) then
-		clientId = ""
-		luup.variable_set(SONOS_SID, "MicrosoftClientId", clientId, device)
-	end
-	local clientSecret = luup.variable_get(SONOS_SID, "MicrosoftClientSecret", device)
-	if (clientSecret == nil) then
-		clientSecret = ""
-		luup.variable_set(SONOS_SID, "MicrosoftClientSecret", clientSecret, device)
-	end
-	local option = luup.variable_get(SONOS_SID, "MicrosoftOption", device)
-	if (option == nil) then
-		option = ""
-		luup.variable_set(SONOS_SID, "MicrosoftOption", option, device)
-	end
-	local rate = luup.variable_get(SONOS_SID, "TTSRate", device)
-	if (rate == nil) then
+	local clientId = getVar("MicrosoftClientId", "", device, SONOS_SID, true)
+	local clientSecret = getVar("MicrosoftClientSecret", "", device, SONOS_SID, true)
+	local option = getVar("MicrosoftOption", "", device, SONOS_SID, true)
+	local rate = getVar("TTSRate", "", device, SONOS_SID, true)
+	if "" == rate then
 		rate = "0.5"
-		luup.variable_set(SONOS_SID, "TTSRate", rate, device)
+	elseif "0.5" == rate then
+		setVar(SONOS_SID, "TTSRate", "", device) -- restore default
 	end
-	local pitch = luup.variable_get(SONOS_SID, "TTSPitch", device)
-	if (pitch == nil) then
+	local pitch = getVar("TTSPitch", "", device, SONOS_SID, true)
+	if "" == pitch then
 		pitch = "0.5"
-		luup.variable_set(SONOS_SID, "TTSPitch", pitch, device)
+	elseif "0.5" == pitch then
+		setVar(SONOS_SID, "TTSPitch", "", device) -- restore default
 	end
-	local baseURL = luup.variable_get(SONOS_SID, "TTSBaseURL", device) or ""
+	-- NOTA BENE! baseURL must resolve to basePath in runtime! That is, whatever directory basePath
+	--            points to must be the directory accessed via baseURL.
+	local baseURL = getVar("TTSBaseURL", "", device, SONOS_SID, true)
+	if ttsrev < 19269 or not baseURL:match("%/$") then
+		setVar(SONOS_SID, "TTSBaseURL", "", device)
+		baseURL = ""
+	end
 	if "" == baseURL then
-		baseURL = string.format("http://%s/port_3480", VERA_IP)
-		luup.variable_set(SONOS_SID, "TTSBaseURL", baseURL, device)
+		if isOpenLuup then
+			baseURL = string.format("http://%s:3480/", VERA_IP)
+		elseif luup.short_version then
+			-- 7.30+
+			baseURL = string.format("http://%s/sonos/", VERA_IP)
+		else
+			baseURL = string.format("http://%s/port_3480/", VERA_IP)
+		end
 	end
-	local basePath = luup.variable_get(SONOS_SID, "TTSBasePath", device) or ""
+	local basePath = getVar("TTSBasePath", "", device, SONOS_SID, true)
+	if ttsrev < 19269 or not basePath:match("%/$") then
+		setVar(SONOS_SID, "TTSBasePath", "", device)
+		basePath = ""
+	end
 	if "" == basePath then
-		basePath = "/etc/cmh-ludl"
-		luup.variable_set(SONOS_SID, "TTSBasePath", basePath, device)
+		basePath = getInstallPath()
+		if not isOpenLuup and luup.short_version then
+			-- Real Vera 7.30+
+			basePath = "/www/sonos/"
+			os.execute("mkdir -p '" .. basePath .. "'")
+		end
 	end
+	setVar(SONOS_SID, "_ttsrev", 19269, device)
 	tts.setup(lang, engine, sayOrAlert, baseURL, basePath, googleURL, serverURL, maryURL, rvURL, clientId, clientSecret, option, rate, pitch)
 end
 
@@ -1663,8 +1731,8 @@ function updateWithoutProxy(device)
 	local dn = tonumber(device) or _G.error "updateWithoutProxy() invalid device: "..tostring(device)
 	refreshNow(dn, true, true)
 	if not upnp.proxyVersionAtLeast(1) then
-		local ts = luup.variable_get( UPNP_AVTRANSPORT_SID, "TransportState", dn ) or "STOPPED"
-		local rp,rs = ( luup.variable_get( SONOS_SID, "PollDelays", dn ) or "15,60" ):match( '^(%S+)%,%s*(.*)$' )
+		local ts = getVar( "TransportState", "STOPPED", dn, UPNP_AVTRANSPORT_SID )
+		local rp,rs = getVar("PollDelays", "15,60", dn):match( '^(%S+)%,%s*(.*)$' )
 		rp = tonumber(rp) or 15
 		rs = tonumber(rs) or 60
 		luup.call_delay("updateWithoutProxy", ( ts == "STOPPED" ) and rs or rp, device)
@@ -1751,29 +1819,34 @@ end
 local function setDeviceIcon( device, icon, model, udn )
 	-- Set up local copy of icon from device and static JSON pointing to it
 	-- (so icon works both locally and remote)
-	local installPath = "/etc/cmh-ludl/" -- Vera default
-	if isOpenLuup then -- ??? FIXME
-		local loader = require "openLuup.loader"
-		if loader.find_file == nil then
-			warning("This version of the Sonos plugin requires openLuup 2018.11.21 or higher")
-			installPath = "./" -- punt
-		else
-			installPath = loader.find_file( "D_Sonos1.json" ):gsub( "D_Sonos1.json$", "" )
-		end
+	local icorev = getVarNumeric("_icorev", 0, device)
+	local installPath = getInstallPath()
+	local iconPath, iconURL
+	if isOpenLuup then
+		iconPath = installPath
+		iconURL = "http://" .. VERA_IP .. ":3480/%s"
 	else
-		-- Always (re)link default icon path. This is UI7.
-		os.execute( "ln -sf "..installPath.."Sonos.png /www/cmh/skins/default/img/devices/device_states/" )
+		-- Vera Luup
+		if luup.short_version then
+			-- 7.30+
+			iconPath = "/www/sonos/"
+			iconURL = "/sonos/%s?http" -- kludge to take advantage of bad test in UI7 7.30 interface.js--leave my url alone!!!
+			os.execute( "mkdir -p '"..iconPath.."'" )
+		else
+			iconPath = "/www/cmh/skins/default/img/devices/device_states/"
+			iconURL = "%s"
+		end
+		os.execute( "ln -sf '"..installPath.."Sonos.png' '"..iconPath.."'" )
 	end
 	-- See if there's a local copy of the icon
 	local iconFile = string.format( "Sonos_%s%s", model, icon:match( "[^/]+$" ):match( "%..+$" ) )
 	local s = file_exists( installPath..iconFile )
 	if not s then
-		log( string.format("fetching device icon from %s to %s%s", iconURL, installPath, iconFile ) )
-		os.execute( "curl -s -o "..installPath..iconFile.." '"..iconURL.."'" )
-		if not isOpenLuup then
-			-- Link icon to UI7 default icon path
-			os.execute( "ln -sf "..installPath..iconFile.." /www/cmh/skins/default/img/devices/device_states/" )
-		end
+		log( string.format("fetching device icon from %s to %s%s", icon, installPath, iconFile ) )
+		os.execute( "curl -s -o '"..installPath..iconFile.."' '"..icon.."'" )
+	end
+	if installPath ~= iconPath then
+		os.execute( "ln -sf '"..installPath..iconFile.."' '"..iconPath.."'" )
 	end
 	-- See if we've already created a custom static JSON for this UDN or model.
 	local staticJSONFile
@@ -1790,7 +1863,7 @@ local function setDeviceIcon( device, icon, model, udn )
 		staticJSONFile = string.format( "D_Sonos1_%s.json", tostring( model or "GENERIC" ):upper():gsub( "[^A-Z0-9_]", "_" ) )
 	end
 	s = file_exists_LZO( installPath .. staticJSONFile )
-	if not s then
+	if icorev < 19269 or not s then
 		-- No. Create model-specific version
 		log("Creating static JSON in "..staticJSONFile)
 		local f
@@ -1811,9 +1884,11 @@ local function setDeviceIcon( device, icon, model, udn )
 			local d = json.decode( s )
 			if not d then _G.error "Can't parse generic static JSON file" end
 			-- Modify to new icon in default path
-			d.default_icon = iconFile
-			d.flashicon = iconFile
-			d.state_icons = { iconFile }
+			local ist = iconURL:format( iconFile )
+			debug( "Creating static JSON for icon " .. ist )
+			d.default_icon = ist
+			d.flashicon = nil
+			d.state_icons = nil
 			d._comment = "AUTOMATICALLY GENERATED -- DO NOT MODIFY THIS FILE"
 			-- Save custom.
 			f = io.open( installPath .. staticJSONFile, "w" )
@@ -1821,7 +1896,7 @@ local function setDeviceIcon( device, icon, model, udn )
 				error( string.format("can't write %s%s", installPath, staticJSONFile), 1)
 				staticJSONFile = nil
 			else
-				f:write( json.encode( d ) )
+				f:write( json.encode( d, { indent=4, keyorder={ "_comment", "default_icon", "state_icons" } } ) )
 				f:close()
 			end
 		end
@@ -1829,7 +1904,7 @@ local function setDeviceIcon( device, icon, model, udn )
 	-- Is this device using the right static JSON file?
 	local cj = luup.attr_get( 'device_json', device ) or ""
 	if not staticJSONFile then staticJSONFile = "D_Sonos1.json" end -- for safety
-	if staticJSONFile and cj ~= staticJSONFile then
+	if cj ~= staticJSONFile then
 		-- No. Switch it out.
 		warning(string.format("device_json currently %s, swapping to %s (and reloading)", cj, staticJSONFile ))
 		luup.attr_set( 'device_json', staticJSONFile, device )
@@ -1837,6 +1912,7 @@ local function setDeviceIcon( device, icon, model, udn )
 		-- for multiple players can be captured in one reload, rather than one per.
 		luup.call_delay( 'SonosReload', 15, "" )
 	end
+	setVar( SONOS_SID, "_icorev", 19269, device )
 end
 
 setup = function(device, init)
@@ -1995,12 +2071,7 @@ setup = function(device, init)
 end
 
 local function getCheckStateRate(device)
-	local rate = luup.variable_get(SONOS_SID, "CheckStateRate", device)
-	if (rate == nil or tonumber(rate) == nil) then
-		rate = "0"
-		luup.variable_set(SONOS_SID, "CheckStateRate", rate, device)
-	end
-	return tonumber(rate) * 60
+	return getVarNumeric("CheckStateRate", 0, device) * 60
 end
 
 function checkDeviceState(data)
@@ -2013,7 +2084,7 @@ function checkDeviceState(data)
 		end
 		device = tonumber(device)
 		local rate = getCheckStateRate(device)
-		if (rate > 0) then
+		if rate > 0 then
 			luup.call_delay("checkDeviceState", rate, idConfRefresh .. ":" .. device)
 			setup(device, false)
 		end
@@ -2022,10 +2093,8 @@ end
 
 local function setCheckStateRate(device, rate)
 	debug("setCheckStateRate rate=" .. (rate or "nil"))
-	if (rate == nil or tonumber(rate) == nil) then
-		rate = "0"
-	end
-	luup.variable_set(SONOS_SID, "CheckStateRate", rate, device)
+	if tonumber(rate) == nil then rate = 0 end
+	setVar(SONOS_SID, "CheckStateRate", rate, device)
 
 	idConfRefresh = idConfRefresh + 1
 
@@ -2225,7 +2294,7 @@ function SonosReload()
 end
 
 -- Check that the proxy is running.
-function checkProxy(data)
+function checkProxy(data) -- luacheck: ignore 212
 	local proxy = false
 	local version = upnp.getProxyApiVersion()
 	if version then
@@ -2271,14 +2340,11 @@ end
 function startup( lul_device )
 	log("version " .. PLUGIN_VERSION .. " starting up #" .. lul_device .. " ("
 		.. luup.devices[lul_device].description .. ")")
+		
+	isOpenLuup = luup.openLuup ~= nil
 
-	local debugLogs = luup.variable_get(SONOS_SID, "DebugLogs", lul_device)
-	if (debugLogs == nil or tonumber(debugLogs) == nil) then
-		debugLogs = "0"
-		luup.variable_set(SONOS_SID, "DebugLogs", debugLogs, lul_device)
-	end
-	debugLogs = tonumber( debugLogs )
-	if debugLogs and debugLogs ~= 0 then
+	local debugLogs = getVarNumeric("DebugLogs", 0, lul_device)
+	if debugLogs ~= 0 then
 		DEBUG_MODE = true
 		if math.floor( debugLogs / 2 ) % 2 == 1 then upnp.DEBUG_MODE = true end
 		if math.floor( debugLogs / 4 ) % 2 == 1 then tts.DEBUG_MODE = true end
@@ -2315,27 +2381,17 @@ function startup( lul_device )
 		luup.variable_set(SONOS_SID, "DiscoveryResult", "", lul_device)
 	end
 
-	local routerIp = luup.variable_get(SONOS_SID, "RouterIp", lul_device)
-	if (routerIp == nil) then
-		routerIp = ""
-		luup.variable_set(SONOS_SID, "RouterIp", routerIp, lul_device)
-	end
-	local routerPort = luup.variable_get(SONOS_SID, "RouterPort", lul_device)
-	if (routerPort == nil) then
-		routerPort = ""
-		luup.variable_set(SONOS_SID, "RouterPort", routerPort, lul_device)
-	end
+	local routerIp = getVar("RouterIp", "", lul_device, SONOS_SID, true)
+	local routerPort = getVar("RouterPort", "", lul_device, SONOS_SID, true)
 
-	local rate = luup.variable_get(SONOS_SID, "CheckStateRate", lul_device)
-	if (rate == nil or tonumber(rate) == nil) then
-		luup.variable_set(SONOS_SID, "CheckStateRate", "0", lul_device)
-	end
+	initVar("CheckStateRate", "", lul_device, SONOS_SID)
 
-	local fetch = luup.variable_get(SONOS_SID, "FetchQueue", lul_device)
-	if (fetch == nil or tonumber(fetch) == nil) then
-		luup.variable_set(SONOS_SID, "FetchQueue", "1", lul_device)
+	local fetch = getVarNumeric("FetchQueue", -1, lul_device)
+	if fetch < 0 then
+		setVar(SONOS_SID, "FetchQueue", "1", lul_device)
+		fetch = 1
 	end
-	if (luup.variable_get(SONOS_SID, "FetchQueue", lul_device) == "0") then
+	if fetch == 0 then
 		fetchQueue = false
 	end
 
@@ -2348,7 +2404,7 @@ function startup( lul_device )
 	stdout:close()
 	debug("sonosStartup: Vera IP Address=" .. VERA_LOCAL_IP)
 
-	if (routerIp == "") then
+	if routerIp == "" then
 		VERA_IP = VERA_LOCAL_IP
 	else
 		VERA_IP = routerIp
@@ -2393,17 +2449,17 @@ function actionSonosSay( lul_device, lul_settings )
 end
 
 function actionSonosSetupTTS( lul_device, lul_settings )
-	luup.variable_set(SONOS_SID, "DefaultLanguageTTS"   			, lul_settings.DefaultLanguage or "en", lul_device)
-	luup.variable_set(SONOS_SID, "DefaultEngineTTS"     			, lul_settings.DefaultEngine or "GOOGLE", lul_device)
+	luup.variable_set(SONOS_SID, "DefaultLanguageTTS"   			, lul_settings.DefaultLanguage or "", lul_device)
+	luup.variable_set(SONOS_SID, "DefaultEngineTTS"     			, lul_settings.DefaultEngine or "", lul_device)
 	luup.variable_set(SONOS_SID, "OSXTTSServerURL"      			, url.unescape(lul_settings.OSXTTSServerURL       		or ""), lul_device)
-	luup.variable_set(SONOS_SID, "GoogleTTSServerURL"   			, url.unescape(lul_settings.GoogleTTSServerURL    		or "https://translate.google.com"), lul_device)
+	luup.variable_set(SONOS_SID, "GoogleTTSServerURL"   			, url.unescape(lul_settings.GoogleTTSServerURL    		or ""), lul_device)
 	luup.variable_set(SONOS_SID, "MaryTTSServerURL"     			, url.unescape(lul_settings.MaryTTSServerURL      		or ""), lul_device)
 	luup.variable_set(SONOS_SID, "MicrosoftClientId"    			, url.unescape(lul_settings.MicrosoftClientId     		or ""), lul_device)
 	luup.variable_set(SONOS_SID, "MicrosoftClientSecret"			, url.unescape(lul_settings.MicrosoftClientSecret 		or ""), lul_device)
 	luup.variable_set(SONOS_SID, "MicrosoftOption"      			, url.unescape(lul_settings.MicrosoftOption      		or ""), lul_device)
-	luup.variable_set(SONOS_SID, "ResponsiveVoiceTTSServerURL"    , url.unescape(lul_settings.ResponsiveVoiceTTSServerURL	or "https://code.responsivevoice.org"), lul_device)
-	luup.variable_set(SONOS_SID, "TTSRate"      					, url.unescape(lul_settings.Rate      		or "0.5"), lul_device)
-	luup.variable_set(SONOS_SID, "TTSPitch"      					, url.unescape(lul_settings.Pitch      		or "0.5"), lul_device)
+	luup.variable_set(SONOS_SID, "ResponsiveVoiceTTSServerURL"    , url.unescape(lul_settings.ResponsiveVoiceTTSServerURL	or ""), lul_device)
+	luup.variable_set(SONOS_SID, "TTSRate"      					, url.unescape(lul_settings.Rate      		or ""), lul_device)
+	luup.variable_set(SONOS_SID, "TTSPitch"      					, url.unescape(lul_settings.Pitch      		or ""), lul_device)
 	setupTTSSettings(lul_device)
 end
 
@@ -2470,7 +2526,7 @@ function actionSonosAlert( lul_device, lul_settings )
 	end
 end
 
-function actionSonosPauseAll( lul_device, lul_settings )
+function actionSonosPauseAll( lul_device, lul_settings ) -- luacheck: ignore 212
 	pauseAll(lul_device)
 end
 
@@ -2479,7 +2535,7 @@ function actionSonosJoinGroup( lul_device, lul_settings )
 	joinGroup(lul_device, zone)
 end
 
-function actionSonoLeaveGroup( lul_device, lul_settings )
+function actionSonoLeaveGroup( lul_device, lul_settings ) -- luacheck: ignore 212
 	leaveGroup(lul_device)
 end
 
@@ -2529,12 +2585,12 @@ function actionSonosSavePlaybackContext( lul_device, lul_settings )
 	return 4,0
 end
 
-function actionSonosRestorePlaybackContext( lul_device, lul_settings )
+function actionSonosRestorePlaybackContext( lul_device, lul_settings ) -- luacheck: ignore 212
 	restorePlaybackContexts(lul_device, playbackCxt[lul_device])
 	return 4,0
 end
 
-function actionSonosStartDiscovery( lul_device, lul_settings )
+function actionSonosStartDiscovery( lul_device, lul_settings ) -- luacheck: ignore 212
 	setVariableValue(SONOS_SID, "DiscoveryResult", "scanning", lul_device)
 	local xml = upnp.scanUPnPDevices("urn:schemas-upnp-org:device:ZonePlayer:1", { "modelName", "friendlyName", "roomName" })
 	setVariableValue(SONOS_SID, "DiscoveryResult", xml, lul_device)
@@ -2582,7 +2638,7 @@ function actionSonosSetReadQueueContent( lul_device, lul_settings )
 	setReadQueueContent(lul_device, lul_settings.enable)
 end
 
-function actionSonosInstallDiscoveryPatch( lul_device, lul_settings )
+function actionSonosInstallDiscoveryPatch( lul_device, lul_settings ) -- luacheck: ignore 212
 	local reload = false
 	if upnp.installDiscoveryPatch(VERA_LOCAL_IP) then
 		reload = true
@@ -2597,7 +2653,7 @@ function actionSonosInstallDiscoveryPatch( lul_device, lul_settings )
 	end
 end
 
-function actionSonosUninstallDiscoveryPatch( lul_device, lul_settings )
+function actionSonosUninstallDiscoveryPatch( lul_device, lul_settings ) -- luacheck: ignore 212
 	local reload = false
 	if upnp.uninstallDiscoveryPatch(VERA_LOCAL_IP) then
 		reload = true
@@ -2628,7 +2684,7 @@ function actionSonosNotifyAVTransportChange( lul_device, lul_settings )
 	return 2,0
 end
 
-function actionSonosNotifyMusicServicesChange( lul_device, lul_settings )
+function actionSonosNotifyMusicServicesChange( lul_device, lul_settings ) -- luacheck: ignore 212
 	if (upnp.isValidNotification("NotifyMusicServicesChange", lul_settings.sid, EventSubscriptions)) then
 		-- log("NotifyMusicServicesChange for device " .. lul_device .. " SID " .. lul_settings.sid .. " with value " .. (lul_settings.LastChange or "nil"))
 		return 4,0
@@ -2677,8 +2733,8 @@ function actionVolumeMute( lul_device, lul_settings )
 
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
 	local channel = defaultValue(lul_settings, "Channel", "Master")
-	local isMuted = luup.variable_get(UPNP_RENDERING_CONTROL_SID, "Mute", lul_device)
-	local desiredMute = 1 - (tonumber(isMuted) or 0)
+	local isMuted = getVarNumeric("Mute", 0, lul_device, UPNP_RENDERING_CONTROL_SID, true)
+	local desiredMute = 1 - isMuted
 
 	Rendering.SetMute(
 		 {OrderedArgs={"InstanceID=" .. instanceId,
@@ -3658,7 +3714,7 @@ end
 
 --]]
 
-function actionPoll( lul_device, lul_settings )
+function actionPoll( lul_device, lul_settings ) -- luacheck: ignore 212
 	refreshNow( lul_device, true, true )
 	return 4,0
 end
