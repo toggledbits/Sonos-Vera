@@ -49,10 +49,10 @@ local engines = {
 }
 
 local SAY_TMP_FILE = "/tmp/Say.%s.%s.mp3"
-local SAY_OUTPUT_FILE = "%s/Say.%s.%s"
-local SAY_OUTPUT_URI = "%s/Say.%s.%s"
-local CONCAT_EXECUTE = "cat %s > %s ; rm %s"
-local DELETE_EXECUTE = "rm %s/Say.%s.*"
+local SAY_OUTPUT_FILE = "%sSay.%s.%s"
+local SAY_OUTPUT_URI = "%sSay.%s.%s"
+local CONCAT_EXECUTE = "cat '%s' > '%s' ; rm -- '%s'"
+local DELETE_EXECUTE = "rm -- '%sSay.%s.*'"
 
 local METADATA = '<DIDL-Lite xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/">'
 				 .. '<item id="VERA_TTS" parentID="-1" restricted="1"><dc:title>%s</dc:title>%s<upnp:class>object.item.audioItem.musicTrack</upnp:class></item></DIDL-Lite>'
@@ -75,7 +75,7 @@ local function GoogleTTS(text, language, device, bitrate)
 
 	if (GoogleServerURL ~= nil and GoogleServerURL ~= "") then
 
-		local SAY_EXECUTE = "rm %s ; wget --output-document %s" .. [[ \
+		local SAY_EXECUTE = "rm -- '%s' ; wget --output-document '%s' " .. [[ \
 --quiet \
 --header "Accept-Charset: utf-8;q=0.7,*;q=0.3" \
 --header "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" \
@@ -145,7 +145,8 @@ local function RV_TTS(text, language, device, bitrate)
 
 	if (RVServerURL ~= nil and RVServerURL ~= "") then
 
-		local SAY_EXECUTE = "rm %s ; curl -s -o %s" .. [[ \
+		local SAY_EXECUTE = "rm -- '%s' ; curl -s -o '%s' " .. [[ \
+--connect-timeout 15 \
 --header "Accept-Charset: utf-8;q=0.7,*;q=0.3" \
 --header "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" \
 --header "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_8_2) AppleWebKit/537.11 (KHTML, like Gecko) Chrome/23.0.1271.64 Safari/537.11" \
@@ -220,7 +221,7 @@ local function TTSServer(text, language, device, bitrate)
 
 	if (OSXserverURL ~= nil and OSXserverURL ~= "") then
 
-		local SAY_EXECUTE = "rm %s ; wget --output-document %s" .. [[ \
+		local SAY_EXECUTE = "rm -- '%s' ; wget --output-document '%s' " .. [[ \
 --quiet \
 --header "Accept-Charset: utf-8;q=0.7,*;q=0.3" \
 --header "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" \
@@ -322,7 +323,7 @@ local function MicrosoftTTSwithToken(text, language, device, bitrate, token)
 	local duration = 0
 	local uri = nil
 
-	local SAY_EXECUTE = "rm %s ; wget --output-document %s" .. [[ \
+	local SAY_EXECUTE = "rm -- '%s' ; wget --output-document '%s' " .. [[ \
 --quiet \
 --header "Accept-Charset: utf-8;q=0.7,*;q=0.3" \
 --header "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" \
@@ -397,17 +398,20 @@ local function MaryTTS(text, language, device, bitrate)
 	local duration = 0
 	local uri = nil
 
-	local SAY_EXECUTE = "rm %s ; wget --output-document %s" .. [[ \
---quiet \
+	local SAY_EXECUTE = "rm -- '%s' ; curl -s -o '%s' " .. [[ \
+--connect-timeout 15 \
 --header "Accept-Charset: utf-8;q=0.7,*;q=0.3" \
 --header "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" \
---user-agent "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_8_2) AppleWebKit/537.11 (KHTML, like Gecko) Chrome/23.0.1271.64 Safari/537.11" \
+--header "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_8_2) AppleWebKit/537.11 (KHTML, like Gecko) Chrome/23.0.1271.64 Safari/537.11" \
 "%s/process?INPUT_TYPE=TEXT&AUDIO=WAVE_FILE&OUTPUT_TYPE=AUDIO&LOCALE=%s&INPUT_TEXT=%s"]]
 
 	local lang = language:gsub("-", "_")
 
 	local file = SAY_OUTPUT_FILE:format(localBasePath, device, "wav")
-	local returnCode = os.execute(SAY_EXECUTE:format(file, file, MaryServerURL, lang, url.escape(text)))
+	local cmd = SAY_EXECUTE:format(file, file, MaryServerURL, lang, url.escape(text))
+	log("MaryTTS: requesting " .. cmd)
+	local returnCode = os.execute(cmd)
+	log("MaryTTS: returned " .. tostring(returnCode))
 	local fh = io.open(file, "a+")
 	local size = fh:seek("end")
 	fh:close()
@@ -438,7 +442,7 @@ end
 function setup(language, engine, playFct, baseURL, basePath, googleUrl, osxUrl, maryUrl, rvURL, clientId, clientSecret, option, rate, pitch)
 	defaultLanguage = language or "en"
 	defaultEngine = engine or "GOOGLE"
-	play = playFct or engines.GOOGLE.fct
+	play = playFct or engines[defaultEngine].fct
 	localBaseURL = baseURL
 	localBasePath = basePath
 	GoogleServerURL = googleUrl or "http://translate.google.com"
