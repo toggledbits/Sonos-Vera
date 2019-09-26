@@ -5,10 +5,11 @@
 
 module( "L_Sonos1", package.seeall )
 
+PLUGIN_NAME = "Sonos"
 PLUGIN_VERSION = "1.5-19269"
 PLUGIN_ID = 4226
 
-local DEBUG_MODE = true	-- Don't hardcode true--use state variable config
+local DEBUG_MODE = false	-- Don't hardcode true--use state variable config
 
 local MIN_UPNP_VERSION = 19191	-- Minimum version of L_SonosUPnP that works
 local MIN_TTS_VERSION = 19191	-- Minimum version of L_SonosTTS that works
@@ -1702,12 +1703,12 @@ local function setupTTSSettings(device)
 	end
 	if "" == baseURL then
 		if isOpenLuup then
-			baseURL = string.format("http://%s:3480/", VERA_IP)
+			baseURL = string.format("http://%s:3480/", VERA_LOCAL_IP)
 		elseif luup.short_version then
 			-- 7.30+
-			baseURL = string.format("http://%s/sonos/", VERA_IP)
+			baseURL = string.format("http://%s/sonos/", VERA_LOCAL_IP)
 		else
-			baseURL = string.format("http://%s/port_3480/", VERA_IP)
+			baseURL = string.format("http://%s/port_3480/", VERA_LOCAL_IP)
 		end
 	end
 	local basePath = getVar("TTSBasePath", "", device, SONOS_SID, true)
@@ -1824,13 +1825,13 @@ local function setDeviceIcon( device, icon, model, udn )
 	local iconPath, iconURL
 	if isOpenLuup then
 		iconPath = installPath
-		iconURL = "http://" .. VERA_IP .. ":3480/%s"
+		iconURL = "http://" .. VERA_LOCAL_IP .. ":3480/%s"
 	else
 		-- Vera Luup
 		if luup.short_version then
 			-- 7.30+
 			iconPath = "/www/sonos/"
-			iconURL = "/sonos/%s?http" -- kludge to take advantage of bad test in UI7 7.30 interface.js--leave my url alone!!!
+			iconURL = "/sonos/%s" -- ?http" -- kludge to take advantage of bad test in UI7 7.30 interface.js--leave my url alone!!!
 			os.execute( "mkdir -p '"..iconPath.."'" )
 		else
 			iconPath = "/www/cmh/skins/default/img/devices/device_states/"
@@ -1896,7 +1897,7 @@ local function setDeviceIcon( device, icon, model, udn )
 				error( string.format("can't write %s%s", installPath, staticJSONFile), 1)
 				staticJSONFile = nil
 			else
-				f:write( json.encode( d, { indent=4, keyorder={ "_comment", "default_icon", "state_icons" } } ) )
+				f:write( json.encode( d, { indent=4, keyorder={ "_comment", "default_icon" } } ) )
 				f:close()
 			end
 		end
@@ -2399,17 +2400,24 @@ function startup( lul_device )
 	-- Acquire the IP Address of Vera itself, needed for the Say method later on.
 	-- Note: We're assuming Vera is connected via it's WAN Port to the Sonos devices
 	--
-	local stdout = io.popen("GetNetworkState.sh ip_wan")
-	VERA_LOCAL_IP = stdout:read("*a")
-	stdout:close()
+	VERA_LOCAL_IP = getVar("LocalIP", "", lul_device, SONOS_SID, true)
+	if VERA_LOCAL_IP == "" then
+		local stdout = io.popen("GetNetworkState.sh ip_wan")
+		VERA_LOCAL_IP = stdout:read("*a")
+		stdout:close()
+	end
 	debug("sonosStartup: Vera IP Address=" .. VERA_LOCAL_IP)
+	if VERA_LOCAL_IP == "" then
+		error("Unable to establish local IP address. Please set 'LocalIP'")
+		luup.set_failure( 1, device )
+		return false, "Unable to establish local IP -- see log", PLUGIN_NAME
+	end
 
 	if routerIp == "" then
 		VERA_IP = VERA_LOCAL_IP
 	else
 		VERA_IP = routerIp
 	end
-
 	if routerPort ~= "" then
 		VERA_WEB_PORT = tonumber(routerPort)
 	end
@@ -2431,6 +2439,8 @@ function startup( lul_device )
 	end
 
 	luup.call_delay("deferredStartup", 1, lul_device)
+	
+	luup.set_failure( 0, lul_device )
 end
 
 --[[
