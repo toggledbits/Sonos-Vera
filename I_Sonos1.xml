@@ -10,7 +10,7 @@ Modified by:
 -->
 <functions>
 	function sonosStartup( dev )
-		require "L_Sonos1"
+		L_Sonos1 = require "L_Sonos1"
 		-- Sanity check installation
 		if ( L_Sonos1.PLUGIN_VERSION or "" ) == "" then
 			luup.log( "Sonos: installation failure; the L_Sonos1 module has not been correctly updated to match the implementation file. Please re-install the entire plugin.", 1 )
