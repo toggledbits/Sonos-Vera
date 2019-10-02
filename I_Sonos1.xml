@@ -57,6 +57,14 @@ Modified by:
 
   <action>
 	<serviceId>urn:micasaverde-com:serviceId:Sonos1</serviceId>
+	<name>ResetTTS</name>
+	<run>
+		return L_Sonos1.actionSonosResetTTS( lul_device, lul_settings )
+	</run>
+  </action>
+
+  <action>
+	<serviceId>urn:micasaverde-com:serviceId:Sonos1</serviceId>
 	<name>SetURIToPlay</name>
 	<run>
 		return L_Sonos1.actionSonosSetURIToPlay( lul_device, lul_settings )

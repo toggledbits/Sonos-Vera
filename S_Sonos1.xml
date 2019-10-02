@@ -265,6 +265,10 @@
       </argumentList>
     </action>
     <action>
+      <name>ResetTTS</name>
+      <argumentList/>
+    </action>
+    <action>
       <name>PauseAll</name>
     </action>
     <action>

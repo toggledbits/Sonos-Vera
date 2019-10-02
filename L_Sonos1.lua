@@ -1867,7 +1867,7 @@ local function setDeviceIcon( device, icon, model, udn )
 	local iconFile = string.format( "Sonos_%s%s", model, icon:match( "[^/]+$" ):match( "%..+$" ) )
 	local s = file_exists( installPath..iconFile )
 	if not s then
-		log( string.format("fetching device icon from %s to %s%s", icon, installPath, iconFile ) )
+		log( string.format("Fetching custom device icon from %s to %s%s", icon, installPath, iconFile ) )
 		os.execute( "curl -s -o '"..installPath..iconFile.."' '"..icon.."'" )
 	end
 	if installPath ~= iconPath then
@@ -2365,7 +2365,7 @@ end
 function startup( lul_device )
 	log("version " .. PLUGIN_VERSION .. " starting up #" .. lul_device .. " ("
 		.. luup.devices[lul_device].description .. ")")
-		
+
 	isOpenLuup = luup.openLuup ~= nil
 
 	local debugLogs = getVarNumeric("DebugLogs", 0, lul_device)
@@ -2453,7 +2453,7 @@ function startup( lul_device )
 	ip, playbackCxt, sayPlayback, UUIDs, metaDataKeys, dataTable = upnp.initialize(log, warning, error)
 
 	if tts then
-		tts.initialize(debug, warning, error)
+		tts.initialize((debugLogs/4)%2~=0 and log or debug, warning, error)
 	end
 
 	port = 1400
@@ -2467,7 +2467,7 @@ function startup( lul_device )
 	end
 
 	luup.call_delay("deferredStartup", 1, lul_device)
-	
+
 	luup.set_failure( 0, lul_device )
 end
 
@@ -2481,7 +2481,7 @@ function actionSonosSay( lul_device, lul_settings )
 	debug("Say: " .. (lul_settings.Text or "nil"))
 	if not tts then
 		warning "The Sonos TTS module is not installed or could not be loaded."
-		return 
+		return
 	end
 	if ( tts.VERSION or 0 ) < MIN_TTS_VERSION then
 		warning "The L_SonosTTS module installed may not be compatible with this version of the plugin core."
@@ -2505,6 +2505,23 @@ function actionSonosSetupTTS( lul_device, lul_settings )
 	luup.variable_set(SONOS_SID, "ResponsiveVoiceTTSServerURL"		, url.unescape(lul_settings.ResponsiveVoiceTTSServerURL	or ""), lul_device)
 	luup.variable_set(SONOS_SID, "TTSRate"							, url.unescape(lul_settings.Rate						or ""), lul_device)
 	luup.variable_set(SONOS_SID, "TTSPitch"							, url.unescape(lul_settings.Pitch						or ""), lul_device)
+	setupTTSSettings(lul_device)
+end
+
+function actionSonosResetTTS( lul_device )
+	luup.variable_set(SONOS_SID, "DefaultLanguageTTS"			, "", lul_device)
+	luup.variable_set(SONOS_SID, "DefaultEngineTTS"				, "", lul_device)
+	luup.variable_set(SONOS_SID, "OSXTTSServerURL"				, "", lul_device)
+	luup.variable_set(SONOS_SID, "GoogleTTSServerURL"			, "", lul_device)
+	luup.variable_set(SONOS_SID, "MaryTTSServerURL"				, "", lul_device)
+	luup.variable_set(SONOS_SID, "MicrosoftClientId"			, "", lul_device)
+	luup.variable_set(SONOS_SID, "MicrosoftClientSecret"		, "", lul_device)
+	luup.variable_set(SONOS_SID, "MicrosoftOption"				, "", lul_device)
+	luup.variable_set(SONOS_SID, "ResponsiveVoiceTTSServerURL"	, "", lul_device)
+	luup.variable_set(SONOS_SID, "TTSRate"						, "", lul_device)
+	luup.variable_set(SONOS_SID, "TTSPitch"						, "", lul_device)
+	luup.variable_set(SONOS_SID, "TTSBasePath"					, "", lul_device)
+	luup.variable_set(SONOS_SID, "TTSBaseURL"					, "", lul_device)
 	setupTTSSettings(lul_device)
 end
 
@@ -2691,7 +2708,7 @@ function actionSonosInstallDiscoveryPatch( lul_device, lul_settings ) -- luachec
 	else
 		log("Discovery patch installation failed")
 	end
-	luup.variable_set(SONOS_SID, "DiscoveryPatchInstalled", 
+	luup.variable_set(SONOS_SID, "DiscoveryPatchInstalled",
 		upnp.isDiscoveryPatchInstalled(VERA_LOCAL_IP) and "1" or "0", lul_device)
 	if reload then
 		luup.call_delay("SonosReload", 2, "")
@@ -2706,7 +2723,7 @@ function actionSonosUninstallDiscoveryPatch( lul_device, lul_settings ) -- luach
 	else
 		log("Discovery patch uninstallation failed")
 	end
-	luup.variable_set(SONOS_SID, "DiscoveryPatchInstalled", 
+	luup.variable_set(SONOS_SID, "DiscoveryPatchInstalled",
 		upnp.isDiscoveryPatchInstalled(VERA_LOCAL_IP) and "1" or "0", lul_device)
 	if reload then
 		luup.call_delay("SonosReload", 2, "")
