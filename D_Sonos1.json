@@ -1,6 +1,6 @@
 {
-	"flashicon": "Sonos.png",
-	"default_icon": "Sonos.png",
+	"flashicon": "../../../icons/Sonos.png",
+	"default_icon": "../../../icons/Sonos.png",
 	"imgIconBody": "",
 	"imgIconDimmable": "",
 	"imgIconTurnable": "",
@@ -15,7 +15,7 @@
 		"Sonos_125.png",
 		"Sonos_150.png",
 		{
-			"img": "Sonos_0.png",
+			"img": "../../../icons/Sonos_0.png",
 			"conditions": [{
 				"service": "urn:micasaverde-com:serviceId:Sonos1",
 				"variable": "SonosModel",
@@ -24,7 +24,7 @@
 			}]
 		},
 		{
-			"img": "Sonos_25.png",
+			"img": "../../../icons/Sonos_25.png",
 			"conditions": [{
 				"service": "urn:micasaverde-com:serviceId:Sonos1",
 				"variable": "SonosModel",
@@ -33,7 +33,7 @@
 			}]
 		},
 		{
-			"img": "Sonos_50.png",
+			"img": "../../../icons/Sonos_50.png",
 			"conditions": [{
 				"service": "urn:micasaverde-com:serviceId:Sonos1",
 				"variable": "SonosModel",
@@ -42,7 +42,7 @@
 			}]
 		},
 		{
-			"img": "Sonos_75.png",
+			"img": "../../../icons/Sonos_75.png",
 			"conditions": [{
 				"service": "urn:micasaverde-com:serviceId:Sonos1",
 				"variable": "SonosModel",
@@ -51,7 +51,7 @@
 			}]
 		},
 		{
-			"img": "Sonos_100.png",
+			"img": "../../../icons/Sonos_100.png",
 			"conditions": [{
 				"service": "urn:micasaverde-com:serviceId:Sonos1",
 				"variable": "SonosModel",
@@ -60,7 +60,7 @@
 			}]
 		},
 		{
-			"img": "Sonos_125.png",
+			"img": "../../../icons/Sonos_125.png",
 			"conditions": [{
 				"service": "urn:micasaverde-com:serviceId:Sonos1",
 				"variable": "SonosModel",
@@ -69,7 +69,7 @@
 			}]
 		},
 		{
-			"img": "Sonos_150.png",
+			"img": "../../../icons/Sonos_150.png",
 			"conditions": [{
 				"service": "urn:micasaverde-com:serviceId:Sonos1",
 				"variable": "SonosModel",

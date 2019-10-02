@@ -1,15 +1,8 @@
 module("L_SonosTTS", package.seeall)
 
---[[
-Verion 1.4+
-Modified by:
-	explorer for openLuup
-	cybermage for ResponsiveVoice
-	reneboer to combine both the above and some usability
-	rigpapa for new ResponsiveVoice URL and Vera incompats
-]]
+-- Maintainer: rigpapa https://community.getvera.com/u/rigpapa/summary
 
-VERSION = 19191
+VERSION = 19274
 DEBUG_MODE = false
 
 local url = require("socket.url")

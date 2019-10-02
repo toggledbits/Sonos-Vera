@@ -1,12 +1,6 @@
 module("L_SonosUPnP", package.seeall)
---[[
-Verion 1.4+
-Modified by:
-    explorer for openLuup
-    cybermage for ResponsiveVoice
-    reneboer to combine both the above and some usability
 
-]]
+-- Maintainer: rigpapa https://community.getvera.com/u/rigpapa/summary
 
 VERSION = 19191
 DEBUG_MODE = false

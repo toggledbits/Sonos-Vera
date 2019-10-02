@@ -1,18 +1,18 @@
 --[[ Sonos Plugin for Vera and openLuup
-     Current maintainer: rigpapa (patrick@toggledbits.com)
+     Current maintainer: rigpapa https://community.getvera.com/u/rigpapa/summary
 	 Github repository: https://github.com/toggledbits/Sonos-Vera
 --]]
 
 module( "L_Sonos1", package.seeall )
 
 PLUGIN_NAME = "Sonos"
-PLUGIN_VERSION = "1.5-19269"
+PLUGIN_VERSION = "1.5-19274"
 PLUGIN_ID = 4226
 
 local DEBUG_MODE = false	-- Don't hardcode true--use state variable config
 
 local MIN_UPNP_VERSION = 19191	-- Minimum version of L_SonosUPnP that works
-local MIN_TTS_VERSION = 19191	-- Minimum version of L_SonosTTS that works
+local MIN_TTS_VERSION = 19274	-- Minimum version of L_SonosTTS that works
 
 local MSG_CLASS = "Sonos"
 local isOpenLuup = false
@@ -1721,7 +1721,6 @@ local function setupTTSSettings(device)
 		if not isOpenLuup and luup.short_version then
 			-- Real Vera 7.30+
 			basePath = "/www/sonos/"
-			os.execute("mkdir -p '" .. basePath .. "'")
 		end
 	end
 	setVar(SONOS_SID, "_ttsrev", 19269, device)
@@ -1766,6 +1765,24 @@ local function getAvailableServices(uuid)
 	return services
 end
 
+-- File copy. Why? So that symlinks are copied as actual file contents.
+local function cp( fromPath, toPath )
+	local ff = io.open( fromPath, "rb" )
+	if not ff then return false end
+	local tf = io.open( toPath, "wb" )
+	if not tf then ff:close() return false end
+	local nb = 0
+	while true do
+		local s = ff:read(2048)
+		if not s then break end
+		tf:write(s)
+		nb = nb + #s
+	end
+	tf:close()
+	ff:close()
+	return nb
+end
+
 -- Return true if file exists; optionally returns handle to open file if exists.
 local function file_exists( fpath, leaveOpen )
 	local f = io.open( fpath, "r" )
@@ -1790,24 +1807,33 @@ end
 
 -- Fix the locations of the legacy icons. This can eventually go away.
 local function fixLegacyIcons()
+	if isOpenLuup then return end
+	local basePath = getInstallPath()
 	function moveIcon( p )
-		if not file_exists( "/etc/cmh-ludl/"..p ) then
-			if file_exists( "/etc/cmh-ludl/" .. p .. ".lzo" ) then
+		if not file_exists( basePath .. p ) then
+			if file_exists( basePath .. p .. ".lzo" ) then
 				-- Decompress
-				os.execute( "pluto-lzo d /etc/cmh-ludl/"..p..".lzo /etc/cmh-ludl/"..p )
+				os.execute( "pluto-lzo d " .. basePath .. p..".lzo " .. basePath .. p )
 			elseif file_exists( "/www/cmh/skins/default/icons/" .. p ) then
 				-- cp instead of mv so Luup doesn't complain about missing plugin files
-				os.execute( "cp -p /www/cmh/skins/default/icons/"..p.." /etc/cmh-ludl/" )
+				cp( "/www/cmh/skins/default/icons/"..p, basePath .. p )
+			elseif file_exists( "/www/cmh/skins/default/img/devices/device_states/" .. p ) then
+				cp( "/www/cmh/skins/default/img/device/device_states/" .. p, basePath .. p )
 			end
-		elseif file_exists( "/etc/cmh-ludl/" .. p .. ".lzo" ) then
+		elseif file_exists( basePath .. p .. ".lzo" ) then
 			-- Both compress and uncompressed exist.
-			if file_dtm( "/etc/cmh-ludl/"..p..".lzo" ) > file_dtm( "/etc/cmh-ludl/"..p ) then
+			if file_dtm( basePath .. p .. ".lzo" ) > file_dtm( basePath .. p ) then
 				-- Decompress newer file
-				os.execute( "pluto-lzo d /etc/cmh-ludl/"..p..".lzo /etc/cmh-ludl/"..p )
+				os.execute( "pluto-lzo d " .. basePath .. p ..".lzo " .. basePath .. p )
 			end
 		end
-		if file_exists( "/etc/cmh-ludl/"..p ) and not file_exists( "/www/cmh/skins/default/img/devices/device_states/"..p ) then
-			os.execute( "ln -s /etc/cmh-ludl/"..p.." /www/cmh/skins/default/img/devices/device_states/" )
+		if file_exists( basePath .. p ) then
+			if not file_exists( "/www/cmh/skins/default/icons/"..p ) then
+				os.execute( "ln -sf " .. basePath .. p .." /www/cmh/skins/default/icons/" )
+			end
+			if luup.short_version and not file_exists( "/www/sonos/" .. p ) then
+				os.execute( "ln -sf " .. basePath .. p .. " /www/sonos/" )
+			end
 		end
 	end
 	moveIcon( "Sonos.png" )
@@ -1832,14 +1858,12 @@ local function setDeviceIcon( device, icon, model, udn )
 			-- 7.30+
 			iconPath = "/www/sonos/"
 			iconURL = "/sonos/%s" -- ?http" -- kludge to take advantage of bad test in UI7 7.30 interface.js--leave my url alone!!!
-			os.execute( "mkdir -p '"..iconPath.."'" )
 		else
-			iconPath = "/www/cmh/skins/default/img/devices/device_states/"
-			iconURL = "%s"
+			iconPath = "/www/cmh/skins/default/icons/"
+			iconURL = "../../../icons/%s"
 		end
-		os.execute( "ln -sf '"..installPath.."Sonos.png' '"..iconPath.."'" )
 	end
-	-- See if there's a local copy of the icon
+	-- See if there's a local copy of the custom icon
 	local iconFile = string.format( "Sonos_%s%s", model, icon:match( "[^/]+$" ):match( "%..+$" ) )
 	local s = file_exists( installPath..iconFile )
 	if not s then
@@ -2351,6 +2375,12 @@ function startup( lul_device )
 		if math.floor( debugLogs / 4 ) % 2 == 1 then tts.DEBUG_MODE = true end
 	end
 
+	if not isOpenLuup and luup.short_version then
+		-- Real Vera 7.30+
+		os.execute("mkdir -p /www/sonos/")
+	end
+	pcall( fixLegacyIcons )
+
 	debug("UPnP module is "..tostring(upnp.VERSION))
 	if ( upnp.VERSION or 0 ) < MIN_UPNP_VERSION then
 		error "The L_SonosUPNP module installed is not compatible with this version of the plugin core."
@@ -2364,8 +2394,6 @@ function startup( lul_device )
 			warning "The L_SonosTTS module installed may not be compatible with this version of the plugin core."
 		end
 	end
-
-	pcall( fixLegacyIcons )
 
 	setData( "PluginVersion", PLUGIN_VERSION, lul_device, false )
 	initData( "PollDelays", "15,60", lul_device )
@@ -2408,8 +2436,8 @@ function startup( lul_device )
 	end
 	debug("sonosStartup: Vera IP Address=" .. VERA_LOCAL_IP)
 	if VERA_LOCAL_IP == "" then
-		error("Unable to establish local IP address. Please set 'LocalIP'")
-		luup.set_failure( 1, device )
+		error("Unable to establish local IP address of Vera/openLuup system. Please set 'LocalIP'")
+		luup.set_failure( 1, lul_device )
 		return false, "Unable to establish local IP -- see log", PLUGIN_NAME
 	end
 
@@ -2450,26 +2478,33 @@ end
 --]]
 
 function actionSonosSay( lul_device, lul_settings )
-	if not tts then return end
 	debug("Say: " .. (lul_settings.Text or "nil"))
+	if not tts then
+		warning "The Sonos TTS module is not installed or could not be loaded."
+		return 
+	end
 	if ( tts.VERSION or 0 ) < MIN_TTS_VERSION then
 		warning "The L_SonosTTS module installed may not be compatible with this version of the plugin core."
+	end
+	if ( luup.attr_get( 'UnsafeLua', 0 ) or "0" ) ~= "1" then
+		warning "The Sonos TTS module requires that 'Enable Unsafe Lua' (under 'Users & Account Info > Security') be enabled in your controller settings."
+		return
 	end
 	tts.queueAlert( lul_device, lul_settings )
 end
 
 function actionSonosSetupTTS( lul_device, lul_settings )
-	luup.variable_set(SONOS_SID, "DefaultLanguageTTS"   			, lul_settings.DefaultLanguage or "", lul_device)
-	luup.variable_set(SONOS_SID, "DefaultEngineTTS"     			, lul_settings.DefaultEngine or "", lul_device)
-	luup.variable_set(SONOS_SID, "OSXTTSServerURL"      			, url.unescape(lul_settings.OSXTTSServerURL       		or ""), lul_device)
-	luup.variable_set(SONOS_SID, "GoogleTTSServerURL"   			, url.unescape(lul_settings.GoogleTTSServerURL    		or ""), lul_device)
-	luup.variable_set(SONOS_SID, "MaryTTSServerURL"     			, url.unescape(lul_settings.MaryTTSServerURL      		or ""), lul_device)
-	luup.variable_set(SONOS_SID, "MicrosoftClientId"    			, url.unescape(lul_settings.MicrosoftClientId     		or ""), lul_device)
-	luup.variable_set(SONOS_SID, "MicrosoftClientSecret"			, url.unescape(lul_settings.MicrosoftClientSecret 		or ""), lul_device)
-	luup.variable_set(SONOS_SID, "MicrosoftOption"      			, url.unescape(lul_settings.MicrosoftOption      		or ""), lul_device)
-	luup.variable_set(SONOS_SID, "ResponsiveVoiceTTSServerURL"    , url.unescape(lul_settings.ResponsiveVoiceTTSServerURL	or ""), lul_device)
-	luup.variable_set(SONOS_SID, "TTSRate"      					, url.unescape(lul_settings.Rate      		or ""), lul_device)
-	luup.variable_set(SONOS_SID, "TTSPitch"      					, url.unescape(lul_settings.Pitch      		or ""), lul_device)
+	luup.variable_set(SONOS_SID, "DefaultLanguageTTS"				, lul_settings.DefaultLanguage or "", lul_device)
+	luup.variable_set(SONOS_SID, "DefaultEngineTTS"					, lul_settings.DefaultEngine or "", lul_device)
+	luup.variable_set(SONOS_SID, "OSXTTSServerURL"					, url.unescape(lul_settings.OSXTTSServerURL				or ""), lul_device)
+	luup.variable_set(SONOS_SID, "GoogleTTSServerURL"				, url.unescape(lul_settings.GoogleTTSServerURL			or ""), lul_device)
+	luup.variable_set(SONOS_SID, "MaryTTSServerURL"					, url.unescape(lul_settings.MaryTTSServerURL			or ""), lul_device)
+	luup.variable_set(SONOS_SID, "MicrosoftClientId"				, url.unescape(lul_settings.MicrosoftClientId			or ""), lul_device)
+	luup.variable_set(SONOS_SID, "MicrosoftClientSecret"			, url.unescape(lul_settings.MicrosoftClientSecret		or ""), lul_device)
+	luup.variable_set(SONOS_SID, "MicrosoftOption"					, url.unescape(lul_settings.MicrosoftOption				or ""), lul_device)
+	luup.variable_set(SONOS_SID, "ResponsiveVoiceTTSServerURL"		, url.unescape(lul_settings.ResponsiveVoiceTTSServerURL	or ""), lul_device)
+	luup.variable_set(SONOS_SID, "TTSRate"							, url.unescape(lul_settings.Rate						or ""), lul_device)
+	luup.variable_set(SONOS_SID, "TTSPitch"							, url.unescape(lul_settings.Pitch						or ""), lul_device)
 	setupTTSSettings(lul_device)
 end
 
