@@ -539,6 +539,7 @@ local function alert(device, settings)
 				local cpath = localBasePath .. curl
 				local ff = settings.URI:match("[^/]+$")
 				local ft = ff:match("%.[^%.]+$") or ""
+				os.execute("mkdir -p " .. Q(cpath))
 				while true do
 					local zf = io.open( cpath .. fmeta.nextfile .. ft, "r" )
 					if not zf then break end
@@ -555,7 +556,7 @@ local function alert(device, settings)
 						fmeta.nextfile = fmeta.nextfile + 1
 						fm:write(json.encode(fmeta))
 						fm:close()
-						debug("(tts) cached " .. ff .. " as " .. fmeta[text].url)
+						debug("(tts) cached " .. ff .. " as " .. fmeta.strings[text].url)
 					else
 						warning("(ttscache) can't write cache meta in " .. cpath)
 					end
