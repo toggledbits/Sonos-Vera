@@ -1,6 +1,10 @@
-module("L_SonosTTS", package.seeall)
+--[[
+	L_SonosTTS.lua - Implementation module for text-to-speech for the Sonos plugin for Luup
+	Current maintainer: rigpapa https://community.getvera.com/u/rigpapa/summary
+	For license information, see https://github.com/toggledbits/Sonos-Vera
+--]]
 
--- Maintainer: rigpapa https://community.getvera.com/u/rigpapa/summary
+module("L_SonosTTS", package.seeall)
 
 VERSION = 19274
 DEBUG_MODE = false

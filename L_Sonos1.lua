@@ -1,6 +1,8 @@
---[[ Sonos Plugin for Vera and openLuup
-     Current maintainer: rigpapa https://community.getvera.com/u/rigpapa/summary
-	 Github repository: https://github.com/toggledbits/Sonos-Vera
+--[[ 
+	Sonos Plugin for Vera and openLuup
+	Current maintainer: rigpapa https://community.getvera.com/u/rigpapa/summary
+	Github repository: https://github.com/toggledbits/Sonos-Vera
+	For license information, please see the above repository.
 --]]
 
 module( "L_Sonos1", package.seeall )

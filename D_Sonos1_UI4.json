@@ -1,310 +1,303 @@
-[
-    {
-        "flashicon": "http://cdn4.staztic.com/cdn/logos/sonos-controller-for-android-352.png",
-        "imgIconBody": "",
-        "imgIconDimmable": "",
-        "imgIconTurnable": "",
-        "imgIconMin": "",
-        "imgIconMax": "",
-        "halloIconsDir": "pics/hallo",
-        "inScene": "1",
-        "DisplayStatus": {},
-        "doc_url": {
-            "doc_language": 1,
-            "doc_manual": 1,
-            "doc_version": 1,
-            "doc_platform": 0,
-            "doc_page": "devices"
-        },
-        "Tabs": [
-            {
-                "Label": {
-                    "lang_tag": "tabname_control",
-                    "text": "Control"
-                },
-                "Position": "0",
-                "TabType": "flash",
-                "SceneGroup": [
-                    {
-                        "id": "1",
-                        "top": "1",
-                        "left": "0",
-                        "x": "1",
-                        "y": "2"
-                    }
-                ],
-                "ControlGroup": [
-                    {
-                        "id": "1",
-                        "type": "info", 
-                        "scenegroup": "1"
-                    }
-                ],
-                "Control": [
-                    {
-                        "ControlType": "button",
-                        "Label": {
-                            "lang_tag": "cmd_play",
-                            "text": "Play"
-                        },
-                        "Display": {
-                            "Service": "urn:upnp-org:serviceId:AVTransport",
-                            "Variable": "TransportState",
-                            "Value": "PLAYING",
-                            "Top": 30,
-                            "Left": 30,
-                            "Width": 50,
-                            "Height": 20 
-                        },
-                        "Command": { 
-                            "Service": "urn:micasaverde-com:serviceId:MediaNavigation1", 
-                            "Action": "Play", 
-                            "Parameters": [] 
-                        } 
-                    },
-                    {
-                        "ControlType": "button",
-                        "Label": {
-                            "lang_tag": "cmd_pause",
-                            "text": "Pause"
-                        },
-                        "Display": {
-                            "Service": "urn:upnp-org:serviceId:AVTransport",
-                            "Variable": "TransportState",
-                            "Value": "PAUSED_PLAYBACK",
-                            "Top": 30,
-                            "Left": 90,
-                            "Width": 50,
-                            "Height": 20 
-                        },
-                        "Command": { 
-                            "Service": "urn:micasaverde-com:serviceId:MediaNavigation1", 
-                            "Action": "Pause", 
-                            "Parameters": [] 
-                        } 
-                    },
-                    {
-                        "ControlType": "button",
-                        "Label": {
-                            "lang_tag": "cmd_stop",
-                            "text": "Stop"
-                        },
-                        "Display": {
-                            "Service": "urn:upnp-org:serviceId:AVTransport",
-                            "Variable": "TransportState",
-                            "Value": "STOPPED",
-                            "Top": 30,
-                            "Left": 150,
-                            "Width": 50,
-                            "Height": 20 
-                        },
-                        "Command": { 
-                            "Service": "urn:micasaverde-com:serviceId:MediaNavigation1", 
-                            "Action": "Stop", 
-                            "Parameters": [] 
-                        } 
-                    },
-                    {
-                        "ControlType": "variable",
-                        "text_align": "left",
-                        "Display": {
-                            "Service": "urn:upnp-org:serviceId:RenderingControl",
-                            "Variable": "Volume",
-                            "Top": 35,
-                            "Left": 310,
-                            "Width": 20,
-                            "Height": 20
-                        }
-                    },
-                    {
-                        "ControlType": "button",
-                        "Label": {
-                            "lang_tag": "cmd_volume_down",
-                            "text": "Vol -"
-                        },
-                        "Display": {
-                            "Top": 30,
-                            "Left": 340,
-                            "Width": 50,
-                            "Height": 20 
-                        },
-                        "Command": { 
-                            "Service": "urn:micasaverde-com:serviceId:Volume1", 
-                            "Action": "Down", 
-                            "Parameters": [] 
-                        } 
-                    },
-                    {
-                        "ControlType": "button",
-                        "Label": {
-                            "lang_tag": "cmd_volume_up",
-                            "text": "Vol +"
-                        },
-                        "Display": {
-                            "Top": 30,
-                            "Left": 400,
-                            "Width": 50,
-                            "Height": 20 
-                        },
-                        "Command": { 
-                            "Service": "urn:micasaverde-com:serviceId:Volume1", 
-                            "Action": "Up", 
-                            "Parameters": [] 
-                        } 
-                    },
-                    {
-                        "ControlType": "button",
-                        "Label": {
-                            "lang_tag": "cmd_mute",
-                            "text": "Mute"
-                        },
-                        "Display": {
-                            "Service": "urn:upnp-org:serviceId:RenderingControl",
-                            "Variable": "Mute",
-                            "Value": "1",
-                            "Top": 30,
-                            "Left": 460,
-                            "Width": 50,
-                            "Height": 20 
-                        },
-                        "Command": { 
-                            "Service": "urn:upnp-org:serviceId:RenderingControl", 
-                            "Action": "SetMute", 
-                            "Parameters": [] 
-                        } 
-                    },
-                    {
-                        "ControlType": "button",
-                        "Label": {
-                            "lang_tag": "cmd_prev",
-                            "text": "Prev"
-                        },
-                        "Display": {
-                            "Top": 60,
-                            "Left": 30,
-                            "Width": 50,
-                            "Height": 20 
-                        },
-                        "Command": { 
-                            "Service": "urn:micasaverde-com:serviceId:MediaNavigation1", 
-                            "Action": "SkipUp", 
-                            "Parameters": [] 
-                        } 
-                    },
-                    {
-                        "ControlType": "button",
-                        "Label": {
-                            "lang_tag": "cmd_next",
-                            "text": "Next"
-                        },
-                        "Display": {
-                            "Top": 60,
-                            "Left": 90,
-                            "Width": 50,
-                            "Height": 20 
-                        },
-                        "Command": { 
-                            "Service": "urn:micasaverde-com:serviceId:MediaNavigation1", 
-                            "Action": "SkipDown", 
-                            "Parameters": [] 
-                        } 
-                    },
-                    {
-                        "ControlType": "label",
-                        "text_align": "left",
-                        "Label": {
-                            "lang_tag": "playing",
-                            "text": "Playing..."
-                        },
-                        "Display": {
-                            "Top": 100,
-                            "Left": 30,
-                            "Width": 80,
-                            "Height": 20
-                        }
-                    },
-                    {
-                        "ControlGroup": "1",
-                        "ControlPair": "1",
-                        "ControlHeader": "1",
-                        "ControlType": "variable",
-                        "top": "0",
-                        "left": "0",
-                        "x": "3",
-                        "y": "3",
-                        "text_align": "left",
-                        "Display": {
-                            "Service": "urn:upnp-org:serviceId:AVTransport",
-                            "Variable": "CurrentStatus",
-                            "Top": 100,
-                            "Left": 110,
-                            "Width": 300,
-                            "Height": 60
-                        }
-                    }
-                ]
-            },
-            {
-                "Label": {
-                    "lang_tag": "tabname_player",
-                    "text": "Player"
-                },
-                "Position": "1",
-                "TabType": "javascript",
-                "ScriptName": "J_Sonos1.js",
-                "Function": "Sonos_showPlayer"
-            },
-            {
-                "Label": {
-                    "lang_tag": "tabname_tts",
-                    "text": "TTS"
-                },
-                "Position": "2",
-                "TabType": "javascript",
-                "ScriptName": "J_Sonos1.js",
-                "Function": "Sonos_showTTS"
-            },
-            {
-                "Label": {
-                    "lang_tag": "tabname_group",
-                    "text": "Group"
-                },
-                "Position": "3",
-                "TabType": "javascript",
-                "ScriptName": "J_Sonos1.js",
-                "Function": "Sonos_showGroup"
-            },
-            {
-                "Label": {
-                    "lang_tag": "settings",
-                    "text": "Settings"
-                },
-                "Position": "4",
-                "TabType": "javascript",
-                "ScriptName": "J_Sonos1.js",
-                "Function": "Sonos_showSettings"
-            },
-            {
-                "Label": {
-                    "lang_tag": "tabname_uri_help",
-                    "text": "Help"
-                },
-                "Position": "5",
-                "TabType": "javascript",
-                "ScriptName": "J_Sonos1.js",
-                "Function": "Sonos_showHelp"
-            },
-            {
-                "Label": {
-                    "lang_tag": "advanced",
-                    "text": "Advanced"
-                },
-                "Position": "6",
-                "TabType": "javascript",
-                "ScriptName": "shared.js",
-                "Function": "advanced_device"
-            }
-        ],
-        "DeviceType": "urn:schemas-micasaverde-com:device:Sonos:1"
-    }
-]
+[{
+	"_comment": ["D_Sonos1_UI4.json"],
+	"flashicon": "http://cdn4.staztic.com/cdn/logos/sonos-controller-for-android-352.png",
+	"imgIconBody": "",
+	"imgIconDimmable": "",
+	"imgIconTurnable": "",
+	"imgIconMin": "",
+	"imgIconMax": "",
+	"halloIconsDir": "pics/hallo",
+	"inScene": "1",
+	"DisplayStatus": {},
+	"doc_url": {
+		"doc_language": 1,
+		"doc_manual": 1,
+		"doc_version": 1,
+		"doc_platform": 0,
+		"doc_page": "devices"
+	},
+	"Tabs": [{
+			"Label": {
+				"lang_tag": "tabname_control",
+				"text": "Control"
+			},
+			"Position": "0",
+			"TabType": "flash",
+			"SceneGroup": [{
+				"id": "1",
+				"top": "1",
+				"left": "0",
+				"x": "1",
+				"y": "2"
+			}],
+			"ControlGroup": [{
+				"id": "1",
+				"type": "info",
+				"scenegroup": "1"
+			}],
+			"Control": [{
+					"ControlType": "button",
+					"Label": {
+						"lang_tag": "cmd_play",
+						"text": "Play"
+					},
+					"Display": {
+						"Service": "urn:upnp-org:serviceId:AVTransport",
+						"Variable": "TransportState",
+						"Value": "PLAYING",
+						"Top": 30,
+						"Left": 30,
+						"Width": 50,
+						"Height": 20
+					},
+					"Command": {
+						"Service": "urn:micasaverde-com:serviceId:MediaNavigation1",
+						"Action": "Play",
+						"Parameters": []
+					}
+				},
+				{
+					"ControlType": "button",
+					"Label": {
+						"lang_tag": "cmd_pause",
+						"text": "Pause"
+					},
+					"Display": {
+						"Service": "urn:upnp-org:serviceId:AVTransport",
+						"Variable": "TransportState",
+						"Value": "PAUSED_PLAYBACK",
+						"Top": 30,
+						"Left": 90,
+						"Width": 50,
+						"Height": 20
+					},
+					"Command": {
+						"Service": "urn:micasaverde-com:serviceId:MediaNavigation1",
+						"Action": "Pause",
+						"Parameters": []
+					}
+				},
+				{
+					"ControlType": "button",
+					"Label": {
+						"lang_tag": "cmd_stop",
+						"text": "Stop"
+					},
+					"Display": {
+						"Service": "urn:upnp-org:serviceId:AVTransport",
+						"Variable": "TransportState",
+						"Value": "STOPPED",
+						"Top": 30,
+						"Left": 150,
+						"Width": 50,
+						"Height": 20
+					},
+					"Command": {
+						"Service": "urn:micasaverde-com:serviceId:MediaNavigation1",
+						"Action": "Stop",
+						"Parameters": []
+					}
+				},
+				{
+					"ControlType": "variable",
+					"text_align": "left",
+					"Display": {
+						"Service": "urn:upnp-org:serviceId:RenderingControl",
+						"Variable": "Volume",
+						"Top": 35,
+						"Left": 310,
+						"Width": 20,
+						"Height": 20
+					}
+				},
+				{
+					"ControlType": "button",
+					"Label": {
+						"lang_tag": "cmd_volume_down",
+						"text": "Vol -"
+					},
+					"Display": {
+						"Top": 30,
+						"Left": 340,
+						"Width": 50,
+						"Height": 20
+					},
+					"Command": {
+						"Service": "urn:micasaverde-com:serviceId:Volume1",
+						"Action": "Down",
+						"Parameters": []
+					}
+				},
+				{
+					"ControlType": "button",
+					"Label": {
+						"lang_tag": "cmd_volume_up",
+						"text": "Vol +"
+					},
+					"Display": {
+						"Top": 30,
+						"Left": 400,
+						"Width": 50,
+						"Height": 20
+					},
+					"Command": {
+						"Service": "urn:micasaverde-com:serviceId:Volume1",
+						"Action": "Up",
+						"Parameters": []
+					}
+				},
+				{
+					"ControlType": "button",
+					"Label": {
+						"lang_tag": "cmd_mute",
+						"text": "Mute"
+					},
+					"Display": {
+						"Service": "urn:upnp-org:serviceId:RenderingControl",
+						"Variable": "Mute",
+						"Value": "1",
+						"Top": 30,
+						"Left": 460,
+						"Width": 50,
+						"Height": 20
+					},
+					"Command": {
+						"Service": "urn:upnp-org:serviceId:RenderingControl",
+						"Action": "SetMute",
+						"Parameters": []
+					}
+				},
+				{
+					"ControlType": "button",
+					"Label": {
+						"lang_tag": "cmd_prev",
+						"text": "Prev"
+					},
+					"Display": {
+						"Top": 60,
+						"Left": 30,
+						"Width": 50,
+						"Height": 20
+					},
+					"Command": {
+						"Service": "urn:micasaverde-com:serviceId:MediaNavigation1",
+						"Action": "SkipUp",
+						"Parameters": []
+					}
+				},
+				{
+					"ControlType": "button",
+					"Label": {
+						"lang_tag": "cmd_next",
+						"text": "Next"
+					},
+					"Display": {
+						"Top": 60,
+						"Left": 90,
+						"Width": 50,
+						"Height": 20
+					},
+					"Command": {
+						"Service": "urn:micasaverde-com:serviceId:MediaNavigation1",
+						"Action": "SkipDown",
+						"Parameters": []
+					}
+				},
+				{
+					"ControlType": "label",
+					"text_align": "left",
+					"Label": {
+						"lang_tag": "playing",
+						"text": "Playing..."
+					},
+					"Display": {
+						"Top": 100,
+						"Left": 30,
+						"Width": 80,
+						"Height": 20
+					}
+				},
+				{
+					"ControlGroup": "1",
+					"ControlPair": "1",
+					"ControlHeader": "1",
+					"ControlType": "variable",
+					"top": "0",
+					"left": "0",
+					"x": "3",
+					"y": "3",
+					"text_align": "left",
+					"Display": {
+						"Service": "urn:upnp-org:serviceId:AVTransport",
+						"Variable": "CurrentStatus",
+						"Top": 100,
+						"Left": 110,
+						"Width": 300,
+						"Height": 60
+					}
+				}
+			]
+		},
+		{
+			"Label": {
+				"lang_tag": "tabname_player",
+				"text": "Player"
+			},
+			"Position": "1",
+			"TabType": "javascript",
+			"ScriptName": "J_Sonos1.js",
+			"Function": "Sonos_showPlayer"
+		},
+		{
+			"Label": {
+				"lang_tag": "tabname_tts",
+				"text": "TTS"
+			},
+			"Position": "2",
+			"TabType": "javascript",
+			"ScriptName": "J_Sonos1.js",
+			"Function": "Sonos_showTTS"
+		},
+		{
+			"Label": {
+				"lang_tag": "tabname_group",
+				"text": "Group"
+			},
+			"Position": "3",
+			"TabType": "javascript",
+			"ScriptName": "J_Sonos1.js",
+			"Function": "Sonos_showGroup"
+		},
+		{
+			"Label": {
+				"lang_tag": "settings",
+				"text": "Settings"
+			},
+			"Position": "4",
+			"TabType": "javascript",
+			"ScriptName": "J_Sonos1.js",
+			"Function": "Sonos_showSettings"
+		},
+		{
+			"Label": {
+				"lang_tag": "tabname_uri_help",
+				"text": "Help"
+			},
+			"Position": "5",
+			"TabType": "javascript",
+			"ScriptName": "J_Sonos1.js",
+			"Function": "Sonos_showHelp"
+		},
+		{
+			"Label": {
+				"lang_tag": "advanced",
+				"text": "Advanced"
+			},
+			"Position": "6",
+			"TabType": "javascript",
+			"ScriptName": "shared.js",
+			"Function": "advanced_device"
+		}
+	],
+	"DeviceType": "urn:schemas-micasaverde-com:device:Sonos:1"
+}]

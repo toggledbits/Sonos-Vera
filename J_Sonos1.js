@@ -1,12 +1,9 @@
-//
-// $Id$
-// version 1.4.3
-// Modified by:
-//	explorer for openLuup
-//	cybermage for ResponsiveVoice
-//	reneboer to combine both the above and some usability
-// version 1.4.3
-//  rigpapa fix
+/**
+ * J_Sonos1.js
+ * Part of the Sonos Plugin for Vera and openLuup
+ * Current maintainer: rigpapa https://community.getvera.com/u/rigpapa/summary
+ * For license information, see https://github.com/toggledbits/Sonos-Vera
+ */
 
 var Sonos = {
 	timeoutVar : undefined,
