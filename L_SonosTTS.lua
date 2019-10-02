@@ -12,8 +12,8 @@ local https = require "ssl.https"
 local ltn12 = require("ltn12")
 
 local log = print
-local warning = print
-local error = print	--luacheck: ignore 231
+local warning = log
+local error = log	--luacheck: ignore 231
 
 local cacheTTS = luup ~= nil and luup.short_version ~= nil
 local play = nil
@@ -51,7 +51,9 @@ local DELETE_EXECUTE = "rm -- '%sSay.%s.*'"
 local METADATA = '<DIDL-Lite xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/">'
 				 .. '<item id="VERA_TTS" parentID="-1" restricted="1"><dc:title>%s</dc:title>%s<upnp:class>object.item.audioItem.musicTrack</upnp:class></item></DIDL-Lite>'
 
-
+local function debug(...)
+	if DEBUG_MODE then log(...) end
+end
 
 local function defaultValue(arr, val, default)
 	if (arr == nil or arr[val] == nil or arr[val] == "") then
@@ -63,7 +65,7 @@ end
 
 
 local function GoogleTTS(text, language, device, bitrate)
-	log("Google TTS: device " .. device .. " language " .. language .. " text " .. text)
+	debug("Google TTS: device " .. device .. " language " .. language .. " text " .. text)
 	local duration = 0
 	local uri = nil
 
@@ -133,9 +135,13 @@ local function GoogleTTS(text, language, device, bitrate)
 end
 
 local function RV_TTS(text, language, device, bitrate)
-	log("RV TTS: device " .. device .. " language " .. language .. " text " .. text)
+	debug("RV TTS: device " .. device .. " language " .. language .. " text " .. text)
 	local duration = 0
 	local uri = nil
+
+	if not string.match( language, "^%w+%-%w+$" ) then
+		warning("(tts) ResponsiveVoice typically requires two-part IETF language tags (e.g. 'en-US', 'de-DE', etc.). You provided '" .. tostring(language) .. "', which may not work.")
+	end
 
 	if (RVServerURL ~= nil and RVServerURL ~= "") then
 
@@ -173,9 +179,9 @@ local function RV_TTS(text, language, device, bitrate)
 		if (#tableTextFragments == 0) then
 			return duration, uri
 		elseif (#tableTextFragments == 1) then
-			log("RV cmd is "..SAY_EXECUTE:format(file, file, RVServerURL, url.escape(tableTextFragments[1]), language, pitch, rate))
+			debug("RV cmd is "..SAY_EXECUTE:format(file, file, RVServerURL, url.escape(tableTextFragments[1]), language, pitch, rate))
 			returnCode = os.execute(SAY_EXECUTE:format(file, file, RVServerURL, url.escape(tableTextFragments[1]), language, pitch, rate))
-			log("RV return code is "..tostring(returnCode))
+			debug("RV return code is "..tostring(returnCode))
 		else
 			local listFiles = ""
 			for i, v in ipairs(tableTextFragments)
@@ -209,7 +215,7 @@ local function RV_TTS(text, language, device, bitrate)
 end
 
 local function TTSServer(text, language, device, bitrate)
-	log("TTS server (ODX): device " .. device .. " language " .. language .. " text " .. text)
+	debug("TTS server (ODX): device " .. device .. " language " .. language .. " text " .. text)
 	local duration = 0
 	local uri = nil
 
@@ -352,7 +358,7 @@ end
 
 
 local function MicrosoftTTS(text, language, device, bitrate)
-	log("Microsoft TTS: device " .. device .. " language " .. language .. " text " .. text)
+	debug("Microsoft TTS: device " .. device .. " language " .. language .. " text " .. text)
 	local duration = 0
 	local uri = nil
 
@@ -388,7 +394,7 @@ end
 
 
 local function MaryTTS(text, language, device, bitrate)
-	log("MaryTTS: device " .. device .. " language " .. language .. " text " .. text)
+	debug("MaryTTS: device " .. device .. " language " .. language .. " text " .. text)
 	local duration = 0
 	local uri = nil
 
@@ -403,9 +409,9 @@ local function MaryTTS(text, language, device, bitrate)
 
 	local file = SAY_OUTPUT_FILE:format(localBasePath, device, "wav")
 	local cmd = SAY_EXECUTE:format(file, file, MaryServerURL, lang, url.escape(text))
-	log("MaryTTS: requesting " .. cmd)
+	debug("MaryTTS: requesting " .. cmd)
 	local returnCode = os.execute(cmd)
-	log("MaryTTS: returned " .. tostring(returnCode))
+	debug("MaryTTS: returned " .. tostring(returnCode))
 	local fh = io.open(file, "a+")
 	local size = fh:seek("end")
 	fh:close()
@@ -473,12 +479,34 @@ function initialize(logger, warningLogger, errorLogger)
 	setup()
 end
 
+-- Quick and dirty hash for cache
 local function hash(t)
 	local s = #t
 	for k=1,#t do
 		s = ( s + t:byte(k) ) % 64
 	end
 	return s
+end
+
+local function Q(str) return "'" .. string.gsub(tostring(str), "(')", "\\%1") .. "'" end
+
+local function fexists(fn) local f = io.open(fn, "r") if f then f:close() return true end return false end
+
+local function loadTTSCache( engine, language, hashcode )
+	local json = require "dkjson"
+	local curl = string.format( "ttscache/%s/%s/%d/", tostring(engine), tostring(language), tostring(hashcode) )
+	local cpath = localBasePath .. curl
+	local fm = io.open( cpath .. "ttsmeta.json", "r" )
+	if fm then
+		local fmeta = json.decode( fm:read("*a") )
+		fm:close()
+		if fmeta and fmeta.version == 1 and fmeta.strings then
+			return fmeta
+		end
+		warning("(tts) clearing cache " .. tostring(cpath))
+		os.execute("rm -rf -- " .. Q(cpath))
+	end
+	return { version=1, nextfile=1, strings={} }, curl
 end
 
 local function alert(device, settings)
@@ -489,72 +517,61 @@ local function alert(device, settings)
 		text = url.unescape(text:gsub("%+", "%%20"))
 		local language = defaultValue(settings, "Language", defaultLanguage)
 		local engine = defaultValue(settings, "Engine", defaultEngine)
-		
+
+		cacheTTS = not fexists( localBathPath .. "no-sonos-tts-cache" )
 		if cacheTTS then
-			local json = require "dkjson"
-			local hash = hash(text)
-			local cpath = string.format( "%sttscache/%s/%s/%d/", localBasePath, engine, language, hash )
-			local fm = io.open( cpath .. "ttsmeta.json", "r" )
-			if fm then
-				log("(tts) checking cache "..cpath)
-				local fmeta = json.decode( fm:read("*a") )
-				fm:close()
-				if fmeta and (fmeta.strings or {})[text] then
-					settings.Duration = fmeta.strings[text].duration
-					settings.URI = localBaseURL .. fmeta.strings[text].url
-					settings.URIMetadata = METADATA:format(engines[engine].title, '<res protocolInfo="' .. engines[engine].protocol ..'">' .. (settings.URI or "") .. '</res>')
-					log("(tts) speaking learned phrase from cache: " .. tostring(settings.URI))
-				else
-					log("(tts) cache miss")
-				end
-			else
-				log("(tts) no cache meta in "..cpath)
+			local fmeta = loadTTSCache( engine, language, hash(text) )
+			if fmeta.strings[text] then
+				settings.Duration = fmeta.strings[text].duration
+				settings.URI = localBaseURL .. fmeta.strings[text].url
+				settings.URIMetadata = METADATA:format(engines[engine].title, '<res protocolInfo="' .. engines[engine].protocol ..'">' .. (settings.URI or "") .. '</res>')
+				log("(tts) speaking phrase from cache: " .. tostring(settings.URI))
 			end
 		end
 		if (settings.URI or "") ~= "" then
 		elseif (engines[engine] or {}).fct  then
 			settings.Duration, settings.URI = engines[engine].fct(text, language, device, engines[engine].bitrate / 8 * 1000)
 			settings.URIMetadata = METADATA:format(engines[engine].title, '<res protocolInfo="' .. engines[engine].protocol ..'">' .. (settings.URI or "") .. '</res>')
-			log("TTS engine "..tostring(engine).." created "..tostring(settings.URI))
+			log("(tts) "..tostring(engine).." created "..tostring(settings.URI))
 			if cacheTTS then
 				-- Save in cache
-				local json = require "dkjson"
-				local hash = hash(text)
-				local curl = string.format( "ttscache/%s/%s/%d/", engine, language, hash )
+				local fmeta, curl = loadTTSCache( engine, language, hash(text) )
 				local cpath = localBasePath .. curl
-				os.execute( "mkdir -p " .. cpath )
-				local fm = io.open( cpath .. "tts.meta", "r" )
-				local fmeta
-				if fm then
-					fmeta = json.decode( fm:read("*a") )
-					fm:close()
-				end
-				fmeta = fmeta or { version=1, nextfile=1, strings={} }
 				local ff = settings.URI:match("[^/]+$")
 				local ft = ff:match("%.[^%.]+$") or ""
-				if os.execute( "cp -f " .. localBasePath .. ff .. " " .. cpath .. fmeta.nextfile .. ft ) ~= 0 then
-					warning("(ttscache) failed to copy "..localBasePath..ff.." to "..cpath..fmeta.nextfile..ft)
+				while true do
+					local zf = io.open( cpath .. fmeta.nextfile .. ft, "r" )
+					if not zf then break end
+					zf:close()
+					fmeta.nextfile = fmeta.nextfile + 1
+				end
+				if os.execute( "cp -f -- " .. Q( localBasePath .. ff ) .. " " .. Q( cpath .. fmeta.nextfile .. ft ) ) ~= 0 then
+					warning("(tts) cache failed to copy "..Q(localBasePath..ff).." to "..Q(cpath..fmeta.nextfile..ft))
 				else
 					fmeta.strings[text] = { duration=settings.Duration, url=curl .. fmeta.nextfile .. ft, created=os.time() }
 					fm = io.open( cpath .. "ttsmeta.json", "w" )
 					if fm then
+						local json = require "dkjson"
 						fmeta.nextfile = fmeta.nextfile + 1
 						fm:write(json.encode(fmeta))
 						fm:close()
+						debug("(tts) cached " .. ff .. " as " .. fmeta[text].url)
+					else
+						warning("(ttscache) can't write cache meta in " .. cpath)
 					end
 				end
 			end
 		else
-			warning("No TTS engine for "..tostring(engine))
+			warning("No TTS engine implementation for "..tostring(engine))
 		end
 	end
-	log("(tts) say " .. tostring(settings.URI))
+	debug("(tts) say " .. tostring(settings.URI))
 	play(device, settings, true)
 end
 
 
 function queueAlert(device, settings)
-	log("TTS queueAlert for device " .. device)
+	debug("TTS queueAlert for device " .. device)
 	if not sayQueue[device] then sayQueue[device] = {} end
 	table.insert(sayQueue[device], settings)
 	-- First one kicks things off
@@ -565,7 +582,7 @@ end
 
 
 function endPlayback(device)
-	log("TTS endPlayback for device " .. device)
+	debug("TTS endPlayback for device " .. device)
 	table.remove(sayQueue[device], 1)
 	if #sayQueue[device] == 0 then
 		os.execute(DELETE_EXECUTE:format(localBasePath, device))
