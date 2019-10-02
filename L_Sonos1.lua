@@ -6,7 +6,7 @@
 module( "L_Sonos1", package.seeall )
 
 PLUGIN_NAME = "Sonos"
-PLUGIN_VERSION = "1.5-19274"
+PLUGIN_VERSION = "1.5-19275"
 PLUGIN_ID = 4226
 
 local DEBUG_MODE = false	-- Don't hardcode true--use state variable config
@@ -1158,24 +1158,24 @@ local function decodeURI(device, coordinator, uri)
 	local localUUID = UUIDs[device]
 	local requireQueuing = false
 
-	if (uri:sub(1, 2) == "Q:") then
+	if uri:sub(1, 2) == "Q:" then
 		track = uri:sub(3)
 		uri = QUEUE_URI:format(coordinator)
-	elseif (uri:sub(1, 3) == "AI:") then
-		if (#uri > 3) then
+	elseif uri:sub(1, 3) == "AI:" then
+		if #uri > 3 then
 			uuid = getUUIDFromZoneName(uri:sub(4))
 		else
 			uuid = localUUID
 		end
-		if (uuid ~= nil) then
+		if uuid ~= nil then
 			uri = "x-rincon-stream:" .. uuid
 		else
 			uri = nil
 		end
-	elseif (uri:sub(1, 3) == "SQ:") then
+	elseif uri:sub(1, 3) == "SQ:" then
 		local found = false
-		if (dataTable[localUUID].SavedQueues ~= nil) then
-			local id
+		if dataTable[localUUID].SavedQueues ~= nil then
+			local id, title
 			for line in dataTable[localUUID].SavedQueues:gmatch("(.-)\n") do
 				id, title = line:match("^(.+)@(.-)$")
 				if (id ~= nil and title == uri:sub(4)) then
@@ -1185,31 +1185,31 @@ local function decodeURI(device, coordinator, uri)
 				end
 			end
 		end
-		if (found == false) then
+		if found == false then
 			uri = nil
 		end
-	elseif (uri:sub(1, 3) == "FR:") then
+	elseif uri:sub(1, 3) == "FR:" then
 		title = uri:sub(4)
 		local found = false
-		if (dataTable[localUUID].FavoritesRadios ~= nil) then
-			local id
+		if dataTable[localUUID].FavoritesRadios ~= nil then
+			local id, title
 			for line in dataTable[localUUID].FavoritesRadios:gmatch("(.-)\n") do
 				id, title = line:match("^(.+)@(.-)$")
-				if (id ~= nil and title == uri:sub(4)) then
+				if id ~= nil and title == uri:sub(4) then
 					found = true
 					uri = "ID:" .. id
 					break
 				end
 			end
 		end
-		if (found == false) then
+		if found == false then
 			uri = nil
 		end
-	elseif (uri:sub(1, 3) == "SF:") then
+	elseif uri:sub(1, 3) == "SF:" then
 		title = uri:sub(4)
 		local found = false
-		if (dataTable[localUUID].Favorites ~= nil) then
-			local id
+		if dataTable[localUUID].Favorites ~= nil then
+			local id, title
 			for line in dataTable[localUUID].Favorites:gmatch("(.-)\n") do
 				id, title = line:match("^(.+)@(.-)$")
 				if (id ~= nil and title == uri:sub(4)) then
@@ -1219,77 +1219,77 @@ local function decodeURI(device, coordinator, uri)
 				end
 			end
 		end
-		if (found == false) then
+		if found == false then
 			uri = nil
 		end
-	elseif (uri:sub(1, 3) == "TR:") then
+	elseif uri:sub(1, 3) == "TR:" then
 		title = uri:sub(4)
 		serviceId = getSonosServiceId("TuneIn") or "254"
 		uri = "x-sonosapi-stream:s" .. uri:sub(4) .. "?sid=" .. serviceId .. "&flags=32"
-	elseif (uri:sub(1, 3) == "SR:") then
+	elseif uri:sub(1, 3) == "SR:" then
 		title = uri:sub(4)
 		serviceId = getSonosServiceId("SiriusXM") or "37"
 		uri = "x-sonosapi-hls:r%3a" .. title .. "?sid=" .. serviceId .. "&flags=288"
-	elseif (uri:sub(1, 3) == "GZ:") then
+	elseif uri:sub(1, 3) == "GZ:" then
 		controlByGroup = false
 		if (#uri > 3) then
 			uuid = getUUIDFromZoneName(uri:sub(4))
 		end
-		if (uuid ~= nil) then
+		if uuid ~= nil then
 			uri = "x-rincon:" .. uuid
 		else
 			uri = nil
 		end
 	end
 
-	if (uri:sub(1, 3) == "ID:") then
+	if uri:sub(1, 3) == "ID:" then
 		local xml = upnp.browseContent(localUUID, UPNP_MR_CONTENT_DIRECTORY_SERVICE, uri:sub(4), true, nil, nil, nil)
 		debug("data from server: " .. (xml or "nil"))
-		if (xml == "") then
+		if xml == "" then
 			uri = nil
 		else
 			title, uri = xml:match("<DIDL%-Lite%s?[^>]-><item%s?[^>]->.-<dc:title%s?[^>]->(.-)</dc:title>.-<res%s?[^>]->(.*)</res>.-</item></DIDL%-Lite>")
-			if (uri ~= nil) then
+			if uri ~= nil then
 				uriMetaData = upnp.decode(xml:match("<DIDL%-Lite%s?[^>]-><item%s?[^>]->.-<r:resMD%s?[^>]->(.*)</r:resMD>.-</item></DIDL%-Lite>") or "")
 			else
 				title, uri = xml:match("<DIDL%-Lite%s?[^>]-><container%s?[^>]->.-<dc:title%s?[^>]->(.-)</dc:title>.-<res%s?[^>]->(.*)</res>.-</container></DIDL%-Lite>")
-				if (uri ~= nil) then
+				if uri ~= nil then
 					uriMetaData = upnp.decode(xml:match("<DIDL%-Lite%s?[^>]-><container%s?[^>]->.-<r:resMD%s?[^>]->(.*)</r:resMD>.-</container></DIDL%-Lite>") or "")
 				end
 			end
 		end
 	end
 
-	if (uri ~= nil and
-			 (uri:sub(1, 38) == "file:///jffs/settings/savedqueues.rsq#"
-				 or uri:sub(1, 18) == "x-rincon-playlist:"
-				 or uri:sub(1, 21) == "x-rincon-cpcontainer:")) then
+	if uri ~= nil and
+		   (uri:sub(1, 38) == "file:///jffs/settings/savedqueues.rsq#"
+			   or uri:sub(1, 18) == "x-rincon-playlist:"
+			   or uri:sub(1, 21) == "x-rincon-cpcontainer:") then
 		requireQueuing = true
 	end
 
-	if (uri ~= nil and uri ~= "" and uriMetaData == "") then
+	if uri ~= nil and uri ~= "" and uriMetaData == "" then
 		_, serviceId = getServiceFromURI(uri, nil)
 		if serviceId ~= nil and metaDataKeys[localUUID][serviceId] ~= nil then
 			if title == nil then
 				uriMetaData = '<DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/">'
-								.. '<item><desc>' .. metaDataKeys[localUUID][serviceId] .. '</desc>'
-								.. '</item></DIDL-Lite>'
+							  .. '<item><desc>' .. metaDataKeys[localUUID][serviceId] .. '</desc>'
+							  .. '</item></DIDL-Lite>'
 			else
 				uriMetaData = '<DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/">'
-								.. '<item><dc:title>' .. title .. '</dc:title>'
-								.. '<desc>' .. metaDataKeys[localUUID][serviceId] .. '</desc>'
-								.. '</item></DIDL-Lite>'
+							  .. '<item><dc:title>' .. title .. '</dc:title>'
+							  .. '<desc>' .. metaDataKeys[localUUID][serviceId] .. '</desc>'
+							  .. '</item></DIDL-Lite>'
 			end
 		elseif title ~= nil then
 			uriMetaData = '<DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/">'
-							.. '<item><dc:title>' .. title .. '</dc:title>'
-							.. '<upnp:class>object.item.audioItem.audioBroadcast</upnp:class>'
-							.. '</item></DIDL-Lite>'
+						  .. '<item><dc:title>' .. title .. '</dc:title>'
+						  .. '<upnp:class>object.item.audioItem.audioBroadcast</upnp:class>'
+						  .. '</item></DIDL-Lite>'
 		end
 	end
 
-	debug("uri: " .. (uri or "nil"))
-	debug("uriMetaData: " .. (uriMetaData or "nil"))
+	debug("uri: " .. tostring(uri))
+	debug("uriMetaData: " .. tostring(uriMetaData))
 	return uri, uriMetaData, track, controlByGroup, requireQueuing
 end
 
@@ -2371,8 +2371,8 @@ function startup( lul_device )
 	local debugLogs = getVarNumeric("DebugLogs", 0, lul_device)
 	if debugLogs ~= 0 then
 		DEBUG_MODE = true
-		if math.floor( debugLogs / 2 ) % 2 == 1 then upnp.DEBUG_MODE = true end
-		if math.floor( debugLogs / 4 ) % 2 == 1 then tts.DEBUG_MODE = true end
+		if upnp and math.floor( debugLogs / 2 ) % 2 == 1 then upnp.DEBUG_MODE = true end
+		if tts and math.floor( debugLogs / 4 ) % 2 == 1 then tts.DEBUG_MODE = true end
 	end
 
 	if not isOpenLuup and luup.short_version then
@@ -2453,7 +2453,7 @@ function startup( lul_device )
 	ip, playbackCxt, sayPlayback, UUIDs, metaDataKeys, dataTable = upnp.initialize(log, warning, error)
 
 	if tts then
-		tts.initialize((debugLogs/4)%2~=0 and log or debug, warning, error)
+		tts.initialize(log, warning, error)
 	end
 
 	port = 1400
