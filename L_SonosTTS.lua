@@ -15,7 +15,6 @@ local log = print
 local warning = log
 local error = log	--luacheck: ignore 231
 
-local cacheTTS = luup ~= nil and luup.short_version ~= nil
 local play = nil
 local localBaseURL
 local localBasePath
@@ -33,6 +32,7 @@ local Rate
 local Pitch
 
 local sayQueue = {}
+local cacheTTS = true
 
 local engines = {
 	GOOGLE = { title = "Google TTS", protocol = "http-get:*:audio/mpeg:*", fct = nil, bitrate = 32 },
@@ -518,7 +518,7 @@ local function alert(device, settings)
 		local language = defaultValue(settings, "Language", defaultLanguage)
 		local engine = defaultValue(settings, "Engine", defaultEngine)
 
-		cacheTTS = not fexists( localBathPath .. "no-sonos-tts-cache" )
+		cacheTTS = not fexists( localBasePath .. "no-sonos-tts-cache" )
 		if cacheTTS then
 			local fmeta = loadTTSCache( engine, language, hash(text) )
 			if fmeta.strings[text] then
