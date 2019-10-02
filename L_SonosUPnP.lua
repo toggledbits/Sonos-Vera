@@ -1,5 +1,5 @@
 --[[
-	L_SonosTTS.lua - Implementation module for UPnP for the Sonos plugin for Luup
+	L_SonosUPnP.lua - Implementation module for UPnP for the Sonos plugin for Luup
 	Current maintainer: rigpapa https://community.getvera.com/u/rigpapa/summary
 	For license information, see https://github.com/toggledbits/Sonos-Vera
 --]]
