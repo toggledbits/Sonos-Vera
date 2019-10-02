@@ -15,6 +15,7 @@ local log = print
 local warning = print
 local error = print	--luacheck: ignore 231
 
+local cacheTTS = luup ~= nil and luup.short_version ~= nil
 local play = nil
 local localBaseURL
 local localBasePath
@@ -472,25 +473,82 @@ function initialize(logger, warningLogger, errorLogger)
 	setup()
 end
 
+local function hash(t)
+	local s = #t
+	for k=1,#t do
+		s = ( s + t:byte(k) ) % 64
+	end
+	return s
+end
 
 local function alert(device, settings)
-	if (settings.URI == nil or settings.URI == "") then
+	if (settings.URI or "" ) == "" then
 		-- TTS case
 
-		local text = defaultValue(settings, "Text", "The monkey is on the branch, the mouse is under the table")
+		local text = defaultValue(settings, "Text", "42")
 		text = url.unescape(text:gsub("%+", "%%20"))
 		local language = defaultValue(settings, "Language", defaultLanguage)
 		local engine = defaultValue(settings, "Engine", defaultEngine)
-
-		if (engines[engine] ~= nil and engines[engine].fct ~= nil) then
+		
+		if cacheTTS then
+			local json = require "dkjson"
+			local hash = hash(text)
+			local cpath = string.format( "%sttscache/%s/%s/%d/", localBasePath, engine, language, hash )
+			local fm = io.open( cpath .. "ttsmeta.json", "r" )
+			if fm then
+				log("(tts) checking cache "..cpath)
+				local fmeta = json.decode( fm:read("*a") )
+				fm:close()
+				if fmeta and (fmeta.strings or {})[text] then
+					settings.Duration = fmeta.strings[text].duration
+					settings.URI = localBaseURL .. fmeta.strings[text].url
+					settings.URIMetadata = METADATA:format(engines[engine].title, '<res protocolInfo="' .. engines[engine].protocol ..'">' .. (settings.URI or "") .. '</res>')
+					log("(tts) speaking learned phrase from cache: " .. tostring(settings.URI))
+				else
+					log("(tts) cache miss")
+				end
+			else
+				log("(tts) no cache meta in "..cpath)
+			end
+		end
+		if (settings.URI or "") ~= "" then
+		elseif (engines[engine] or {}).fct  then
 			settings.Duration, settings.URI = engines[engine].fct(text, language, device, engines[engine].bitrate / 8 * 1000)
 			settings.URIMetadata = METADATA:format(engines[engine].title, '<res protocolInfo="' .. engines[engine].protocol ..'">' .. (settings.URI or "") .. '</res>')
 			log("TTS engine "..tostring(engine).." created "..tostring(settings.URI))
+			if cacheTTS then
+				-- Save in cache
+				local json = require "dkjson"
+				local hash = hash(text)
+				local curl = string.format( "ttscache/%s/%s/%d/", engine, language, hash )
+				local cpath = localBasePath .. curl
+				os.execute( "mkdir -p " .. cpath )
+				local fm = io.open( cpath .. "tts.meta", "r" )
+				local fmeta
+				if fm then
+					fmeta = json.decode( fm:read("*a") )
+					fm:close()
+				end
+				fmeta = fmeta or { version=1, nextfile=1, strings={} }
+				local ff = settings.URI:match("[^/]+$")
+				local ft = ff:match("%.[^%.]+$") or ""
+				if os.execute( "cp -f " .. localBasePath .. ff .. " " .. cpath .. fmeta.nextfile .. ft ) ~= 0 then
+					warning("(ttscache) failed to copy "..localBasePath..ff.." to "..cpath..fmeta.nextfile..ft)
+				else
+					fmeta.strings[text] = { duration=settings.Duration, url=curl .. fmeta.nextfile .. ft, created=os.time() }
+					fm = io.open( cpath .. "ttsmeta.json", "w" )
+					if fm then
+						fmeta.nextfile = fmeta.nextfile + 1
+						fm:write(json.encode(fmeta))
+						fm:close()
+					end
+				end
+			end
 		else
 			warning("No TTS engine for "..tostring(engine))
 		end
 	end
-
+	log("(tts) say " .. tostring(settings.URI))
 	play(device, settings, true)
 end
 
