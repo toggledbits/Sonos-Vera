@@ -1,6 +1,15 @@
 # Change Log
 
-## Version 1.4.3 (development)
+## Version 1.5 (development)
+
+* Implement TTS caching to reduce traffic to and dependence on remote services. The performance of remote services can vary greatly; for example, ResponsiveVoice has been seen taking up to 30 seconds to respond with an audio result. Since most users likely speak a small number of fixed phrases repeatedly, caching removes repeated remote queries for the same data and allows immediate replay of the previously-played phrase.
+* Revamped state variable initialization so that defaults are not written to state, but handled on the fly. This allows future changes in default values to be done without user intervention. Particularly important for TTS, where, for example, the URL used for a remote service may change for all users.
+* Clean up of code and logging to a more maintainable form. I find having lots of implementation code in the XML implementation file to be really inconvenient and unnecessarily troublesome. The plugin core now lives in its own module.
+* Support for openLuup with the addition of the `LocalIP`, `TTSBasePath` and `TTSBaseURL` variables. For openLuup, the `localIP` variable should be set to the IP address of the openLuup system.
+* Support `TTSBasePath` and `TTSBaseURL` variables to move TTS sound files and cache to a directory of the user's chosing. The directory must be accessible by the Sonos system(s) via HTTP. The `TTSBasePath` must contain an absolute filesystem path that refers to the directory accessible at `TTSBaseURL`.
+* Update icon handling and various other tweaks for 7.30, which restricts certain directories previously used to read-only. Vera 7.30 and up will now use `/www/sonos`, and below will use the standard `/www/cmh/skins/default/icons` directory accessed via a relative URL to be compatible/consistent with many prior versions. OpenLuup will continue to use the install directory.
+
+## Version 1.4.3 (interim)
 
 * rigpapa: Dynamic icon by mashing up static JSON on the fly using device description URL. Should eliminate need to change code when new devices are released just to get the icon right.
 * rigpapa: Implement variable polling for when UPnP Event Proxy is not installed to reduce system load and network traffic; configurable: polling rates are controlled by PollDelay, default 15,60; polls every 15 seconds except when player stopped, then every 60 seconds.
