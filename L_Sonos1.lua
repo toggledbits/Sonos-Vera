@@ -2492,6 +2492,8 @@ function actionSonosSay( lul_device, lul_settings )
 		warning "The Sonos TTS module requires that 'Enable Unsafe Lua' (under 'Users & Account Info > Security') be enabled in your controller settings."
 		return
 	end
+	-- Spaces not decoded by receiver
+	lul_settings.Text = string.gsub( lul_settings.Text or "", "%%20", " " )
 	tts.queueAlert( lul_device, lul_settings )
 end
 
