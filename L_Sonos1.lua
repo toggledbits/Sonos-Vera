@@ -8,13 +8,13 @@
 module( "L_Sonos1", package.seeall )
 
 PLUGIN_NAME = "Sonos"
-PLUGIN_VERSION = "1.5-19275"
+PLUGIN_VERSION = "1.5-19287"
 PLUGIN_ID = 4226
 
 local DEBUG_MODE = false	-- Don't hardcode true--use state variable config
 
 local MIN_UPNP_VERSION = 19191	-- Minimum version of L_SonosUPnP that works
-local MIN_TTS_VERSION = 19274	-- Minimum version of L_SonosTTS that works
+local MIN_TTS_VERSION = 19287	-- Minimum version of L_SonosTTS that works
 
 local MSG_CLASS = "Sonos"
 local isOpenLuup = false
@@ -164,6 +164,12 @@ local BROWSE_TIMEOUT = 5
 local fetchQueue = true
 
 local idConfRefresh = 0
+
+-- TTS queue and support
+local sayQueue = {}
+local cacheTTS = true
+local TTSBasePath
+local TTSBaseURL
 
 local function log(stuff, level)
 	luup.log(string.format("%s: %s", MSG_CLASS, tostring(stuff)), (level or 50))
@@ -1432,146 +1438,6 @@ groupDevices = function(device, instanceId, uuids, volume)
 	end
 end
 
-
-local function sayOrAlert(device, parameters, saveAndRestore)
-	local instanceId = defaultValue(parameters, "InstanceID", "0")
-	-- local channel = defaultValue(parameters, "Channel", "Master")
-	local volume = defaultValue(parameters, "Volume", nil)
-	local devices = defaultValue(parameters, "GroupDevices", "")
-	local zones = defaultValue(parameters, "GroupZones", "")
-	local uri = defaultValue(parameters, "URI", nil)
-	local duration = defaultValue(parameters, "Duration", "0")
-	local sameVolume = false
-	if (parameters.SameVolumeForAll == "true"
-		or parameters.SameVolumeForAll == "TRUE"
-		or parameters.SameVolumeForAll == "1") then
-		sameVolume = true
-	end
-
-	if (uri == nil or uri == "") then
-		if (saveAndRestore == true) then
-			endSayAlert(device)
-		end
-		return
-	end
-
-	local uuidListe = ""
-	local newGroup
-	local controlByGroup
-	local localUUID = UUIDs[device]
-	if (zones:upper() == "CURRENT") then
-		local coordinator = dataTable[localUUID].GroupCoordinator or ""
-
-		if (saveAndRestore == true and sayPlayback[device] == nil) then
-			sayPlayback[device] = savePlaybackContexts(device, coordinator)
-			sayPlayback[device].grpMembers = ""
-		end
-
-		newGroup = false
-		controlByGroup = true
-	else
-		for id in devices:gmatch("%d+") do
-			local nid = tonumber(id)
-			if nid ~= device then
-				local uuid = UUIDs[nid]
-				if (uuid == nil) then
-					uuid = luup.variable_get(UPNP_DEVICE_PROPERTIES_SID, "SonosID", nid)
-				end
-				if (uuid ~= nil and uuid ~= "" and uuidListe:find(uuid) == nil) then
-					if (uuidListe ~= "") then
-						uuidListe = uuidListe .. ","
-					end
-					uuidListe = uuidListe .. uuid
-				end
-			end
-		end
-		if (zones:upper() == "ALL") then
-			local uuids = getAllUUIDs()
-			for uuid in uuids:gmatch("RINCON_%x+") do
-				if (uuid ~= localUUID and uuidListe:find(uuid) == nil) then
-					if (uuidListe ~= "") then
-						uuidListe = uuidListe .. ","
-					end
-					uuidListe = uuidListe .. uuid
-				end
-			end
-		else
-			for zone in zones:gmatch("[^,]+") do
-				local uuid = getUUIDFromZoneName(zone)
-				if (uuid ~= nil and uuid ~= "" and uuid ~= localUUID and uuidListe:find(uuid) == nil) then
-					if (uuidListe ~= "") then
-						uuidListe = uuidListe .. ","
-					end
-					uuidListe = uuidListe .. uuid
-				end
-			end
-		end
-
-		local members, coordinator
-
-		if (saveAndRestore == true and sayPlayback[device] == nil) then
-			local uuidListe2 = uuidListe
-			if (uuidListe2:find(localUUID) == nil) then
-				if (uuidListe2 == "") then
-					uuidListe2 = localUUID
-				else
-					uuidListe2 = localUUID .. "," .. uuidListe2
-				end
-			end
-
-			local uuidListe3 = uuidListe2
-			for uuid in uuidListe2:gmatch("RINCON_%x+") do
-				members, coordinator = getGroupInfos(uuid)
-				if (coordinator == uuid) then
-					for uuid2 in members:gmatch("RINCON_%x+") do
-						if (uuidListe3:find(uuid2) == nil) then
-							uuidListe3 = uuidListe3 .. "," .. uuid2
-						end
-					end
-				end
-			end
-			sayPlayback[device] = savePlaybackContexts(device, uuidListe3)
-			sayPlayback[device].grpMembers = uuidListe
-
-			-- Break all groups
-			for uuid, cxt in pairs(sayPlayback[device].context) do
-				if (cxt.GroupCoordinator ~= uuid) then
-					local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
-					if AVTransport ~= nil then
-						AVTransport.BecomeCoordinatorOfStandaloneGroup({InstanceID=instanceId})
-					end
-				end
-			end
-		end
-
-		coordinator = dataTable[localUUID].GroupCoordinator or ""
-		members = dataTable[localUUID].ZonePlayerUUIDsInGroup or ""
-		newGroup = false
-		if (coordinator ~= "" and coordinator == localUUID and members ~= localUUID) then
-			newGroup = true
-		end
-		controlByGroup = false
-	end
-
-	playURI(device, instanceId, uri, "1", volume, uuidListe, sameVolume, nil, newGroup, controlByGroup)
-
-	if (saveAndRestore == true) then
-		luup.call_delay("endSayAlert", duration, device)
-	end
-
-	refreshNow(device, false, false)
-end
-
-function endSayAlert(device)
-	if not tts then return end
-	device = tonumber(device)
-	local finished = tts.endPlayback(device)
-	if (finished == true) then
-		restorePlaybackContexts(device, sayPlayback[device])
-		sayPlayback[device] = nil
-	end
-end
-
 local function joinGroup(device, zone)
 	local localUUID = UUIDs[device]
 	local uuid = getUUIDFromZoneName(zone)
@@ -1684,49 +1550,56 @@ local function setupTTSSettings(device)
 	local clientId = getVar("MicrosoftClientId", "", device, SONOS_SID, true)
 	local clientSecret = getVar("MicrosoftClientSecret", "", device, SONOS_SID, true)
 	local option = getVar("MicrosoftOption", "", device, SONOS_SID, true)
-	local rate = getVar("TTSRate", "", device, SONOS_SID, true)
-	if "" == rate then
-		rate = "0.5"
-	elseif "0.5" == rate then
-		setVar(SONOS_SID, "TTSRate", "", device) -- restore default
-	end
-	local pitch = getVar("TTSPitch", "", device, SONOS_SID, true)
-	if "" == pitch then
-		pitch = "0.5"
-	elseif "0.5" == pitch then
-		setVar(SONOS_SID, "TTSPitch", "", device) -- restore default
-	end
-	-- NOTA BENE! baseURL must resolve to basePath in runtime! That is, whatever directory basePath
-	--            points to must be the directory accessed via baseURL.
-	local baseURL = getVar("TTSBaseURL", "", device, SONOS_SID, true)
-	if ttsrev < 19269 or not baseURL:match("%/$") then
+	-- NOTA BENE! TTSBaseURL must resolve to TTSBasePath in runtime! That is, whatever directory 
+	--            TTSBasePath points to must be the directory accessed via TTSBaseURL.
+	TTSBaseURL = getVar("TTSBaseURL", "", device, SONOS_SID, true)
+	if ttsrev < 19269 or not TTSBaseURL:match("%/$") then
 		setVar(SONOS_SID, "TTSBaseURL", "", device)
-		baseURL = ""
+		TTSBaseURL = ""
 	end
-	if "" == baseURL then
+	if "" == TTSBaseURL then
 		if isOpenLuup then
-			baseURL = string.format("http://%s:3480/", VERA_LOCAL_IP)
+			TTSBaseURL = string.format("http://%s:3480/", VERA_LOCAL_IP)
 		elseif luup.short_version then
 			-- 7.30+
-			baseURL = string.format("http://%s/sonos/", VERA_LOCAL_IP)
+			TTSBaseURL = string.format("http://%s/sonos/", VERA_LOCAL_IP)
 		else
-			baseURL = string.format("http://%s/port_3480/", VERA_LOCAL_IP)
+			TTSBaseURL = string.format("http://%s/port_3480/", VERA_LOCAL_IP)
 		end
 	end
-	local basePath = getVar("TTSBasePath", "", device, SONOS_SID, true)
-	if ttsrev < 19269 or not basePath:match("%/$") then
+	TTSBasePath = getVar("TTSBasePath", "", device, SONOS_SID, true)
+	if ttsrev < 19269 or not TTSBasePath:match("%/$") then
 		setVar(SONOS_SID, "TTSBasePath", "", device)
-		basePath = ""
+		TTSBasePath = ""
 	end
-	if "" == basePath then
-		basePath = getInstallPath()
+	if "" == TTSBasePath then
+		TTSBasePath = getInstallPath()
 		if not isOpenLuup and luup.short_version then
 			-- Real Vera 7.30+
-			basePath = "/www/sonos/"
+			TTSBasePath = "/www/sonos/"
 		end
 	end
 	setVar(SONOS_SID, "_ttsrev", 19269, device)
-	tts.setup(lang, engine, sayOrAlert, baseURL, basePath, googleURL, serverURL, maryURL, rvURL, clientId, clientSecret, option, rate, pitch)
+
+	tts.setup(lang, engine, googleURL, serverURL, maryURL, rvURL, clientId, clientSecret, option)
+
+	local RV = tts.getEngine("RV")
+	if RV then
+		local rate = getVar("TTSRate", "", device, SONOS_SID, true)
+		if "" == rate then
+			rate = "0.5"
+		elseif "0.5" == rate then
+			setVar(SONOS_SID, "TTSRate", "", device) -- restore default
+		end
+		local pitch = getVar("TTSPitch", "", device, SONOS_SID, true)
+		if "" == pitch then
+			pitch = "0.5"
+		elseif "0.5" == pitch then
+			setVar(SONOS_SID, "TTSPitch", "", device) -- restore default
+		end
+		RV.pitch = pitch
+		RV.rate = rate
+	end
 end
 
 function updateWithoutProxy(device)
@@ -2475,12 +2348,288 @@ end
 
 --[[
 
+	TTS Support Functions
+
+--]]
+local TTS_METADATA = [[<DIDL-Lite xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/">
+	<item id="VERA_TTS" parentID="-1" restricted="1">
+		<dc:title>%s</dc:title>
+		<res protocolInfo="%s">%s</res>
+		<upnp:class>object.item.audioItem.musicTrack</upnp:class>
+	</item>
+</DIDL-Lite>]]
+
+local function Q(str) return "'" .. string.gsub(tostring(str), "(')", "\\%1") .. "'" end
+
+endSayAlert = false-- Forward declaration, non-local
+
+local function sayOrAlert(device, parameters, saveAndRestore)
+	local instanceId = defaultValue(parameters, "InstanceID", "0")
+	-- local channel = defaultValue(parameters, "Channel", "Master")
+	local volume = defaultValue(parameters, "Volume", nil)
+	local devices = defaultValue(parameters, "GroupDevices", "")
+	local zones = defaultValue(parameters, "GroupZones", "")
+	local uri = defaultValue(parameters, "URI", nil)
+	local duration = defaultValue(parameters, "Duration", "0")
+	local sameVolume = false
+	if (parameters.SameVolumeForAll == "true"
+		or parameters.SameVolumeForAll == "TRUE"
+		or parameters.SameVolumeForAll == "1") then
+		sameVolume = true
+	end
+
+	if (uri == nil or uri == "") then
+		if (saveAndRestore == true) then
+			endSayAlert(device)
+		end
+		return
+	end
+
+	local uuidListe = ""
+	local newGroup
+	local controlByGroup
+	local localUUID = UUIDs[device]
+	if (zones:upper() == "CURRENT") then
+		local coordinator = dataTable[localUUID].GroupCoordinator or ""
+
+		if (saveAndRestore == true and sayPlayback[device] == nil) then
+			sayPlayback[device] = savePlaybackContexts(device, coordinator)
+			sayPlayback[device].grpMembers = ""
+		end
+
+		newGroup = false
+		controlByGroup = true
+	else
+		for id in devices:gmatch("%d+") do
+			local nid = tonumber(id)
+			if nid ~= device then
+				local uuid = UUIDs[nid]
+				if (uuid == nil) then
+					uuid = luup.variable_get(UPNP_DEVICE_PROPERTIES_SID, "SonosID", nid)
+				end
+				if (uuid ~= nil and uuid ~= "" and uuidListe:find(uuid) == nil) then
+					if (uuidListe ~= "") then
+						uuidListe = uuidListe .. ","
+					end
+					uuidListe = uuidListe .. uuid
+				end
+			end
+		end
+		if (zones:upper() == "ALL") then
+			local uuids = getAllUUIDs()
+			for uuid in uuids:gmatch("RINCON_%x+") do
+				if (uuid ~= localUUID and uuidListe:find(uuid) == nil) then
+					if (uuidListe ~= "") then
+						uuidListe = uuidListe .. ","
+					end
+					uuidListe = uuidListe .. uuid
+				end
+			end
+		else
+			for zone in zones:gmatch("[^,]+") do
+				local uuid = getUUIDFromZoneName(zone)
+				if (uuid ~= nil and uuid ~= "" and uuid ~= localUUID and uuidListe:find(uuid) == nil) then
+					if (uuidListe ~= "") then
+						uuidListe = uuidListe .. ","
+					end
+					uuidListe = uuidListe .. uuid
+				end
+			end
+		end
+
+		local members, coordinator
+
+		if (saveAndRestore == true and sayPlayback[device] == nil) then
+			local uuidListe2 = uuidListe
+			if (uuidListe2:find(localUUID) == nil) then
+				if (uuidListe2 == "") then
+					uuidListe2 = localUUID
+				else
+					uuidListe2 = localUUID .. "," .. uuidListe2
+				end
+			end
+
+			local uuidListe3 = uuidListe2
+			for uuid in uuidListe2:gmatch("RINCON_%x+") do
+				members, coordinator = getGroupInfos(uuid)
+				if (coordinator == uuid) then
+					for uuid2 in members:gmatch("RINCON_%x+") do
+						if (uuidListe3:find(uuid2) == nil) then
+							uuidListe3 = uuidListe3 .. "," .. uuid2
+						end
+					end
+				end
+			end
+			sayPlayback[device] = savePlaybackContexts(device, uuidListe3)
+			sayPlayback[device].grpMembers = uuidListe
+
+			-- Break all groups
+			for uuid, cxt in pairs(sayPlayback[device].context) do
+				if (cxt.GroupCoordinator ~= uuid) then
+					local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
+					if AVTransport ~= nil then
+						AVTransport.BecomeCoordinatorOfStandaloneGroup({InstanceID=instanceId})
+					end
+				end
+			end
+		end
+
+		coordinator = dataTable[localUUID].GroupCoordinator or ""
+		members = dataTable[localUUID].ZonePlayerUUIDsInGroup or ""
+		newGroup = false
+		if (coordinator ~= "" and coordinator == localUUID and members ~= localUUID) then
+			newGroup = true
+		end
+		controlByGroup = false
+	end
+
+	playURI(device, instanceId, uri, "1", volume, uuidListe, sameVolume, nil, newGroup, controlByGroup)
+
+	if (saveAndRestore == true) then
+		luup.call_delay("endSayAlert", duration, device)
+	end
+
+	refreshNow(device, false, false)
+end
+
+local function queueAlert(device, settings)
+	debug("TTS queueAlert for device " .. device)
+	if not sayQueue[device] then sayQueue[device] = {} end
+	table.insert(sayQueue[device], settings)
+	-- First one kicks things off
+	if #sayQueue[device] == 1 then
+		sayOrAlert(device, settings, true)
+	end
+end
+
+-- This TTS audio is done. More?
+local function endTTSPlayback(device)
+	if sayQueue[device] and #sayQueue[device] > 0 then
+		local settings = sayQueue[device][1]
+		if settings.TempFile then
+			-- Remove temp file
+			os.execute(string.format("rm -f -- %s", Q(settings.TempFile)))
+		end
+		table.remove(sayQueue[device], 1)
+		if #sayQueue[device] > 0 then
+			sayOrAlert(device, sayQueue[device][1], true)
+			return false
+		end
+	end
+	debug("(tts) queue empty")
+	sayQueue[device] = nil
+	return true -- finished
+end
+
+-- Callback for end of alert/Say.
+endSayAlert = function(device)
+	debug("TTS endSayAlert for device " .. device)
+	if not tts then return end
+	device = tonumber(device) or error("Invalid parameter/device number for endSayAlert")
+	if endTTSPlayback(device) then
+		restorePlaybackContexts(device, sayPlayback[device])
+		sayPlayback[device] = nil
+	end
+end
+
+-- Quick and dirty hash for cache
+local function hash(t)
+	local s = #t
+	for k=1,#t do
+		s = ( s + t:byte(k) ) % 64
+	end
+	return s
+end
+
+local function loadTTSCache( engine, language, hashcode )
+	local json = require "dkjson"
+	local curl = string.format( "ttscache/%s/%s/%d/", tostring(engine), tostring(language), tostring(hashcode) )
+	local cpath = TTSBasePath .. curl
+	local fm = io.open( cpath .. "ttsmeta.json", "r" )
+	if fm then
+		local fmeta = json.decode( fm:read("*a") )
+		fm:close()
+		if fmeta and fmeta.version == 1 and fmeta.strings then
+			return fmeta
+		end
+		warning("(tts) clearing cache " .. tostring(cpath))
+		os.execute("rm -rf -- " .. Q(cpath))
+	end
+	return { version=1, nextfile=1, strings={} }, curl
+end
+
+local function makeTTSAlert( device, settings )
+	local text = settings.Text or "42"
+	local engobj = tts.getEngine( settings.Engine )
+	cacheTTS = not file_exists( TTSBasePath .. "no-tts-cache" )
+	if cacheTTS then
+		local fmeta = loadTTSCache( settings.Engine, settings.Language, hash(text) )
+		if fmeta.strings[text] then
+			settings.Duration = fmeta.strings[text].duration
+			settings.URI = TTSBaseURL .. fmeta.strings[text].url
+			settings.URIMetadata = TTS_METADATA:format(engobj.title, engobj.protocol,
+				settings.URI or "")
+			settings.TempFile = nil -- flag no delete in endPlayback
+			log("(tts) speaking phrase from cache: " .. tostring(settings.URI))
+		end
+	end
+	if engobj then
+		-- Convert text to speech using specified engine
+		local file = string.format( "Say.%s.%s", tostring(device), engobj.fileType or "mp3" )
+		local destFile = TTSBasePath .. file
+		settings.Duration = tts.ConvertTTS(text, destFile, settings.Language, settings.Engine, {})
+		if (settings.Duration or 0) == 0 then
+			warning("(tts) "..tostring(engobj.title).." produced no audio")
+			return
+		end
+		settings.URI = TTSBaseURL .. file
+		settings.TempFile = destFile
+		settings.URIMetadata = TTS_METADATA:format(engobj.title, engobj.protocol,
+			settings.URI)
+		log("(tts) "..tostring(engobj.title).." created "..tostring(settings.URI))
+		if cacheTTS then
+			-- Save in cache
+			local fmeta, curl = loadTTSCache( settings.Engine, settings.Language, hash(text) )
+			local cpath = TTSBasePath .. curl
+			local ft = file:match("[^/]+$"):match("%.[^%.]+$") or ""
+			os.execute("mkdir -p " .. Q(cpath))
+			while true do
+				local zf = io.open( cpath .. fmeta.nextfile .. ft, "r" )
+				if not zf then break end
+				zf:close()
+				fmeta.nextfile = fmeta.nextfile + 1
+			end
+			if os.execute( "cp -f -- " .. Q( destFile ) .. " " .. Q( cpath .. fmeta.nextfile .. ft ) ) ~= 0 then
+				warning("(tts) cache failed to copy "..Q( destFile ).." to "..Q( cpath..fmeta.nextfile..ft ))
+			else
+				fmeta.strings[text] = { duration=settings.Duration, url=curl .. fmeta.nextfile .. ft, created=os.time() }
+				fm = io.open( cpath .. "ttsmeta.json", "w" )
+				if fm then
+					local json = require "dkjson"
+					fmeta.nextfile = fmeta.nextfile + 1
+					fm:write(json.encode(fmeta))
+					fm:close()
+					debug("(tts) cached " .. destFile .. " as " .. fmeta.strings[text].url)
+				else
+					warning("(ttscache) can't write cache meta in " .. cpath)
+				end
+			end
+		end
+	else
+		warning("No TTS engine implementation for "..tostring(settings.Engine))
+		return nil
+	end
+	return settings
+end
+
+--[[
+
 	IMPLEMENTATIONS FOR ACTIONS IN urn:micasaverde-com:serviceId:Sonos1
 
 --]]
 
 function actionSonosSay( lul_device, lul_settings )
-	debug("Say: " .. (lul_settings.Text or "nil"))
+	log("Say action on device " .. string(lul_device) .. " text " .. tostring(lul_settings.Text))
 	if not tts then
 		warning "The Sonos TTS module is not installed or could not be loaded."
 		return
@@ -2488,13 +2637,15 @@ function actionSonosSay( lul_device, lul_settings )
 	if ( tts.VERSION or 0 ) < MIN_TTS_VERSION then
 		warning "The L_SonosTTS module installed may not be compatible with this version of the plugin core."
 	end
-	if ( luup.attr_get( 'UnsafeLua', 0 ) or "0" ) ~= "1" then
-		warning "The Sonos TTS module requires that 'Enable Unsafe Lua' (under 'Users & Account Info > Security') be enabled in your controller settings."
+	if ( luup.attr_get( 'UnsafeLua', 0 ) or "0" ) ~= "1" and not isOpenLuup then
+		warning "The TTS module requires that 'Enable Unsafe Lua' (under 'Users & Account Info > Security') be enabled in your controller settings."
 		return
 	end
 	-- Spaces not decoded by receiver
 	lul_settings.Text = string.gsub( lul_settings.Text or "", "%%20", " " )
-	tts.queueAlert( lul_device, lul_settings )
+	-- Play as alert.
+	local alert_settings = makeTTSAlert( lul_device, lul_settings )
+	queueAlert( lul_device, alert_settings )
 end
 
 function actionSonosSetupTTS( lul_device, lul_settings )
@@ -2580,13 +2731,12 @@ function actionSonosEnqueueURI( lul_device, lul_settings )
 end
 
 function actionSonosAlert( lul_device, lul_settings )
-	if not tts then return end
-	if ( tts.VERSION or 0 ) < MIN_TTS_VERSION then
-		warning "The L_SonosTTS module installed may not be compatible with this version of the plugin core."
-	end
+	log("Alert action on device " .. tostring(lul_device) .. " URI " .. tostring(lul_settings.URI) .. 
+		" duration " .. tostring(lul_settings.Duration))
 	local duration = tonumber(defaultValue(lul_settings, "Duration", "0")) or 0
 	if duration > 0 then
-		tts.queueAlert(lul_device, lul_settings)
+		-- Sound already defined
+		queueAlert(lul_device, lul_settings)
 	else
 		sayOrAlert(lul_device, lul_settings, false)
 	end
