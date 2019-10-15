@@ -253,6 +253,11 @@
 					<relatedStateVariable>A_ARG_TYPE_URI</relatedStateVariable>
 				</argument>
 				<argument>
+					<name>ResponsiveVoiceTTSServerURL</name>
+					<direction>in</direction>
+					<relatedStateVariable>A_ARG_TYPE_URI</relatedStateVariable>
+				</argument>
+				<argument>
 					<name>MicrosoftClientId</name>
 					<direction>in</direction>
 					<relatedStateVariable>A_ARG_TYPE_clientId</relatedStateVariable>

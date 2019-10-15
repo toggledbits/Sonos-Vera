@@ -1303,7 +1303,7 @@ end
 
 local groupDevices -- forward declaration
 local function playURI(device, instanceId, uri, speed, volume, uuids, sameVolumeForAll, enqueueMode, newGroup, controlByGroup)
-
+	log("Playing "..tostring(uri).." on "..tostring(device).."/"..tostring(instanceId))
 	uri = url.unescape(uri)
 
 	local uriMetaData, track, controlByGroup2, requireQueuing, uuid, status, tmp, position
@@ -2550,7 +2550,7 @@ local function loadTTSCache( engine, language, hashcode )
 		local fmeta = json.decode( fm:read("*a") )
 		fm:close()
 		if fmeta and fmeta.version == 1 and fmeta.strings then
-			return fmeta
+			return fmeta, curl
 		end
 		warning("(tts) clearing cache " .. tostring(cpath))
 		os.execute("rm -rf -- " .. Q(cpath))
@@ -2571,6 +2571,7 @@ local function makeTTSAlert( device, settings )
 				settings.URI or "")
 			settings.TempFile = nil -- flag no delete in endPlayback
 			log("(tts) speaking phrase from cache: " .. tostring(settings.URI))
+			return settings
 		end
 	end
 	if engobj then
@@ -2629,7 +2630,7 @@ end
 --]]
 
 function actionSonosSay( lul_device, lul_settings )
-	log("Say action on device " .. string(lul_device) .. " text " .. tostring(lul_settings.Text))
+	log("Say action on device " .. tostring(lul_device) .. " text " .. tostring(lul_settings.Text))
 	if not tts then
 		warning "The Sonos TTS module is not installed or could not be loaded."
 		return
@@ -2641,8 +2642,8 @@ function actionSonosSay( lul_device, lul_settings )
 		warning "The TTS module requires that 'Enable Unsafe Lua' (under 'Users & Account Info > Security') be enabled in your controller settings."
 		return
 	end
-	-- Spaces not decoded by receiver
-	lul_settings.Text = string.gsub( lul_settings.Text or "", "%%20", " " )
+	-- ??? Request handler doesn't unescape?
+	lul_settings.Text = url.unescape( lul_settings.Text )
 	-- Play as alert.
 	local alert_settings = makeTTSAlert( lul_device, lul_settings )
 	queueAlert( lul_device, alert_settings )

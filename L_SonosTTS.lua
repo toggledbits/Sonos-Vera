@@ -28,7 +28,7 @@ local accessTokenExpires
 
 local engines = {}
 
-local function debug(...) if DEBUG_MODE then log(...) end end
+local function debug(m, ...) if DEBUG_MODE then log(string.format("(tts debug) %s", tostring(m)), ...) end end
 
 local function Q(str) return "'" .. string.gsub(tostring(str), "(')", "\\%1") .. "'" end
 
@@ -63,16 +63,8 @@ function TTSEngine:new(o)
 	o = o or {}   -- create object if user does not provide one
 	setmetatable(o, self)
 	self.__index = self
-	self.title = "unnamed"
-	self.fileType = "mp3"
-	self.bitrate = o.bitrate or 32
-	self.protocol = o.protocol or "http-get:*:audio/mpeg:*"
-	self.configured = false
 	return o
 end
-
--- Abstract: do any necessary configuration on device. Subclasses must call superclass method.
-function TTSEngine:configure() self.configured = true end
 
 -- say: retrieve audio file for text
 function TTSEngine:say(text, language, destFile, engineOptions) end -- luacheck: ignore 212
@@ -80,20 +72,13 @@ function TTSEngine:say(text, language, destFile, engineOptions) end -- luacheck:
 -- HTTPGetTTSEngine - base class for HTTP GET-based TTS (extends TTSEngine).
 HTTPGetTTSEngine = TTSEngine:new()
 function HTTPGetTTSEngine:new(o)
-	o = o or TTSEngine:new()
+	o = o or TTSEngine:new(o)
 	setmetatable(o, self)
 	self.__index = self
-	self.serverURL = o.serverURL or "http://127.0.0.1"
-	self.shellCmd = o.shellCmd or [[rm -- '%{destFile:s}';curl -s -o '${destFile}' %{serverURL:s}/tts?text=%{text}]]
-	self.timeout = o.timeout or 15
-	self.maxTextLength = o.maxTextLength or 0
 	return o
 end
 function HTTPGetTTSEngine:say(text, language, destFile, engineOptions)
-	if not self.configured then
-		self:configure()
-	end
-	debug("say_http_get: destFile " .. destFile .. " language " .. language .. " text " .. text)
+	debug("say_http_get: engine " .. self.title .. " destFile " .. destFile .. " language " .. language .. " text " .. text)
 	local param = { lang=language, destFile=destFile, text=text }
 
 	local txlist = cut_text( text:gsub("%s+", " "), self.maxTextLength or 0 )
@@ -118,9 +103,9 @@ function HTTPGetTTSEngine:say(text, language, destFile, engineOptions)
 				local s = param[n] or engineOptions[n] or self[n] or d or ""
 				return f == "u" and url.escape(tostring(s)) or tostring(s)
 			end)
-		debug("(tts) say_http_get: requesting " .. tostring(cmd))
+		debug("say_http_get: requesting " .. tostring(cmd))
 		local returnCode = os.execute(cmd)
-		debug("(tts) say_http_get: returned " .. tostring(returnCode))
+		debug("say_http_get: returned " .. tostring(returnCode))
 		if returnCode == 0 then
 			if #txlist > 1 then
 				-- Add chunk to combined output
@@ -133,8 +118,9 @@ function HTTPGetTTSEngine:say(text, language, destFile, engineOptions)
 				fh:close()
 			end
 		else
+			warning(tostring(engine.title).." fetch command failed ("..tostring(returnCode).."); "..tostring(cmd))
 			os.execute("rm -f -- " .. Q(destFile) .. " " .. Q(destFile .. ".part"))
-			return nil, "Failed to retrieve audio file"
+			return nil, "Failed to retrieve audio file from remote API"
 		end
 		os.execute("rm -f -- " .. Q(destFile .. ".part"))
 	end
@@ -158,18 +144,18 @@ end
 -- ResponsiveVoice subclass of TTSEngine
 ResponsiveVoiceTTSEngine = HTTPGetTTSEngine:new{
 	title="ResponsiveVoice",
-	protocol="http-get:*:audio/mpeg:*",
 	fileType="mp3",
 	bitrate=32,
-	maxTextLength=100,
+	protocol="http-get:*:audio/mpeg:*",
 	serverURL="https://code.responsivevoice.org",
 	shellCmd=[[ rm -- '%{destFile:s}' ; curl -s -o '%{destFile:s}' \
 --connect-timeout %{timeout:s|15} \
 --header "Accept-Charset: utf-8;q=0.7,*;q=0.3" \
 --header "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" \
 --header "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_8_2) AppleWebKit/537.11 (KHTML, like Gecko) Chrome/23.0.1271.64 Safari/537.11" \
-'%{serverURL:s}/getvoice.php?t=%{text}&tl=%{lang|en_US}&sv=&vn=&pitch=%{pitch|0.5}&rate=%{rate|0.5}']]
-}
+'%{serverURL:s}/getvoice.php?t=%{text}&tl=%{lang|en_US}&sv=&vn=&pitch=%{pitch|0.5}&rate=%{rate|0.5}']],
+	timeout=15,
+	maxTextLength=100}
 function ResponsiveVoiceTTSEngine:say( text, language, destFile, engineOptions )
 	if not string.match( language, "^%w+%-%w+$" ) then
 		warning("(tts) ResponsiveVoice typically requires two-part IETF language tags (e.g. 'en-US', 'de-DE', etc.). You provided '" .. tostring(language) .. "', which may not work.")
@@ -181,46 +167,48 @@ end
 -- MaryTTS subclass
 MaryTTSEngine = HTTPGetTTSEngine:new{
 	title="MaryTTS",
-	protocol="http-get:*:audio/wav:*", 
-	bitrate=256,
 	fileType="wav",
+	bitrate=768, -- ??? was 256, but my Mary seems to produce higher rate; configurable?
+	protocol="http-get:*:audio/wav:*",
 	serverURL="http://127.0.0.1:59125",
 	shellCmd=[[ rm -- '%{destFile:s}' ; curl -s -o '%{destFile:s}' \
---connect-timeout {timeout|15} \
+--connect-timeout %{timeout|15} \
 --header "Accept-Charset: utf-8;q=0.7,*;q=0.3" \
 --header "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" \
 --header "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_8_2) AppleWebKit/537.11 (KHTML, like Gecko) Chrome/23.0.1271.64 Safari/537.11" \
-"%{serverURL:s}/process?INPUT_TYPE=TEXT&AUDIO=WAVE_FILE&OUTPUT_TYPE=AUDIO&LOCALE=%{lang|en}&INPUT_TEXT=%{text}"]]
-}
+"%{serverURL:s}/process?INPUT_TYPE=TEXT&AUDIO=WAVE_FILE&OUTPUT_TYPE=AUDIO&LOCALE=%{lang|en_US}&INPUT_TEXT=%{text}"]],
+	timeout=15,
+	maxTextLength=0}
 
 GoogleTTSEngine = HTTPGetTTSEngine:new{
-	title="Google TTS", 
-	protocol="http-get:*:audio/mpeg:*", 
+	title="Google TTS",
+	fileType="mp3",
 	bitrate=32,
-	filetype="mp3",
-	maxTextLength=100,
+	protocol="http-get:*:audio/mpeg:*", 
 	serverURL="https://translate.google.com",
 	shellCmd=[[rm -- '%{destFile:s}' ; wget --output-document '%{destFile:s}' \
 --quiet \
 --header "Accept-Charset: utf-8;q=0.7,*;q=0.3" \
 --header "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" \
 --user-agent "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_8_2) AppleWebKit/537.11 (KHTML, like Gecko) Chrome/23.0.1271.64 Safari/537.11" \
-"%{serverURL:s}/translate_tts?tl=%{lang|en}&q=%{text}&client=Vera"]]
-}
+"%{serverURL:s}/translate_tts?tl=%{lang|en}&q=%{text}&client=Vera"]],
+	timeout=15,
+	maxTextLength=100}
 
 OSXTTSEngine = HTTPGetTTSEngine:new{
 	title="OSX TTS Server", 
-	protocol="http-get:*:audio/mpeg:*", 
-	bitrate=64,
 	fileType="mp3",
-	serverURL="",
+	bitrate=64,
+	protocol="http-get:*:audio/mpeg:*", 
+	serverURL="http://127.0.0.1",
 	shellCmd=[[rm -- '%{destFile:s}' ; wget --output-document '%{destFile:s}' \
 --quiet \
 --header "Accept-Charset: utf-8;q=0.7,*;q=0.3" \
 --header "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" \
 --user-agent "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_8_2) AppleWebKit/537.11 (KHTML, like Gecko) Chrome/23.0.1271.64 Safari/537.11" \
-"%{serverURL:s}/tts?text=%{text}"]]
-}
+"%{serverURL:s}/tts?text=%{text}"]],
+	timeout=15,
+	maxTextLength=0}
 
 -- Legacy engines
 
@@ -391,10 +379,10 @@ function initialize(logger, warningLogger, errorLogger)
 	error = errorLogger
 
 	-- ??? FIXME Eventually, only register engines at first use.
-	registerEngine( "GOOGLE", GoogleTTSEngine:new() )
-	registerEngine( "MARY", MaryTTSEngine:new() )
-	registerEngine( "RV", ResponsiveVoiceTTSEngine:new() )
-	registerEngine( "OSX_TTS_SERVER", OSXTTSEngine:new() )
+	registerEngine( "GOOGLE", GoogleTTSEngine )
+	registerEngine( "MARY", MaryTTSEngine )
+	registerEngine( "RV", ResponsiveVoiceTTSEngine )
+	registerEngine( "OSX_TTS_SERVER", OSXTTSEngine )
 
 	-- Legacy Engines
 	engines.MICROSOFT = { title = "Microsoft TTS", protocol = "http-get:*:audio/mpeg:*", fct = MicrosoftTTS, bitrate = 32, legacy=true }
@@ -405,19 +393,22 @@ function initialize(logger, warningLogger, errorLogger)
 end
 
 -- Convert text to speech audio in named file.
-function ConvertTTS(text, destFile, language, engine, engineOptions)
+function ConvertTTS(text, destFile, language, engineId, engineOptions)
 	-- Convert text to speech using specified engine
 	language = language or defaultLanguage
-	engine = engine or defaultEngine
+	engine = engines[engineId or defaultEngine]
 	engineOptions = engineOptions or {}
-	if engines[engine].legacy then
-		return engines[engine].fct(text, destFile, language, engines[engine].bitrate)
+	debug("ConvertTTS engine "..tostring(engineId).." language "..tostring(language).." text "..tostring(text))
+	if not engine then
+		return nil, string.format("Engine not registered (%s)", tostring(engineId or defaultEngine))
+	elseif engine.legacy then
+		return engine.fct(text, destFile, language, engine.bitrate)
 	else
 		local duration,err = engine:say( text, language, destFile, engineOptions )
-		if duration then
-			return duration
+		if not duration then 
+			warning("(tts) engine " .. (engine.title or "title?") .. " error: " .. tostring(err))
+			return nil, err
 		end
-		warning("(tts) engine " .. (engine.title or "title?") .. " error: " .. tostring(err))
+		return duration
 	end
-	return nil
 end
