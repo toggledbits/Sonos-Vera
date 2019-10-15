@@ -148,7 +148,7 @@ ResponsiveVoiceTTSEngine = HTTPGetTTSEngine:new{
 	bitrate=32,
 	protocol="http-get:*:audio/mpeg:*",
 	serverURL="https://code.responsivevoice.org",
-	shellCmd=[[ rm -- '%{destFile:s}' ; curl -s -o '%{destFile:s}' \
+	shellCmd=[[ rm -- '%{destFile:s}' ; curl -s -k -o '%{destFile:s}' \
 --connect-timeout %{timeout:s|15} \
 --header "Accept-Charset: utf-8;q=0.7,*;q=0.3" \
 --header "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" \
@@ -171,7 +171,7 @@ MaryTTSEngine = HTTPGetTTSEngine:new{
 	bitrate=768, -- ??? was 256, but my Mary seems to produce higher rate; configurable?
 	protocol="http-get:*:audio/wav:*",
 	serverURL="http://127.0.0.1:59125",
-	shellCmd=[[ rm -- '%{destFile:s}' ; curl -s -o '%{destFile:s}' \
+	shellCmd=[[ rm -- '%{destFile:s}' ; curl -s -k -o '%{destFile:s}' \
 --connect-timeout %{timeout|15} \
 --header "Accept-Charset: utf-8;q=0.7,*;q=0.3" \
 --header "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" \
