@@ -1,4 +1,4 @@
---[[ 
+--[[
 	Sonos Plugin for Vera and openLuup
 	Current maintainer: rigpapa https://community.getvera.com/u/rigpapa/summary
 	Github repository: https://github.com/toggledbits/Sonos-Vera
@@ -8,7 +8,7 @@
 module( "L_Sonos1", package.seeall )
 
 PLUGIN_NAME = "Sonos"
-PLUGIN_VERSION = "1.5-19287"
+PLUGIN_VERSION = "1.5-19295"
 PLUGIN_ID = 4226
 
 local DEBUG_MODE = false	-- Don't hardcode true--use state variable config
@@ -32,7 +32,7 @@ local VERA_WEB_PORT = 80
 local UPNP_AVTRANSPORT_SERVICE = 'urn:schemas-upnp-org:service:AVTransport:1'
 local UPNP_RENDERING_CONTROL_SERVICE = 'urn:schemas-upnp-org:service:RenderingControl:1'
 local UPNP_GROUP_RENDERING_CONTROL_SERVICE = 'urn:schemas-upnp-org:service:GroupRenderingControl:1'
--- local UPNP_DEVICE_PROPERTIES_SERVICE = 'urn:schemas-upnp-org:service:DeviceProperties:1'
+local UPNP_DEVICE_PROPERTIES_SERVICE = 'urn:schemas-upnp-org:service:DeviceProperties:1'
 -- local UPNP_CONNECTION_MANAGER_SERVICE = 'urn:schemas-upnp-org:service:ConnectionManager:1'
 local UPNP_ZONEGROUPTOPOLOGY_SERVICE = 'urn:schemas-upnp-org:service:ZoneGroupTopology:1'
 local UPNP_MUSICSERVICES_SERVICE = 'urn:schemas-upnp-org:service:MusicServices:1'
@@ -170,6 +170,8 @@ local sayQueue = {}
 local cacheTTS = true
 local TTSBasePath
 local TTSBaseURL
+
+local function Q(str) return "'" .. string.gsub(tostring(str), "(')", "\\%1") .. "'" end
 
 local function log(stuff, level)
 	luup.log(string.format("%s: %s", MSG_CLASS, tostring(stuff)), (level or 50))
@@ -470,21 +472,15 @@ local function getIPFromUUID(uuid)
 	local result = nil
 	local tag = "ZoneGroup"
 	local subtag = "ZoneGroupMember"
-	local found = false
 	for _, item in groupsState:gmatch("<"..tag..'%sCoordinator="([^"]-)"[^>]->(.-)</'..tag..'>') do
-	for item2 in item:gmatch("(<"..subtag.."%s?[^>]->)") do
+		for item2 in item:gmatch("(<"..subtag.."%s?[^>]->)") do
 			local id = getAttribute(item2, subtag, "UUID")
 			if id == uuid then
 				local location = getAttribute(item2, subtag, "Location")
-				if (location ~= nil) then
-					result = location:match("http://(.-):.+")
+				if location then
+					return location:match("https?://([^:/]+)")
 				end
-				found = true
-				break
 			end
-		end
-		if (found) then
-			break
 		end
 	end
 	return result
@@ -493,6 +489,7 @@ end
 local function deviceIsOnline(device)
 	local changed = setData("SonosOnline", "1", device, false)
 	if changed then
+		log("Setting device #" .. tostring(device) .. " on line.")
 		setVariableValue(HADEVICE_SID, "LastUpdate", os.time(), device)
 	end
 	return changed
@@ -501,6 +498,7 @@ end
 local function deviceIsOffline(device)
 	local changed = setData("SonosOnline", "0", device, false)
 	if changed then
+		warning("Setting device #" .. tostring(device) .. " to off-line state.")
 		groupsState = "<ZoneGroups></ZoneGroups>"
 
 		changed = setData("TransportState", "STOPPED",  device, changed)
@@ -547,7 +545,8 @@ local function deviceIsOffline(device)
 end
 
 local function commsFailure(device, text)
-	debug("commsFailure: Device offline? status=" .. text)
+	warning("Sonos device #" .. tostring(device) .. " (" .. tostring((luup.devices[device] or {}).description) ..
+		" @" .. (luup.attr_get("ip", device or -1) or "") .. ") comm failure. " .. tostring(text or ""))
 	deviceIsOffline(device)
 end
 
@@ -787,6 +786,14 @@ local function refreshNow(device, force, refreshQueue)
 	local statusString, info, title, title2, artist, album, details, albumArt
 	local currentUri, currentUriMetaData, trackUri, trackUriMetaData, service
 
+	-- PHR???
+	local DeviceProperties = upnp.getService(uuid, UPNP_DEVICE_PROPERTIES_SERVICE)
+	if DeviceProperties then
+		status, tmp = DeviceProperties.GetZoneInfo({})
+	else
+		debug("Can't find device properties service " .. tostring(UPNP_DEVICE_PROPERTIES_SERVICE))
+	end
+
 	-- Update network and group information
 	local ZoneGroupTopology = upnp.getService(uuid, UPNP_ZONEGROUPTOPOLOGY_SERVICE)
 	if (ZoneGroupTopology ~= nil) then
@@ -973,6 +980,7 @@ local function controlAnotherZone(targetUUID, sourceDevice)
 									{ },
 									{ { "urn:schemas-upnp-org:device:ZonePlayer:1",
 										{ UPNP_MUSICSERVICES_SERVICE,
+										UPNP_DEVICE_PROPERTIES_SERVICE,
 										UPNP_ZONEGROUPTOPOLOGY_SERVICE } },
 									{ "urn:schemas-upnp-org:device:MediaRenderer:1",
 									 { UPNP_AVTRANSPORT_SERVICE,
@@ -1012,12 +1020,13 @@ local function savePlaybackContexts(device, uuids)
 	debug("savePlaybackContexts: device=" .. device .. " uuids=" .. uuids)
 
 	local cxt = {}
-
+	local devices = {}
 	for uuid in uuids:gmatch("RINCON_%x+") do
 		local device2 = controlAnotherZone(uuid, device)
 		if (device2 ~= nil) then
 			refreshNow(device2, true, false)
 			cxt[uuid] = {}
+			cxt[uuid].Device = device2
 			cxt[uuid].TransportState = dataTable[uuid].TransportState
 			cxt[uuid].TransportPlaySpeed = dataTable[uuid].TransportPlaySpeed
 			cxt[uuid].CurrentPlayMode = dataTable[uuid].CurrentPlayMode
@@ -1031,10 +1040,10 @@ local function savePlaybackContexts(device, uuids)
 			cxt[uuid].Mute = dataTable[uuid].Mute
 			cxt[uuid].Volume = dataTable[uuid].Volume
 			cxt[uuid].GroupCoordinator = dataTable[uuid].GroupCoordinator
+			table.insert( devices, device2 )
 		end
 	end
 
-	-- ??? rigpapa: devices isn't even defined in this scope or globally
 	return { context = cxt, devices = devices }
 end
 
@@ -1105,20 +1114,20 @@ local function restorePlaybackContext(device, uuid, cxt)
 							"Speed=" .. cxt.TransportPlaySpeed}})
 	end
 
-	if (device ~= 0) then
+	if (device or 0) ~= 0 then
 		refreshNow(device, false, true)
 	end
 end
 
 local function restorePlaybackContexts(device, playCxt)
 	debug("restorePlaybackContexts: device=" .. device)
-	local instanceId="0"
+	-- local instanceId="0"
 	-- local channel="Master"
-	local localUUID = UUIDs[device]
-	local device2
+	-- local localUUID = UUIDs[device]
+	-- local device2
 
 	if (playCxt == nil) then
-		--warning("Please save the context before restoring it !")
+		--warning("Please save the context before restoring it!")
 		return
 	end
 
@@ -1126,28 +1135,20 @@ local function restorePlaybackContexts(device, playCxt)
 	for uuid in playCxt.grpMembers:gmatch("RINCON_%x+") do
 		local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
 		if AVTransport ~= nil then
-			AVTransport.BecomeCoordinatorOfStandaloneGroup({InstanceID=instanceId})
+			AVTransport.BecomeCoordinatorOfStandaloneGroup({InstanceID="0"})
 		end
 	end
 
 	-- Then restore context for zone group coordinators
 	for uuid, cxt in pairs(playCxt.context) do
 		if (cxt.GroupCoordinator == uuid) then
-			device2 = 0
-			if (uuid == localUUID) then
-				device2 = device
-			end
-			restorePlaybackContext(device2, uuid, cxt)
+			restorePlaybackContext(cxt.Device or 0, uuid, cxt)
 		end
 	end
 	-- Finally restore context for other zones
 	for uuid, cxt in pairs(playCxt.context) do
 		if (cxt.GroupCoordinator ~= uuid) then
-			device2 = 0
-			if (uuid == localUUID) then
-				device2 = device
-			end
-			restorePlaybackContext(device2, uuid, cxt)
+			restorePlaybackContext(cxt.Device or 0, uuid, cxt)
 		end
 	end
 end
@@ -1157,6 +1158,8 @@ end
 --              if the inner values attained are needed in the outer scopes. This needs
 --              to be studied carefully before cleanup.
 local function decodeURI(device, coordinator, uri)
+	debug("decodeURI device "..tostring(device).." coord "..tostring(coordinator)..
+		" uri "..tostring(uri))
 	local uuid = nil
 	local track = nil
 	local uriMetaData = ""
@@ -1550,7 +1553,7 @@ local function setupTTSSettings(device)
 	local clientId = getVar("MicrosoftClientId", "", device, SONOS_SID, true)
 	local clientSecret = getVar("MicrosoftClientSecret", "", device, SONOS_SID, true)
 	local option = getVar("MicrosoftOption", "", device, SONOS_SID, true)
-	-- NOTA BENE! TTSBaseURL must resolve to TTSBasePath in runtime! That is, whatever directory 
+	-- NOTA BENE! TTSBaseURL must resolve to TTSBasePath in runtime! That is, whatever directory
 	--            TTSBasePath points to must be the directory accessed via TTSBaseURL.
 	TTSBaseURL = getVar("TTSBaseURL", "", device, SONOS_SID, true)
 	if ttsrev < 19269 or not TTSBaseURL:match("%/$") then
@@ -1680,12 +1683,13 @@ local function file_dtm( fpath )
 	return ts
 end
 
--- Fix the locations of the legacy icons. This can eventually go away.
+-- Fix the locations of the legacy icons. This can eventually go away. 7.30: Or can it? :(
 local function fixLegacyIcons()
 	if isOpenLuup then return end
 	local basePath = getInstallPath()
 	function moveIcon( p )
 		if not file_exists( basePath .. p ) then
+			-- File missing from basePath; try to locate it.
 			if file_exists( basePath .. p .. ".lzo" ) then
 				-- Decompress
 				os.execute( "pluto-lzo d " .. basePath .. p..".lzo " .. basePath .. p )
@@ -1696,18 +1700,16 @@ local function fixLegacyIcons()
 				cp( "/www/cmh/skins/default/img/device/device_states/" .. p, basePath .. p )
 			end
 		elseif file_exists( basePath .. p .. ".lzo" ) then
-			-- Both compress and uncompressed exist.
+			-- Both compressed and uncompressed exist.
 			if file_dtm( basePath .. p .. ".lzo" ) > file_dtm( basePath .. p ) then
 				-- Decompress newer file
 				os.execute( "pluto-lzo d " .. basePath .. p ..".lzo " .. basePath .. p )
 			end
 		end
 		if file_exists( basePath .. p ) then
+			-- Apparently as of 7.30, this is new designated location.
 			if not file_exists( "/www/cmh/skins/default/icons/"..p ) then
 				os.execute( "ln -sf " .. basePath .. p .." /www/cmh/skins/default/icons/" )
-			end
-			if luup.short_version and not file_exists( "/www/sonos/" .. p ) then
-				os.execute( "ln -sf " .. basePath .. p .. " /www/sonos/" )
 			end
 		end
 	end
@@ -1729,24 +1731,18 @@ local function setDeviceIcon( device, icon, model, udn )
 		iconURL = "http://" .. VERA_LOCAL_IP .. ":3480/%s"
 	else
 		-- Vera Luup
-		if luup.short_version then
-			-- 7.30+
-			iconPath = "/www/sonos/"
-			iconURL = "/sonos/%s" -- ?http" -- kludge to take advantage of bad test in UI7 7.30 interface.js--leave my url alone!!!
-		else
-			iconPath = "/www/cmh/skins/default/icons/"
-			iconURL = "../../../icons/%s"
-		end
+		iconPath = "/www/cmh/skins/default/icons/"
+		iconURL = "../../../icons/%s" -- blech. c'mon guys, really.
 	end
 	-- See if there's a local copy of the custom icon
 	local iconFile = string.format( "Sonos_%s%s", model, icon:match( "[^/]+$" ):match( "%..+$" ) )
 	local s = file_exists( installPath..iconFile )
 	if not s then
 		log( string.format("Fetching custom device icon from %s to %s%s", icon, installPath, iconFile ) )
-		os.execute( "curl -s -o '"..installPath..iconFile.."' '"..icon.."'" )
+		os.execute( "curl -s -o " .. Q( installPath..iconFile ) .. " " .. Q( icon ) )
 	end
 	if installPath ~= iconPath then
-		os.execute( "ln -sf '"..installPath..iconFile.."' '"..iconPath.."'" )
+		os.execute( "ln -sf " .. Q(installPath..iconFile) .. " " .. Q(iconPath) )
 	end
 	-- See if we've already created a custom static JSON for this UDN or model.
 	local staticJSONFile
@@ -1762,14 +1758,14 @@ local function setDeviceIcon( device, icon, model, udn )
 	if not staticJSONFile then
 		staticJSONFile = string.format( "D_Sonos1_%s.json", tostring( model or "GENERIC" ):upper():gsub( "[^A-Z0-9_]", "_" ) )
 	end
-	s = file_exists_LZO( installPath .. staticJSONFile )
-	if icorev < 19269 or not s then
-		-- No. Create model-specific version
+	local ICONREV = 19295
+	if icorev < ICONREV or not file_exists_LZO( installPath .. staticJSONFile ) then
+		-- Create model-specific version of static JSON
 		log("Creating static JSON in "..staticJSONFile)
 		local f
 		s,f = file_exists( installPath.."D_Sonos1.json", true )
 		if not s then
-			os.execute( 'pluto-lzo d '..installPath..'D_Sonos1.json.lzo /tmp/D_Sonos1.json.tmp' )
+			os.execute( 'pluto-lzo d ' .. Q(installPath .. 'D_Sonos1.json.lzo') .. ' /tmp/D_Sonos1.json.tmp' )
 			f = io.open( '/tmp/D_Sonos1.json.tmp', 'r' )
 			if not f then
 				warning("Failed to open /tmp/D_Sonos1.json.tmp")
@@ -1789,7 +1785,7 @@ local function setDeviceIcon( device, icon, model, udn )
 			d.default_icon = ist
 			d.flashicon = nil
 			d.state_icons = nil
-			d._comment = "AUTOMATICALLY GENERATED -- DO NOT MODIFY THIS FILE"
+			d._comment = { "AUTOMATICALLY GENERATED -- DO NOT MODIFY THIS FILE (rev " .. ICONREV .. ")" }
 			-- Save custom.
 			f = io.open( installPath .. staticJSONFile, "w" )
 			if not f then
@@ -1804,15 +1800,15 @@ local function setDeviceIcon( device, icon, model, udn )
 	-- Is this device using the right static JSON file?
 	local cj = luup.attr_get( 'device_json', device ) or ""
 	if not staticJSONFile then staticJSONFile = "D_Sonos1.json" end -- for safety
-	if cj ~= staticJSONFile then
+	if cj ~= staticJSONFile or icorev < ICONREV then
 		-- No. Switch it out.
 		warning(string.format("device_json currently %s, swapping to %s (and reloading)", cj, staticJSONFile ))
 		luup.attr_set( 'device_json', staticJSONFile, device )
-		-- rigpapa: by using a delay here, we increase the changes that changes
-		-- for multiple players can be captured in one reload, rather than one per.
+		-- rigpapa: by using a delay here, we increase the chances that changes for multiple
+		-- players can be captured in one reload, rather than one per.
 		luup.call_delay( 'SonosReload', 15, "" )
 	end
-	setVar( SONOS_SID, "_icorev", 19269, device )
+	setVar( SONOS_SID, "_icorev", ICONREV, device )
 end
 
 setup = function(device, init)
@@ -1858,6 +1854,7 @@ setup = function(device, init)
 										{ "UDN", "roomName", "modelName", "modelNumber" },
 										{ { "urn:schemas-upnp-org:device:ZonePlayer:1",
 											{ UPNP_MUSICSERVICES_SERVICE,
+											UPNP_DEVICE_PROPERTIES_SERVICE,
 											UPNP_ZONEGROUPTOPOLOGY_SERVICE } },
 										{ "urn:schemas-upnp-org:device:MediaRenderer:1",
 											{ UPNP_AVTRANSPORT_SERVICE,
@@ -2275,7 +2272,7 @@ function startup( lul_device )
 
 	local enabled = initData( "Enabled", "1", lul_device )
 	if "0" == enabled then
-		warning("#"..lul_device.." disabled via state variable config; start aborting.")
+		warning(luup.devices[lul_device].description.." (#"..lul_device..") disabled by configuration; startup aborting.")
 		deviceIsOffline( lul_device )
 		return true, "Offline", MSG_CLASS
 	end
@@ -2359,8 +2356,6 @@ local TTS_METADATA = [[<DIDL-Lite xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-
 	</item>
 </DIDL-Lite>]]
 
-local function Q(str) return "'" .. string.gsub(tostring(str), "(')", "\\%1") .. "'" end
-
 endSayAlert = false-- Forward declaration, non-local
 
 local function sayOrAlert(device, parameters, saveAndRestore)
@@ -2401,8 +2396,10 @@ local function sayOrAlert(device, parameters, saveAndRestore)
 		controlByGroup = true
 	else
 		for id in devices:gmatch("%d+") do
-			local nid = tonumber(id)
-			if nid ~= device then
+			local nid = tonumber(id) or -1
+			if not luup.devices[nid] then
+				warning("Say/Alert action GroupDevices device "..tostring(id).." does not exist (ignored)")
+			elseif nid ~= device then
 				local uuid = UUIDs[nid]
 				if (uuid == nil) then
 					uuid = luup.variable_get(UPNP_DEVICE_PROPERTIES_SID, "SonosID", nid)
@@ -2433,6 +2430,8 @@ local function sayOrAlert(device, parameters, saveAndRestore)
 						uuidListe = uuidListe .. ","
 					end
 					uuidListe = uuidListe .. uuid
+				else
+					warning("Say/Alert zone name "..tostring(zone).." not found (ignored)")
 				end
 			end
 		end
@@ -2732,7 +2731,7 @@ function actionSonosEnqueueURI( lul_device, lul_settings )
 end
 
 function actionSonosAlert( lul_device, lul_settings )
-	log("Alert action on device " .. tostring(lul_device) .. " URI " .. tostring(lul_settings.URI) .. 
+	log("Alert action on device " .. tostring(lul_device) .. " URI " .. tostring(lul_settings.URI) ..
 		" duration " .. tostring(lul_settings.Duration))
 	local duration = tonumber(defaultValue(lul_settings, "Duration", "0")) or 0
 	if duration > 0 then
