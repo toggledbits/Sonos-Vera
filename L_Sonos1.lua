@@ -2186,7 +2186,7 @@ local function setReadQueueContent(device, enable)
 end
 
 function SonosReload()
-	log( 'Requesting luup reload...' )
+	warning( 'Requesting luup reload...' )
 	luup.reload()
 end
 
