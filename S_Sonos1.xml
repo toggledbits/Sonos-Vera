@@ -69,6 +69,10 @@
 			<dataType>string</dataType>
 		</stateVariable>
 		<stateVariable sendEvents="no">
+			<name>A_ARG_TYPE_boolean</name>
+			<dataType>boolean</dataType>
+		</stateVariable>
+		<stateVariable sendEvents="no">
 			<name>A_ARG_TYPE_LastChange</name>
 			<dataType>string</dataType>
 		</stateVariable>
@@ -88,6 +92,7 @@
 				<allowedValue>OSX_TTS_SERVER</allowedValue>
 				<allowedValue>MICROSOFT</allowedValue>
 				<allowedValue>MARY</allowedValue>
+				<allowedValue>RV</allowedValue>
 			</allowedValueList>
 		</stateVariable>
 		<stateVariable sendEvents="yes">
@@ -221,6 +226,11 @@
 					<name>GroupZones</name>
 					<direction>in</direction>
 					<relatedStateVariable>A_ARG_TYPE_Zones</relatedStateVariable>
+				</argument>
+				<argument>
+					<name>Chime</name>
+					<direction>in</direction>
+					<relatedStateVariable>A_ARG_TYPE_boolean</relatedStateVariable>
 				</argument>
 			</argumentList>
 		</action>
