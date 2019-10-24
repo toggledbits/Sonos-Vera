@@ -7,78 +7,15 @@
 	"imgIconTurnable": "",
 	"imgIconMin": "",
 	"imgIconMax": "",
-	"state_icons": [
-		"Sonos_0.png",
-		"Sonos_25.png",
-		"Sonos_50.png",
-		"Sonos_75.png",
-		"Sonos_100.png",
-		"Sonos_125.png",
-		"Sonos_150.png",
-		{
-			"img": "../../../icons/Sonos_0.png",
+	"state_icons": [{
+			"img": "../../../icons/Sonos.png",
 			"conditions": [{
 				"service": "urn:micasaverde-com:serviceId:Sonos1",
-				"variable": "SonosModel",
-				"operator": "==",
-				"value": 0
+				"variable": "SonosOnline",
+				"operator": "!=",
+				"value": "1"
 			}]
-		},
-		{
-			"img": "../../../icons/Sonos_25.png",
-			"conditions": [{
-				"service": "urn:micasaverde-com:serviceId:Sonos1",
-				"variable": "SonosModel",
-				"operator": "==",
-				"value": 1
-			}]
-		},
-		{
-			"img": "../../../icons/Sonos_50.png",
-			"conditions": [{
-				"service": "urn:micasaverde-com:serviceId:Sonos1",
-				"variable": "SonosModel",
-				"operator": "==",
-				"value": 2
-			}]
-		},
-		{
-			"img": "../../../icons/Sonos_75.png",
-			"conditions": [{
-				"service": "urn:micasaverde-com:serviceId:Sonos1",
-				"variable": "SonosModel",
-				"operator": "==",
-				"value": 3
-			}]
-		},
-		{
-			"img": "../../../icons/Sonos_100.png",
-			"conditions": [{
-				"service": "urn:micasaverde-com:serviceId:Sonos1",
-				"variable": "SonosModel",
-				"operator": "==",
-				"value": 4
-			}]
-		},
-		{
-			"img": "../../../icons/Sonos_125.png",
-			"conditions": [{
-				"service": "urn:micasaverde-com:serviceId:Sonos1",
-				"variable": "SonosModel",
-				"operator": "==",
-				"value": 5
-			}]
-		},
-		{
-			"img": "../../../icons/Sonos_150.png",
-			"conditions": [{
-				"service": "urn:micasaverde-com:serviceId:Sonos1",
-				"variable": "SonosModel",
-				"operator": "==",
-				"value": 6
-			}]
-		}
-	],
+	}],
 	"halloIconsDir": "pics/hallo",
 	"x": "3",
 	"y": "4",
