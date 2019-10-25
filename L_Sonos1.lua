@@ -69,6 +69,8 @@ local iconURL
 local HADEVICE_SID = "urn:micasaverde-com:serviceId:HaDevice1"
 local SONOS_SID = "urn:micasaverde-com:serviceId:Sonos1"
 local SONOS_DEVICE_TYPE = "urn:schemas-micasaverde-com:device:Sonos:1"
+local SONOS_SYS_SID = "urn:toggledbits-com:serviceId:SonosSystem1"
+local SONOS_SYS_DEVICE_TYPE = "urn:schemas-toggledbits-com:device:SonosSystem:1"
 
 local EventSubscriptions = {
 	{ service = UPNP_AVTRANSPORT_SERVICE,
@@ -104,7 +106,8 @@ local sayPlayback = {}
 local zoneInfo = false
 
 -- Table of Sonos UUIDs indexed by Vera devices
-local UUIDs = {}
+local UUIDs = {} -- key is device, value is UUID
+local Zones = {} -- key is UUID, value is device
 
 local groupsState = ""
 
@@ -140,7 +143,10 @@ local variableSidTable = {
 	RelativeTimePosition = UPNP_AVTRANSPORT_SID,
 
 	Mute = UPNP_RENDERING_CONTROL_SID,
-	Volume = UPNP_RENDERING_CONTROL_SID,
+	Bass = UPNP_RENDERING_CONTROL_SID,
+	Treble = UPNP_RENDERING_CONTROL_SID,
+	Loudness = UPNP_RENDERING_CONTROL_SID,
+	OutputFixed = UPNP_RENDERING_CONTROL_SID,
 
 	SavedQueues = UPNP_MR_CONTENT_DIRECTORY_SID,
 	FavoritesRadios = UPNP_MR_CONTENT_DIRECTORY_SID,
@@ -252,6 +258,18 @@ local function map( sourceTable, func, destMap )
 		destMap[v] = k
 	end
 	return destMap
+end
+
+local findDeviceByUUID( zoneUUID )
+	if Zones[zoneUUID] then return Zones[zoneUUID] end
+	for k,v in pairs(luup.devices) do
+		if v.device_type == SONOS_DEVICE_TYPE and getVar( "SonosID", "", k, SONOS_SID ) == zoneUUID then
+			UUIDs[k] = zoneUUID
+			Zones[zoneUUID] = k
+			return k
+		end
+	end
+	return nil
 end
 
 -- Initialize a variable if it does not already exist.
@@ -367,7 +385,7 @@ local function setData(name, value, deviceId, default)
 	end
 
 	if (deviceId == 0 or variableSidTable[name] == nil) then
-		error(string.format("setData() can't set %s on %d no SID!", tostring(name), deviceId))
+		debug(string.format("setData() can't set %s on %d no SID!", tostring(name), deviceId))
 		return (default or false)
 	end
 
@@ -567,7 +585,13 @@ end
 
 local function getZoneCoordinator( zoneUUID )
 	local gr = getZoneGroup( zoneUUID ) or {}
-	return (gr or {}).Coordinator, gr
+	return (gr or {}).Coordinator or zoneUUID, gr
+end
+
+-- Return true if zone is group coordinator
+local function isGroupCoordinator( zoneUUID )
+	local gr = getZoneGroup( zoneUUID ) or {}
+	return zoneUUID == gr.Coordinator
 end
 
 -- Return group info for the group of which `uuid` is a member
@@ -942,6 +966,38 @@ local function refreshNow(device, force, refreshQueue)
 			return ""
 		end
 		changed = setData("Volume", upnp.extractElement("CurrentVolume", tmp, ""), device, changed)
+
+		-- Get Bass
+		status, tmp = Rendering.GetBass({OrderedArgs={"InstanceID=0", "Channel=Master"}})
+		if status ~= true then
+			commsFailure(device, tmp)
+			return ""
+		end
+		changed = setData("Bass", upnp.extractElement("CurrentBass", tmp, ""), device, changed)
+
+		-- Get Treble
+		status, tmp = Rendering.GetTreble({OrderedArgs={"InstanceID=0", "Channel=Master"}})
+		if status ~= true then
+			commsFailure(device, tmp)
+			return ""
+		end
+		changed = setData("Treble", upnp.extractElement("CurrentTreble", tmp, ""), device, changed)
+
+		-- Get Loudness
+		status, tmp = Rendering.GetLoudness({OrderedArgs={"InstanceID=0", "Channel=Master"}})
+		if status ~= true then
+			commsFailure(device, tmp)
+			return ""
+		end
+		changed = setData("Loudness", upnp.extractElement("CurrentLoudness", tmp, ""), device, changed)
+
+		-- Get OutputFixed
+		status, tmp = Rendering.GetOutputFixed({OrderedArgs={"InstanceID=0"}})
+		if status ~= true then
+			commsFailure(device, tmp)
+			return ""
+		end
+		changed = setData("OutputFixed", upnp.extractElement("CurrentFixed", tmp, ""), device, changed)
 	end
 
 	-- Sonos queue
@@ -1016,41 +1072,21 @@ local function refreshMuteNow(device)
 	end
 end
 
-local function controlAnotherZone(targetUUID, sourceDevice)
-	debug("controlAnotherZone targetUUID=" .. targetUUID .. " sourceDevice=" .. sourceDevice)
-	local device = nil
-	local sourceUUID = UUIDs[sourceDevice or ""]
-	if targetUUID == sourceUUID then
-		debug("controlAnotherZone() self-control")
-		device = sourceDevice
-	else
+local function controlAnotherZone(targetUUID, sourceUUID)
+	debug("controlAnotherZone targetUUID=" .. targetUUID .. " sourceUUID=" .. sourceUUID)
+	local device = findDeviceByUUID( targetUUID )
+	if not device then
 		local targetIP = getIPFromUUID(targetUUID)
 		debug("controlAnotherZone targetIP="..tostring(targetIP))
 		if targetIP then
-			-- Search known devices
-			for k,v in pairs( UUIDs ) do
-				if v == targetUUID then
-					device = k
-					break
-				end
-			end
-			if not device then
-				-- Search all devices
-				for nd,v in pairs( luup.devices ) do
-					if v.device_type == SONOS_DEVICE_TYPE and luup.attr_get( 'ip', nd ) == targetIP then
-						-- Found!
-						device = nd
-						break
-					end
-				end
-			end
-			device = device or 0
+			device = 0
 			debug("controlAnotherZone() device for " .. targetIP .. " is " .. device)
+			ip[device] = targetIP -- monkey motion
 			UUIDs[device] = targetUUID
-			ip[device] = targetIP
+			Zones[targetUUID] = device
 			metaDataKeys[targetUUID] = metaDataKeys[sourceUUID]
 			dataTable[targetUUID] = {}
-			if (ip[targetUUID] == nil or ip[targetUUID] ~= targetIP) then
+			if ip[targetUUID] ~= targetIP then
 				debug("controlAnotherZone resetting UPnP services for "..tostring(targetIP))
 				local descrURL = string.format(descriptionURL, targetIP, port)
 				upnp.resetServices(targetUUID)
@@ -1067,41 +1103,41 @@ local function controlAnotherZone(targetUUID, sourceDevice)
 										UPNP_GROUP_RENDERING_CONTROL_SERVICE } },
 									{ "urn:schemas-upnp-org:device:MediaServer:1",
 										{ UPNP_MR_CONTENT_DIRECTORY_SERVICE } }})
-				if (status == true) then
+				if status then
 					ip[targetUUID] = targetIP
-					debug("controlAnotherZone OK, that worked... what about setting device???")
+					debug("controlAnotherZone() set up services for "..targetUUID.." at "..targetIP)
 				else
+					debug("controlAnotherZone() UNABLE TO LOCATE "..targetUUID)
+					Zones[targetUUID] = nil
 					ip[targetUUID] = nil
-					device = nil
+					ip[device] = nil
+					UUIDs[device] = nil
+					dataTable[targetUUID] = nil
+					metaDataKeys[targetUUID] = nil
+					return nil
 				end
 			end
+		else
+			warning("Attempt to control "..targetUUID.." fails; zone not found in system")
 		end
 	end
-	debug("controlAnotherZone result=" .. tostring(device))
-	return device
+	return targetUUID
 end
 
-local function controlByCoordinator(device)
-	local resDevice = nil
-	local resUUID
-	local coordinator = getZoneCoordinator( UUIDs[device] ) or ""
-	if coordinator then
-		resDevice = controlAnotherZone(coordinator, device)
-		resUUID = coordinator
+local function controlByCoordinator(uuid)
+	local gr = getZoneGroup( uuid )
+	if gr then
+		uuid = gr.Coordinator or uuid
 	end
-	if not resDevice then
-		resDevice = device
-		resUUID = UUIDs[device]
-	end
-	return resDevice, resUUID
+	return findDeviceByUUID( uuid ) or 0, uuid
 end
 
 -- ??? rigpapa: there is brokenness in the handling of the title variable throughout,
 --              with interior local redeclarations shadowing the exterior declaration, it's unclear
 --              if the inner values attained are needed in the outer scopes. This needs
 --              to be studied carefully before cleanup.
-local function decodeURI(device, coordinator, uri)
-	debug("decodeURI device "..tostring(device).." coord "..tostring(coordinator)..
+local function decodeURI(localUUID, coordinator, uri)
+	debug("decodeURI zone "..tostring(localUUID).." coord "..tostring(coordinator)..
 		" uri "..tostring(uri))
 	local uuid = nil
 	local track = nil
@@ -1109,7 +1145,6 @@ local function decodeURI(device, coordinator, uri)
 	local serviceId
 	local title = nil
 	local controlByGroup = true
-	local localUUID = UUIDs[device]
 	local requireQueueing = false
 
 	if uri:sub(1, 2) == "Q:" then
@@ -1248,28 +1283,28 @@ local function decodeURI(device, coordinator, uri)
 end
 
 local groupDevices -- forward declaration
-local function playURI(device, instanceId, uri, speed, volume, uuids, sameVolumeForAll, enqueueMode, newGroup, controlByGroup)
-	log("Playing "..tostring(uri).." on "..tostring(device).."/"..tostring(instanceId))
+local function playURI(zoneUUID, instanceId, uri, speed, volume, uuids, sameVolumeForAll, enqueueMode, newGroup, controlByGroup)
+	log("playURI() "..tostring(uri).." on "..tostring(zoneUUID).."/"..tostring(instanceId))
 	uri = url.unescape(uri)
 
-	local uriMetaData, track, controlByGroup2, requireQueueing, uuid, status, tmp, position
+	local uriMetaData, track, controlByGroup2, requireQueueing, status, tmp, position
 	local channel = "Master"
 
 	if newGroup then
 		controlByGroup = false
 	end
 
+	local uuid = zoneUUID
+	local coordinator = getZoneCoordinator( zoneUUID )
 	if controlByGroup then
-		_, uuid = controlByCoordinator(device)
-	else
-		uuid = UUIDs[device]
+		uuid = coordinator
 	end
 
-	uri, uriMetaData, track, controlByGroup2, requireQueueing = decodeURI(device, uuid, uri)
+	uri, uriMetaData, track, controlByGroup2, requireQueueing = decodeURI(uuid, coordinator, uri)
 	if (controlByGroup and not controlByGroup2) then
 		-- ??? rigpapa ...and then what are the controlByGroup variables used for???
 		controlByGroup = false -- luacheck: ignore 311
-		uuid = UUIDs[device]
+		uuid = zoneUUID
 	end
 
 	if requireQueueing and not enqueueMode then
@@ -1343,7 +1378,7 @@ local function playURI(device, instanceId, uri, speed, volume, uuids, sameVolume
 
 			-- If uuids is an array containing other than just the controlling device, group them.
 			if uuids and not (#uuids == 1 and uuids[1] == uuid) then
-				groupDevices(device, instanceId, uuids, sameVolumeForAll and volume or nil)
+				groupDevices(uuid, instanceId, uuids, sameVolumeForAll and volume or nil)
 			end
 		end
 
@@ -1361,7 +1396,8 @@ local function playURI(device, instanceId, uri, speed, volume, uuids, sameVolume
 							 "Target=" .. track}})
 		end
 
-		if tonumber(volume or "") and Rendering then
+		-- Don't attempt to set volume on fixed output volume zone.
+		if tonumber(volume or "") and (dataTable[uuid].OutputFixed or 0) == 0 and Rendering then
 			debug("playURI() setting volume "..tostring(volume))
 			Rendering.SetVolume(
 				{OrderedArgs={"InstanceID=" .. instanceId,
@@ -1379,15 +1415,11 @@ local function playURI(device, instanceId, uri, speed, volume, uuids, sameVolume
 	end
 end
 
-groupDevices = function(device, instanceId, uuids, volume)
-	debug("groupDevices() args="..dump({device=device,instanceId=instanceId,uuids=uuids,volume=volume}))
-	local localUUID = UUIDs[device]
+groupDevices = function(coordinator, instanceId, uuids, volume)
+	debug("groupDevices() args="..dump({coordinator=coordinator,instanceId=instanceId,uuids=uuids,volume=volume}))
 	for _,uuid in ipairs( uuids or {} ) do
-		if uuid ~= localUUID then
-			local device2 = controlAnotherZone(uuid, device)
-			if device2 then
-				playURI(device2, instanceId, "x-rincon:" .. UUIDs[device], "1", volume, nil, false, nil, false, false)
-			end
+		if uuid ~= coordinator then
+			playURI(uuid, instanceId, "x-rincon:" .. coordinator, "1", volume, nil, false, nil, false, false)
 		end
 	end
 end
@@ -1397,7 +1429,7 @@ local function savePlaybackContexts(device, uuids)
 	local cxt = {}
 	local devices = {}
 	for _,uuid in ipairs( uuids ) do
-		local device2 = controlAnotherZone(uuid, device)
+		local device2 = controlAnotherZone(uuid, UUIDs[device])
 		if device2 then
 			refreshNow(device2, true, false) -- ??? PHR: ineffective, the operation is basically asynchronous, so this is a race condition that probably always loses
 			cxt[uuid] = {}
@@ -1522,27 +1554,26 @@ local function restorePlaybackContexts(device, playCxt)
 end
 
 -- The device is added to the same group as zone (UUID or name)
-local function joinGroup(device, zone)
-	local localUUID = UUIDs[device]
+local function joinGroup(localUUID, zone)
 	local uuid = zone:match("RINCON_%x+") and zone or getUUIDFromZoneName(zone)
-	if uuid ~= nil then
+	if uuid ~= nil and zoneInfo.zones[uuid] then
 		local groupInfo = zoneInfo.groups[zoneInfo.zones[uuid].Group]
 		for _,member in ipairs( (groupInfo or {}).members or {} ) do
 			if member.UUID == localUUID then return end -- already in group
 		end
-		playURI(device, "0", "x-rincon:" .. groupInfo.Coordinator, "1", nil, nil, false, nil, false, false)
+		playURI(localUUID, "0", "x-rincon:" .. groupInfo.Coordinator, "1", nil, nil, false, nil, false, false)
 	end
 end
 
-local function leaveGroup(device)
-	local AVTransport = upnp.getService(UUIDs[device], UPNP_AVTRANSPORT_SERVICE)
+local function leaveGroup(localUUID)
+	local AVTransport = upnp.getService(localUUID, UPNP_AVTRANSPORT_SERVICE)
 	if AVTransport ~= nil then
 		AVTransport.BecomeCoordinatorOfStandaloneGroup({InstanceID="0"})
 	end
 end
 
-local function updateGroupMembers(device, members)
-	local prevMembers, coordinator = getGroupInfos(UUIDs[device])
+local function updateGroupMembers(gc, members)
+	local prevMembers, coordinator = getGroupInfos(gc)
 	local targets = {}
 	if members:upper() == "ALL" then
 		_, targets = getAllUUIDs()
@@ -1563,18 +1594,14 @@ local function updateGroupMembers(device, members)
 	-- Make any new members part of the group
 	for uuid in pairs( targets ) do
 		if not prevMembers:find(uuid) then
-			local device2 = controlAnotherZone(uuid, device)
-			if device2 then
-				playURI(device2, "0", "x-rincon:" .. coordinator, "1", nil, nil, false, nil, false, false)
-			end
+			playURI(uuid, "0", "x-rincon:" .. coordinator, "1", nil, nil, false, nil, false, false)
 		end
 	end
 
 	-- Remove previous members that are no longer in group
 	for uuid in prevMembers:gmatch("RINCON_%x+") do
 		if not targets[uuid] then
-			local device2 = controlAnotherZone(uuid, device)
-			if device2 then
+			if controlAnotherZone(uuid, gc) then
 				local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
 				if AVTransport then
 					AVTransport.BecomeCoordinatorOfStandaloneGroup({InstanceID="0"})
@@ -1587,7 +1614,7 @@ end
 local function pauseAll(device)
 	local uuids = getAllUUIDs()
 	for uuid in uuids:gmatch("RINCON_%x+") do
-		local device2 = controlAnotherZone(uuid, device)
+		local device2 = controlAnotherZone(uuid, UUIDs[device])
 		if device2 then
 			local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
 			if AVTransport then
@@ -1955,6 +1982,7 @@ setup = function(device, init)
 
 	local uuid = values.UDN:match("uuid:(.+)") or ""
 	UUIDs[device] = uuid
+	Zones[uuid] = device
 	ip[uuid] = ip[device]
 	if (dataTable[uuid] == nil) then
 		dataTable[uuid] = {}
@@ -2123,6 +2151,7 @@ local function handleAVTransportChange(device, uuid, event)
 				attrTable[attr] = value
 			end
 			if (attrTable.val ~= nil) then
+log("handleAVTransportChange() "..tostring(token).." = "..tostring(attrTable.val))
 				changed = setData(token, upnp.decode(attrTable.val), device, changed)
 			end
 		end
@@ -2477,7 +2506,7 @@ local function sayOrAlert(device, parameters, saveAndRestore)
 		if gr.Coordinator ~= localUUID then
 			debug("sayOrAlert() CURRENT zone group, switching to coordinator "..gr.Coordinator)
 			localUUID = gr.Coordinator
-			device = controlAnotherZone( localUUID, device )
+			device = controlAnotherZone( localUUID, UUIDs[device] )
 			if (device or 0) == 0 then
 				warning("(tts/alert) cannot control "..localUUID..", not found or not ready")
 				return
@@ -2552,7 +2581,7 @@ local function sayOrAlert(device, parameters, saveAndRestore)
 		end
 	end
 
-	playURI(device, instanceId, uri, "1", volume, newGroup and keys(targets) or nil, sameVolume, nil, newGroup, true)
+	playURI(localUUID, instanceId, uri, "1", volume, newGroup and keys(targets) or nil, sameVolume, nil, newGroup, true)
 
 	if saveAndRestore and (duration or 0) > 0 then
 		debug("sayOrAlert() delaying for duration "..duration)
@@ -2619,9 +2648,8 @@ endSayAlert = function(device)
 				if cxt.GroupCoordinator ~= uuid then
 					debug("endSayAlert() restoring member "..uuid.." to "..cxt.GroupCoordinator)
 					-- Add this uuid to its prior GroupCoordinator
-					local device2 = controlAnotherZone( uuid, device )
-					if device2 then
-						playURI(device2, "0", "x-rincon:" .. cxt.GroupCoordinator, "1", nil, nil, false, nil, false, false)
+					if controlAnotherZone( uuid, UUIDs[device] ) then
+						playURI(uuid, "0", "x-rincon:" .. cxt.GroupCoordinator, "1", nil, nil, false, nil, false, false)
 					end
 				else
 					debug("endSayAlert() "..uuid.." is its own group coordinator")
@@ -2801,7 +2829,7 @@ function actionSonosSetURIToPlay( lul_device, lul_settings )
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
 	local uri = defaultValue(lul_settings, "URIToPlay", "")
 
-	playURI(lul_device, instanceId, uri, nil, nil, nil, false, nil, false, true)
+	playURI(UUIDs[lul_device], instanceId, uri, nil, nil, nil, false, nil, false, true)
 
 	refreshNow(lul_device, false, true)
 
@@ -2822,7 +2850,7 @@ function actionSonosPlayURI( lul_device, lul_settings )
 	local volume = defaultValue(lul_settings, "Volume", nil)
 	local speed = defaultValue(lul_settings, "Speed", "1")
 
-	playURI(lul_device, instanceId, uri, speed, volume, nil, false, nil, false, true)
+	playURI(UUIDs[lul_device], instanceId, uri, speed, volume, nil, false, nil, false, true)
 
 	refreshNow(lul_device, false, true)
 
@@ -2842,7 +2870,7 @@ function actionSonosEnqueueURI( lul_device, lul_settings )
 	local uri = defaultValue(lul_settings, "URIToEnqueue", "")
 	local enqueueMode = defaultValue(lul_settings, "EnqueueMode", "ENQUEUE_AND_PLAY")
 
-	playURI(lul_device, instanceId, uri, "1", nil, nil, false, enqueueMode, false, true)
+	playURI(UUIDs[lul_device], instanceId, uri, "1", nil, nil, false, enqueueMode, false, true)
 
 	refreshNow(lul_device, false, true)
 end
@@ -2865,16 +2893,16 @@ end
 
 function actionSonosJoinGroup( lul_device, lul_settings )
 	local zone = defaultValue(lul_settings, "Zone", "")
-	joinGroup(lul_device, zone)
+	joinGroup(UUIDs[lul_device], zone)
 end
 
 function actionSonoLeaveGroup( lul_device, lul_settings ) -- luacheck: ignore 212
-	leaveGroup(lul_device)
+	leaveGroup(UUIDs[lul_device])
 end
 
 function actionSonosUpdateGroupMembers( lul_device, lul_settings )
 	local zones = url.unescape(defaultValue(lul_settings, "Zones", ""))
-	updateGroupMembers(lul_device, zones)
+	updateGroupMembers(UUIDs[lul_device], zones)
 end
 
 function actionSonosSavePlaybackContext( lul_device, lul_settings )
@@ -3119,7 +3147,7 @@ end
 --]]
 
 function actionMediaNavigationSkipDown( lul_device, lul_settings )
-	local device, uuid = controlByCoordinator(lul_device)
+	local device, uuid = controlByCoordinator(UUIDs[lul_device])
 	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
 	if (AVTransport == nil) then
 		return
@@ -3141,7 +3169,7 @@ function actionMediaNavigationSkipDown( lul_device, lul_settings )
 end
 
 function actionMediaNavigationSkipUp( lul_device, lul_settings )
-	local device, uuid = controlByCoordinator(lul_device)
+	local device, uuid = controlByCoordinator(UUIDs[lul_device])
 	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
 	if (AVTransport == nil) then
 		return
@@ -3163,7 +3191,7 @@ end
 --]]
 
 function actionAVTransportPlayMedia( lul_device, lul_settings )
-	local device, uuid = controlByCoordinator(lul_device)
+	local device, uuid = controlByCoordinator(UUIDs[lul_device])
 	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
 	if (AVTransport == nil) then
 		return
@@ -3188,7 +3216,7 @@ function actionAVTransportPlayMedia( lul_device, lul_settings )
 end
 
 function actionAVTransportSeek( lul_device, lul_settings )
-	local _, uuid = controlByCoordinator(lul_device)
+	local _, uuid = controlByCoordinator(UUIDs[lul_device])
 	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
 	if (AVTransport == nil) then
 		return
@@ -3205,7 +3233,7 @@ function actionAVTransportSeek( lul_device, lul_settings )
 end
 
 function actionAVTransportPause( lul_device, lul_settings )
-	local device, uuid = controlByCoordinator(lul_device)
+	local device, uuid = controlByCoordinator(UUIDs[lul_device])
 	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
 	if (AVTransport == nil) then
 		return
@@ -3227,7 +3255,7 @@ function actionAVTransportPause( lul_device, lul_settings )
 end
 
 function actionAVTransportStop( lul_device, lul_settings )
-	local device, uuid = controlByCoordinator(lul_device)
+	local device, uuid = controlByCoordinator(UUIDs[lul_device])
 	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
 	if (AVTransport == nil) then
 		return
@@ -3243,7 +3271,7 @@ function actionAVTransportStop( lul_device, lul_settings )
 end
 
 function actionAVTransportNext( lul_device, lul_settings )
-	local _, uuid = controlByCoordinator(lul_device)
+	local _, uuid = controlByCoordinator(UUIDs[lul_device])
 	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
 	if (AVTransport == nil) then
 		return
@@ -3255,7 +3283,7 @@ function actionAVTransportNext( lul_device, lul_settings )
 end
 
 function actionAVTransportPrevious( lul_device, lul_settings )
-	local _, uuid = controlByCoordinator(lul_device)
+	local _, uuid = controlByCoordinator(UUIDs[lul_device])
 	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
 	if (AVTransport == nil) then
 		return
@@ -3267,7 +3295,7 @@ function actionAVTransportPrevious( lul_device, lul_settings )
 end
 
 function actionAVTransportNextSection( lul_device, lul_settings )
-	local _, uuid = controlByCoordinator(lul_device)
+	local _, uuid = controlByCoordinator(UUIDs[lul_device])
 	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
 	if (AVTransport == nil) then
 		return
@@ -3279,7 +3307,7 @@ function actionAVTransportNextSection( lul_device, lul_settings )
 end
 
 function actionAVTransportPreviousSection( lul_device, lul_settings )
-	local _, uuid = controlByCoordinator(lul_device)
+	local _, uuid = controlByCoordinator(UUIDs[lul_device])
 	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
 	if (AVTransport == nil) then
 		return
@@ -3291,7 +3319,7 @@ function actionAVTransportPreviousSection( lul_device, lul_settings )
 end
 
 function actionAVTransportNextProgrammedRadioTracks( lul_device, lul_settings )
-	local _, uuid = controlByCoordinator(lul_device)
+	local _, uuid = controlByCoordinator(UUIDs[lul_device])
 	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
 	if (AVTransport == nil) then
 		return
@@ -3303,7 +3331,7 @@ function actionAVTransportNextProgrammedRadioTracks( lul_device, lul_settings )
 end
 
 function actionAVTransportGetPositionInfo( lul_device, lul_settings )
-	local device, uuid = controlByCoordinator(lul_device)
+	local device, uuid = controlByCoordinator(UUIDs[lul_device])
 	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
 	if (AVTransport == nil) then
 		return
@@ -3316,7 +3344,7 @@ function actionAVTransportGetPositionInfo( lul_device, lul_settings )
 end
 
 function actionAVTransportSetPlayMode( lul_device, lul_settings )
-	local _, uuid = controlByCoordinator(lul_device)
+	local _, uuid = controlByCoordinator(UUIDs[lul_device])
 	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
 	if (AVTransport == nil) then
 		return
@@ -3364,7 +3392,7 @@ function actionAVTransportSetNextURI( lul_device, lul_settings )
 end
 
 function actionAVTransportAddMultipleURIs( lul_device, lul_settings )
-	local _, uuid = controlByCoordinator(lul_device)
+	local _, uuid = controlByCoordinator(UUIDs[lul_device])
 	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
 	if (AVTransport == nil) then
 		return
@@ -3393,7 +3421,7 @@ function actionAVTransportAddMultipleURIs( lul_device, lul_settings )
 end
 
 function actionAVTransportAddURI( lul_device, lul_settings )
-	local _, uuid = controlByCoordinator(lul_device)
+	local _, uuid = controlByCoordinator(UUIDs[lul_device])
 	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
 	if (AVTransport == nil) then
 		return
@@ -3414,7 +3442,7 @@ function actionAVTransportAddURI( lul_device, lul_settings )
 end
 
 function actionAVTransportCreateSavedQueue( lul_device, lul_settings )
-	local _, uuid = controlByCoordinator(lul_device)
+	local _, uuid = controlByCoordinator(UUIDs[lul_device])
 	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
 	if (AVTransport == nil) then
 		return
@@ -3433,7 +3461,7 @@ function actionAVTransportCreateSavedQueue( lul_device, lul_settings )
 end
 
 function actionAVTransportAddURItoSaved( lul_device, lul_settings )
-	local _, uuid = controlByCoordinator(lul_device)
+	local _, uuid = controlByCoordinator(UUIDs[lul_device])
 	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
 	if (AVTransport == nil) then
 		return
@@ -3456,7 +3484,7 @@ function actionAVTransportAddURItoSaved( lul_device, lul_settings )
 end
 
 function actionAVTransportReorderQueue( lul_device, lul_settings )
-	local _, uuid = controlByCoordinator(lul_device)
+	local _, uuid = controlByCoordinator(UUIDs[lul_device])
 	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
 	if (AVTransport == nil) then
 		return
@@ -3473,7 +3501,7 @@ function actionAVTransportReorderQueue( lul_device, lul_settings )
 end
 
 function actionAVTransportReorderSaved( lul_device, lul_settings )
-	local _, uuid = controlByCoordinator(lul_device)
+	local _, uuid = controlByCoordinator(UUIDs[lul_device])
 	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
 	if (AVTransport == nil) then
 		return
@@ -3490,7 +3518,7 @@ function actionAVTransportReorderSaved( lul_device, lul_settings )
 end
 
 function actionAVTransportRemoveTrackFromQueue( lul_device, lul_settings )
-	local _, uuid = controlByCoordinator(lul_device)
+	local _, uuid = controlByCoordinator(UUIDs[lul_device])
 	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
 	if (AVTransport == nil) then
 		return
@@ -3505,7 +3533,7 @@ function actionAVTransportRemoveTrackFromQueue( lul_device, lul_settings )
 end
 
 function actionAVTransportRemoveTrackRangeFromQueue( lul_device, lul_settings )
-	local _, uuid = controlByCoordinator(lul_device)
+	local _, uuid = controlByCoordinator(UUIDs[lul_device])
 	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
 	if (AVTransport == nil) then
 		return
@@ -3521,7 +3549,7 @@ function actionAVTransportRemoveTrackRangeFromQueue( lul_device, lul_settings )
 end
 
 function actionAVTransportRemoveAllTracksFromQueue( lul_device, lul_settings )
-	local _, uuid = controlByCoordinator(lul_device)
+	local _, uuid = controlByCoordinator(UUIDs[lul_device])
 	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
 	if (AVTransport == nil) then
 		return
@@ -3533,7 +3561,7 @@ function actionAVTransportRemoveAllTracksFromQueue( lul_device, lul_settings )
 end
 
 function actionAVTransportSaveQueue( lul_device, lul_settings )
-	local _, uuid = controlByCoordinator(lul_device)
+	local _, uuid = controlByCoordinator(UUIDs[lul_device])
 	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
 	if (AVTransport == nil) then
 		return
@@ -3548,7 +3576,7 @@ function actionAVTransportSaveQueue( lul_device, lul_settings )
 end
 
 function actionAVTransportBackupQueue( lul_device, lul_settings )
-	local _, uuid = controlByCoordinator(lul_device)
+	local _, uuid = controlByCoordinator(UUIDs[lul_device])
 	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
 	if (AVTransport == nil) then
 		return
@@ -3560,7 +3588,7 @@ function actionAVTransportBackupQueue( lul_device, lul_settings )
 end
 
 function actionAVTransportChangeTransportSettings( lul_device, lul_settings )
-	local _, uuid = controlByCoordinator(lul_device)
+	local _, uuid = controlByCoordinator(UUIDs[lul_device])
 	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
 	if (AVTransport == nil) then
 		return
@@ -3608,7 +3636,7 @@ function actionAVTransportRunAlarm( lul_device, lul_settings )
 end
 
 function actionAVTransportStartAutoplay( lul_device, lul_settings )
-	local _, uuid = controlByCoordinator(lul_device)
+	local _, uuid = controlByCoordinator(UUIDs[lul_device])
 	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
 	if (AVTransport == nil) then
 		return
@@ -3639,7 +3667,7 @@ function actionAVTransportSnoozeAlarm( lul_device, lul_settings )
 end
 
 function actionAVTransportSetCrossfadeMode( lul_device, lul_settings )
-	local device, uuid = controlByCoordinator(lul_device)
+	local device, uuid = controlByCoordinator(UUIDs[lul_device])
 	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
 	if (AVTransport == nil) then
 		return
@@ -3984,7 +4012,7 @@ end
 --]]
 
 function actionGRCSetGroupMute( lul_device, lul_settings )
-	local _, uuid = controlByCoordinator(lul_device)
+	local _, uuid = controlByCoordinator(UUIDs[lul_device])
 	local GroupRendering = upnp.getService(uuid, UPNP_GROUP_RENDERING_CONTROL_SERVICE)
 	if (GroupRendering == nil) then
 		return
@@ -3999,7 +4027,7 @@ function actionGRCSetGroupMute( lul_device, lul_settings )
 end
 
 function actionGRCSetGroupVolume( lul_device, lul_settings )
-	local _, uuid = controlByCoordinator(lul_device)
+	local _, uuid = controlByCoordinator(UUIDs[lul_device])
 	local GroupRendering = upnp.getService(uuid, UPNP_GROUP_RENDERING_CONTROL_SERVICE)
 	if (GroupRendering == nil) then
 		return
@@ -4014,7 +4042,7 @@ function actionGRCSetGroupVolume( lul_device, lul_settings )
 end
 
 function actionGRCSetRelativeGroupVolume( lul_device, lul_settings )
-	local _, uuid = controlByCoordinator(lul_device)
+	local _, uuid = controlByCoordinator(UUIDs[lul_device])
 	local GroupRendering = upnp.getService(uuid, UPNP_GROUP_RENDERING_CONTROL_SERVICE)
 	if (GroupRendering == nil) then
 		return
@@ -4028,7 +4056,7 @@ function actionGRCSetRelativeGroupVolume( lul_device, lul_settings )
 end
 
 function actionGRCSnapshotGroupVolume( lul_device, lul_settings )
-	local _, uuid = controlByCoordinator(lul_device)
+	local _, uuid = controlByCoordinator(UUIDs[lul_device])
 	local GroupRendering = upnp.getService(uuid, UPNP_GROUP_RENDERING_CONTROL_SERVICE)
 	if (GroupRendering == nil) then
 		return
