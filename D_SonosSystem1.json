@@ -1,0 +1,140 @@
+{
+	"_comment": ["D_SonosSystem1.json"],
+	"flashicon": "../../../icons/Sonos.png",
+	"default_icon": "../../../icons/Sonos.png",
+	"imgIconBody": "",
+	"imgIconDimmable": "",
+	"imgIconTurnable": "",
+	"imgIconMin": "",
+	"imgIconMax": "",
+	"state_icons": [],
+	"halloIconsDir": "pics/hallo",
+	"x": "3",
+	"y": "4",
+	"inScene": "1",
+	"doc_url": {
+		"doc_language": 1,
+		"doc_manual": 1,
+		"doc_version": 1,
+		"doc_platform": 0,
+		"doc_page": "devices"
+	},
+	"Tabs": [{
+			"Label": {
+				"lang_tag": "tabname_control",
+				"text": "Control"
+			},
+			"Position": "0",
+			"TabType": "flash",
+			"SceneGroup": [{
+					"id": "1",
+					"top": "0.25",
+					"left": "0",
+					"x": "3",
+					"y": "1"
+				},
+				{
+					"id": "2",
+					"top": "1",
+					"left": "0",
+					"x": "3",
+					"y": "3"
+				}
+			],
+			"ControlGroup": [{
+					"id": "1",
+					"type": "info",
+					"scenegroup": "1"
+				},
+				{
+					"id": "2",
+					"scenegroup": "2",
+					"isSingle": "1"
+				}
+			],
+			"Control": [{
+				"ControlGroup": "1",
+				"ControlPair": "1",
+				"ControlHeader": "1",
+				"ControlType": "variable",
+				"top": "0",
+				"left": "0",
+				"x": "3",
+				"y": "1",
+				"text_align": "left",
+				"Display": {
+					"Service": "urn:toggledbits-com:serviceId:SonosSystem1",
+					"Variable": "Message",
+					"Top": 100,
+					"Left": 110,
+					"Width": 300,
+					"Height": 60
+				}
+			}]
+		},
+		{
+			"Label": {
+				"lang_tag": "tabname_player",
+				"text": "Player"
+			},
+			"Position": "1",
+			"TabType": "javascript",
+			"ScriptName": "J_Sonos1.js",
+			"Function": "Sonos_showPlayer"
+		},
+		{
+			"Label": {
+				"lang_tag": "tabname_tts",
+				"text": "TTS"
+			},
+			"Position": "2",
+			"TabType": "javascript",
+			"ScriptName": "J_Sonos1.js",
+			"Function": "Sonos_showTTS"
+		},
+		{
+			"Label": {
+				"lang_tag": "tabname_group",
+				"text": "Group"
+			},
+			"Position": "3",
+			"TabType": "javascript",
+			"ScriptName": "J_Sonos1.js",
+			"Function": "Sonos_showGroup"
+		},
+		{
+			"Label": {
+				"lang_tag": "settings",
+				"text": "Settings"
+			},
+			"Position": "4",
+			"TabType": "javascript",
+			"ScriptName": "J_Sonos1.js",
+			"Function": "Sonos_showSettings"
+		},
+		{
+			"Label": {
+				"lang_tag": "tabname_uri_help",
+				"text": "Help"
+			},
+			"Position": "5",
+			"TabType": "javascript",
+			"ScriptName": "J_Sonos1.js",
+			"Function": "Sonos_showHelp"
+		},
+		{
+			"Label": {
+				"lang_tag": "advanced",
+				"text": "Advanced"
+			},
+			"Position": "6",
+			"TabType": "javascript",
+			"ScriptName": "shared.js",
+			"Function": "advanced_device"
+		}
+	],
+	"eventList": {},
+	"eventList2": [],
+	"DeviceType": "urn:schemas-micasaverde-com:device:SonosSystem:1",
+	"device_type": "urn:schemas-micasaverde-com:device:SonosSystem:1"
+}

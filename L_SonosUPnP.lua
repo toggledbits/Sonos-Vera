@@ -1113,7 +1113,7 @@ end
   function subscribeToEvents(device, veraIP, subscriptions, actionServiceId, uuid)
     debug("Subscribing to all events")
 
-    if (proxyVersionAtLeast(1) == false) then
+    if not proxyVersionAtLeast(1) then
        debug("Event subscription postponed, proxy is not running. " .. device )
 --     luup.call_delay("renewSubscriptions", 30, device .. ":" .. uuid)
        return true
@@ -1186,7 +1186,7 @@ end
   function cancelProxySubscriptions(subscriptions)
     debug("Cancelling all event subscriptions")
 
-    if (proxyVersionAtLeast(1) == false) then
+    if not proxyVersionAtLeast(1) then
         return
     end
 
@@ -1214,7 +1214,7 @@ end
   --   false if the proxy notification is not valid
   function isValidNotification(notifyAction, sid, subscriptions)
     local valid = false
-    if (proxyVersionAtLeast(1) == false) then
+    if not proxyVersionAtLeast(1) then
         warning("Call to " .. notifyAction .. " while proxy is not used")
     else
         for _,subscription in ipairs(subscriptions) do

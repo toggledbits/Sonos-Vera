@@ -235,55 +235,6 @@
 			</argumentList>
 		</action>
 		<action>
-			<name>SetupTTS</name>
-			<argumentList>
-				<argument>
-					<name>DefaultLanguage</name>
-					<direction>in</direction>
-					<relatedStateVariable>A_ARG_TYPE_Language</relatedStateVariable>
-				</argument>
-				<argument>
-					<name>DefaultEngine</name>
-					<direction>in</direction>
-					<relatedStateVariable>A_ARG_TYPE_Engine</relatedStateVariable>
-				</argument>
-				<argument>
-					<name>GoogleTTSServerURL</name>
-					<direction>in</direction>
-					<relatedStateVariable>A_ARG_TYPE_URI</relatedStateVariable>
-				</argument>
-				<argument>
-					<name>OSXTTSServerURL</name>
-					<direction>in</direction>
-					<relatedStateVariable>A_ARG_TYPE_URI</relatedStateVariable>
-				</argument>
-				<argument>
-					<name>MaryTTSServerURL</name>
-					<direction>in</direction>
-					<relatedStateVariable>A_ARG_TYPE_URI</relatedStateVariable>
-				</argument>
-				<argument>
-					<name>ResponsiveVoiceTTSServerURL</name>
-					<direction>in</direction>
-					<relatedStateVariable>A_ARG_TYPE_URI</relatedStateVariable>
-				</argument>
-				<argument>
-					<name>MicrosoftClientId</name>
-					<direction>in</direction>
-					<relatedStateVariable>A_ARG_TYPE_clientId</relatedStateVariable>
-				</argument>
-				<argument>
-					<name>MicrosoftClientSecret</name>
-					<direction>in</direction>
-					<relatedStateVariable>A_ARG_TYPE_clientSecret</relatedStateVariable>
-				</argument>
-			</argumentList>
-		</action>
-		<action>
-			<name>ResetTTS</name>
-			<argumentList />
-		</action>
-		<action>
 			<name>PauseAll</name>
 		</action>
 		<action>
@@ -310,48 +261,12 @@
 			</argumentList>
 		</action>
 		<action>
-			<name>SavePlaybackContext</name>
-			<argumentList>
-				<argument>
-					<name>GroupDevices</name>
-					<direction>in</direction>
-					<relatedStateVariable>A_ARG_TYPE_Devices</relatedStateVariable>
-				</argument>
-				<argument>
-					<name>GroupZones</name>
-					<direction>in</direction>
-					<relatedStateVariable>A_ARG_TYPE_Zones</relatedStateVariable>
-				</argument>
-			</argumentList>
-		</action>
-		<action>
-			<name>RestorePlaybackContext</name>
-		</action>
-		<action>
-			<name>StartSonosDiscovery</name>
-		</action>
-		<action>
 			<name>SelectSonosDevice</name>
 			<argumentList>
 				<argument>
 					<name>URL</name>
 					<direction>in</direction>
 					<relatedStateVariable>A_ARG_TYPE_URI</relatedStateVariable>
-				</argument>
-			</argumentList>
-		</action>
-		<action>
-			<name>SearchAndSelectSonosDevice</name>
-			<argumentList>
-				<argument>
-					<name>Name</name>
-					<direction>in</direction>
-					<relatedStateVariable>A_ARG_TYPE_Name</relatedStateVariable>
-				</argument>
-				<argument>
-					<name>IP</name>
-					<direction>in</direction>
-					<relatedStateVariable>A_ARG_TYPE_IP</relatedStateVariable>
 				</argument>
 			</argumentList>
 		</action>
@@ -366,78 +281,12 @@
 			</argumentList>
 		</action>
 		<action>
-			<name>SetDebugLogs</name>
-			<argumentList>
-				<argument>
-					<name>enable</name>
-					<direction>in</direction>
-					<relatedStateVariable>A_ARG_TYPE_enable</relatedStateVariable>
-				</argument>
-			</argumentList>
-		</action>
-		<action>
 			<name>SetReadQueueContent</name>
 			<argumentList>
 				<argument>
 					<name>enable</name>
 					<direction>in</direction>
 					<relatedStateVariable>A_ARG_TYPE_enable</relatedStateVariable>
-				</argument>
-			</argumentList>
-		</action>
-		<action>
-			<name>InstallDiscoveryPatch</name>
-		</action>
-		<action>
-			<name>UninstallDiscoveryPatch</name>
-		</action>
-		<action>
-			<name>NotifyRenderingChange</name>
-			<argumentList>
-				<argument>
-					<name>LastChange</name>
-					<direction>in</direction>
-					<relatedStateVariable>A_ARG_TYPE_LastChange</relatedStateVariable>
-				</argument>
-			</argumentList>
-		</action>
-		<action>
-			<name>NotifyAVTransportChange</name>
-			<argumentList>
-				<argument>
-					<name>LastChange</name>
-					<direction>in</direction>
-					<relatedStateVariable>A_ARG_TYPE_LastChange</relatedStateVariable>
-				</argument>
-			</argumentList>
-		</action>
-		<action>
-			<name>NotifyMusicServicesChange</name>
-			<argumentList>
-				<argument>
-					<name>LastChange</name>
-					<direction>in</direction>
-					<relatedStateVariable>A_ARG_TYPE_LastChange</relatedStateVariable>
-				</argument>
-			</argumentList>
-		</action>
-		<action>
-			<name>NotifyZoneGroupTopologyChange</name>
-			<argumentList>
-				<argument>
-					<name>ZoneGroupState</name>
-					<direction>in</direction>
-					<relatedStateVariable>A_ARG_TYPE_ZoneGroupState</relatedStateVariable>
-				</argument>
-			</argumentList>
-		</action>
-		<action>
-			<name>NotifyContentDirectoryChange</name>
-			<argumentList>
-				<argument>
-					<name>ContainerUpdateIDs</name>
-					<direction>in</direction>
-					<relatedStateVariable>A_ARG_TYPE_ContainerUpdateIDs</relatedStateVariable>
 				</argument>
 			</argumentList>
 		</action>

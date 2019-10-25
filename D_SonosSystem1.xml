@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<!-- D_Sonos1.xml -->
+<root xmlns="urn:schemas-upnp-org:device-1-0">
+	<specVersion>
+		<major>1</major>
+		<minor>0</minor>
+	</specVersion>
+	<device>
+		<friendlyName>Sonos System</friendlyName>
+		<manufacturer>Sonos</manufacturer>
+		<manufacturerURL>http://www.sonos.com</manufacturerURL>
+		<modelDescription>Sonos</modelDescription>
+		<modelName>Sonos</modelName>
+		<modelNumber></modelNumber>
+		<deviceType>urn:schemas-micasaverde-com:device:SonosSystem:1</deviceType>
+		<Category_Num>1</Category_Num>
+		<staticJson>D_SonosSystem1.json</staticJson>
+		<serviceList>
+			<service>
+				<serviceType>urn:schemas-micasaverde-com:service:SonosSystem:1</serviceType>
+				<serviceId>urn:micasaverde-com:serviceId:SonosSystem1</serviceId>
+				<SCPDURL>S_SonosSystem1.xml</SCPDURL>
+			</service>
+		</serviceList>
+		<implementationList>
+			<implementationFile>I_SonosSystem1.xml</implementationFile>
+		</implementationList>
+	</device>
+</root>
