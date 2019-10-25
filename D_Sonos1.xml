@@ -52,8 +52,6 @@
 				<SCPDURL>S_HaDevice1.xml</SCPDURL>
 			</service>
 		</serviceList>
-		<implementationList>
-			<implementationFile>I_Sonos1.xml</implementationFile>
-		</implementationList>
+		<implementationList/>
 	</device>
 </root>

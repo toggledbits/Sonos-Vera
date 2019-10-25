@@ -281,6 +281,56 @@
 			</argumentList>
 		</action>
 		<action>
+			<name>NotifyRenderingChange</name>
+			<argumentList>
+				<argument>
+					<name>LastChange</name>
+					<direction>in</direction>
+					<relatedStateVariable>A_ARG_TYPE_LastChange</relatedStateVariable>
+				</argument>
+			</argumentList>
+		</action>
+		<action>
+			<name>NotifyAVTransportChange</name>
+			<argumentList>
+				<argument>
+					<name>LastChange</name>
+					<direction>in</direction>
+					<relatedStateVariable>A_ARG_TYPE_LastChange</relatedStateVariable>
+				</argument>
+			</argumentList>
+		</action>
+		<action>
+			<name>NotifyMusicServicesChange</name>
+			<argumentList>
+				<argument>
+					<name>LastChange</name>
+					<direction>in</direction>
+					<relatedStateVariable>A_ARG_TYPE_LastChange</relatedStateVariable>
+				</argument>
+			</argumentList>
+		</action>
+		<action>
+			<name>NotifyZoneGroupTopologyChange</name>
+			<argumentList>
+				<argument>
+					<name>ZoneGroupState</name>
+					<direction>in</direction>
+					<relatedStateVariable>A_ARG_TYPE_ZoneGroupState</relatedStateVariable>
+				</argument>
+			</argumentList>
+		</action>
+		<action>
+			<name>NotifyContentDirectoryChange</name>
+			<argumentList>
+				<argument>
+					<name>ContainerUpdateIDs</name>
+					<direction>in</direction>
+					<relatedStateVariable>A_ARG_TYPE_ContainerUpdateIDs</relatedStateVariable>
+				</argument>
+			</argumentList>
+		</action>
+		<action>
 			<name>SetReadQueueContent</name>
 			<argumentList>
 				<argument>

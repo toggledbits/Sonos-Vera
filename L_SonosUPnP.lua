@@ -983,20 +983,20 @@ end
 -- Add a notification to the notification queue.
 -- This queue will be sent on a timer
 -- to make it easy for the server to process sonos proxy traffic
-function equeueSubscription(sid, proxyRequestBody)
+local function enqueueSubscription(sid, proxyRequestBody)
     table.insert(subscriptionQueue, {
         sid = sid,
         proxyRequestBody = proxyRequestBody
     })
 
-    if (#subscriptionQueue == 1) then
-        luup.call_delay("processProxySubscriptions", 2, "Enqued:" .. #subscriptionQueue )
+    if #subscriptionQueue == 1 then
+        luup.call_delay("processProxySubscriptions", 0, "Enqueued:" .. #subscriptionQueue )
     end
 end
 
 
 function processProxySubscriptions()
-    if (#subscriptionQueue > 0) then
+    if #subscriptionQueue > 0 then
         local subscription = table.remove(subscriptionQueue, 1)
 
         local sock = function()
@@ -1039,10 +1039,10 @@ function processProxySubscriptions()
         else
             debug("Completed Proxy subscription request: " .. r.method .. " SID " .. subscription.sid )
         end
-    end
 
-    if (#subscriptionQueue > 0) then
-        luup.call_delay("processProxySubscriptions", 2, "Enqued:" .. #subscriptionQueue  )
+        if #subscriptionQueue > 0 then
+            luup.call_delay("processProxySubscriptions", 0, "Enqueued:" .. #subscriptionQueue  )
+        end
     end
 end
 
@@ -1068,13 +1068,13 @@ end
     local callbackURL = string.format("http://%s:2529/upnp/event", veraIP)
     local expiry = nil
     local sid, duration = UPnP_subscribe(eventSubURL, callbackURL, renewalSID)
-    if (sid) then
+    if sid then
         expiry = os.time() + duration
 
         -- Tell proxy about this subscription and the variable we care about.
         -- Volume is the variable we care about.
         local proxyRequestBody = PROXY_REQUEST:format(expiry, eventVariable, device, actionServiceId, actionName, eventVariable)
-        equeueSubscription(sid, proxyRequestBody)
+        enqueueSubscription(sid, proxyRequestBody)
     end
 
     return sid, expiry, duration
@@ -1086,7 +1086,7 @@ end
   -- Sends a DELETE /upnp/event/[sid] message to the UPnP event proxy,
   function cancelProxySubscription(sid)
     debug("Cancelling subscription for sid " .. sid)
-    equeueSubscription(sid)
+    enqueueSubscription(sid)
   end
 
 
@@ -1134,7 +1134,7 @@ end
     for _,subscription in ipairs(subscriptions) do
         if (Services[uuid][subscription.service] ~= nil) then
             sid = nil
-            if (subscription.id ~= "") then
+            if (subscription.id or "") ~= "" then
                 sid = subscription.id
             end
             sid, expiry, duration = subscribeToUPnPEvent(device,
@@ -1144,7 +1144,7 @@ end
                                                          actionServiceId,
                                                          subscription.actionName,
                                                          sid)
-            if (sid ~= nil) then
+            if sid then
                 debug("Event subscription succeeded => SID " .. sid .. " duration " .. duration .. " expiry " .. expiry)
                 subscription.id = sid
                 subscription.expiry = expiry
@@ -1159,6 +1159,8 @@ end
                 result = false
                 break
             end
+        else
+			warning("Event subscription for service "..tostring(subscription.service).." ignored, unregistered service")
         end
     end
 
@@ -1199,7 +1201,6 @@ end
     end
   end
 
-
   -- isValidNotification(notifyAction, sid, subscriptions)
   -- Check whether a proxy notification is valid (the subscription id has to be declared in the
   -- table containing current subscription data)
@@ -1213,23 +1214,17 @@ end
   --   true if the proxy notification is valid
   --   false if the proxy notification is not valid
   function isValidNotification(notifyAction, sid, subscriptions)
-    local valid = false
     if not proxyVersionAtLeast(1) then
         warning("Call to " .. notifyAction .. " while proxy is not used")
     else
         for _,subscription in ipairs(subscriptions) do
-            if (subscription.id == sid) then
-                valid = true
-                break
-            end
+            if subscription.id == sid then
+				return true
+			end
         end
-        if (not valid) then
-            warning("Call to " .. notifyAction .. " with bad SID " .. sid)
-        end
+        warning("Call to " .. notifyAction .. " with bad SID " .. sid)
     end
-    if (not valid) then
-        -- Try to shut the proxy up, we don't care about this SID.
-        luup.call_delay("cancelProxySubscription", 1, sid)
-    end
-    return valid
+    -- Try to shut the proxy up, we don't care about this SID.
+    luup.call_delay("cancelProxySubscription", 1, sid)
+    return false
   end

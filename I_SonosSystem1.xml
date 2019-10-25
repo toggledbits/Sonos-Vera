@@ -34,102 +34,67 @@
 
 		-->
 		<action>
-			<serviceId>urn:micasaverde-com:serviceId:SonosSystem1</serviceId>
+			<serviceId>urn:toggledbits-com:serviceId:SonosSystem1</serviceId>
 			<name>SetupTTS</name>
 			<run>
 				return L_SonosSystem1.actionSonosSetupTTS( lul_device, lul_settings )
 			</run>
 		</action>
 		<action>
-			<serviceId>urn:micasaverde-com:serviceId:SonosSystem1</serviceId>
+			<serviceId>urn:toggledbits-com:serviceId:SonosSystem1</serviceId>
 			<name>ResetTTS</name>
 			<run>
 				return L_SonosSystem1.actionSonosResetTTS( lul_device, lul_settings )
 			</run>
 		</action>
 		<action>
-			<serviceId>urn:micasaverde-com:serviceId:SonosSystem1</serviceId>
+			<serviceId>urn:toggledbits-com:serviceId:SonosSystem1</serviceId>
 			<name>PauseAll</name>
 			<run>
 				return L_SonosSystem1.actionSonosPauseAll( lul_device, lul_settings )
 			</run>
 		</action>
 		<action>
-			<serviceId>urn:micasaverde-com:serviceId:SonosSystem1</serviceId>
+			<serviceId>urn:toggledbits-com:serviceId:SonosSystem1</serviceId>
 			<name>SavePlaybackContext</name>
 			<job>
 				return L_SonosSystem1.actionSonosSavePlaybackContext( lul_device, lul_settings )
 			</job>
 		</action>
 		<action>
-			<serviceId>urn:micasaverde-com:serviceId:SonosSystem1</serviceId>
+			<serviceId>urn:toggledbits-com:serviceId:SonosSystem1</serviceId>
 			<name>RestorePlaybackContext</name>
 			<job>
 				return L_SonosSystem1.actionSonosRestorePlaybackContext( lul_device, lul_settings )
 			</job>
 		</action>
 		<action>
-			<serviceId>urn:micasaverde-com:serviceId:SonosSystem1</serviceId>
+			<serviceId>urn:toggledbits-com:serviceId:SonosSystem1</serviceId>
 			<name>StartSonosDiscovery</name>
 			<job>
 				return L_SonosSystem1.actionSonosStartDiscovery( lul_device, lul_settings )
 			</job>
 		</action>
 		<action>
-			<serviceId>urn:micasaverde-com:serviceId:SonosSystem1</serviceId>
+			<serviceId>urn:toggledbits-com:serviceId:SonosSystem1</serviceId>
 			<name>SetDebugLogs</name>
 			<run>
 				return L_SonosSystem1.actionSonosSetDebugLogs( lul_device, lul_settings )
 			</run>
 		</action>
 		<action>
-			<serviceId>urn:micasaverde-com:serviceId:SonosSystem1</serviceId>
+			<serviceId>urn:toggledbits-com:serviceId:SonosSystem1</serviceId>
 			<name>InstallDiscoveryPatch</name>
 			<run>
 				return L_SonosSystem1.actionSonosInstallDiscoveryPatch( lul_device, lul_settings )
 			</run>
 		</action>
 		<action>
-			<serviceId>urn:micasaverde-com:serviceId:SonosSystem1</serviceId>
+			<serviceId>urn:toggledbits-com:serviceId:SonosSystem1</serviceId>
 			<name>UninstallDiscoveryPatch</name>
 			<run>
 				return L_SonosSystem1.actionSonosUninstallDiscoveryPatch( lul_device, lul_settings )
 			</run>
-		</action>
-		<action>
-			<serviceId>urn:micasaverde-com:serviceId:SonosSystem1</serviceId>
-			<name>NotifyRenderingChange</name>
-			<job>
-				return L_SonosSystem1.actionSonosNotifyRenderingChange( lul_device, lul_settings )
-			</job>
-		</action>
-		<action>
-			<serviceId>urn:micasaverde-com:serviceId:SonosSystem1</serviceId>
-			<name>NotifyAVTransportChange</name>
-			<job>
-				return L_SonosSystem1.actionSonosNotifyAVTransportChange( lul_device, lul_settings )
-			</job>
-		</action>
-		<action>
-			<serviceId>urn:micasaverde-com:serviceId:SonosSystem1</serviceId>
-			<name>NotifyMusicServicesChange</name>
-			<job>
-				return L_SonosSystem1.actionSonosNotifyMusicServicesChange( lul_device, lul_settings )
-			</job>
-		</action>
-		<action>
-			<serviceId>urn:micasaverde-com:serviceId:SonosSystem1</serviceId>
-			<name>NotifyZoneGroupTopologyChange</name>
-			<job>
-				return L_SonosSystem1.actionSonosNotifyZoneGroupTopologyChange( lul_device, lul_settings )
-			</job>
-		</action>
-		<action>
-			<serviceId>urn:micasaverde-com:serviceId:SonosSystem1</serviceId>
-			<name>NotifyContentDirectoryChange</name>
-			<job>
-				return L_SonosSystem1.actionSonosNotifyContentDirectoryChange( lul_device, lul_settings )
-			</job>
 		</action>
 		<!--
 
@@ -226,6 +191,41 @@
 			<run>
 				return L_SonosSystem1.actionSonosSetReadQueueContent( lul_device, lul_settings )
 			</run>
+		</action>
+		<action>
+			<serviceId>urn:micasaverde-com:serviceId:Sonos1</serviceId>
+			<name>NotifyRenderingChange</name>
+			<job>
+				return L_SonosSystem1.actionSonosNotifyRenderingChange( lul_device, lul_settings )
+			</job>
+		</action>
+		<action>
+			<serviceId>urn:micasaverde-com:serviceId:Sonos1</serviceId>
+			<name>NotifyAVTransportChange</name>
+			<job>
+				return L_SonosSystem1.actionSonosNotifyAVTransportChange( lul_device, lul_settings )
+			</job>
+		</action>
+		<action>
+			<serviceId>urn:micasaverde-com:serviceId:Sonos1</serviceId>
+			<name>NotifyMusicServicesChange</name>
+			<job>
+				return L_SonosSystem1.actionSonosNotifyMusicServicesChange( lul_device, lul_settings )
+			</job>
+		</action>
+		<action>
+			<serviceId>urn:micasaverde-com:serviceId:Sonos1</serviceId>
+			<name>NotifyZoneGroupTopologyChange</name>
+			<job>
+				return L_SonosSystem1.actionSonosNotifyZoneGroupTopologyChange( lul_device, lul_settings )
+			</job>
+		</action>
+		<action>
+			<serviceId>urn:micasaverde-com:serviceId:Sonos1</serviceId>
+			<name>NotifyContentDirectoryChange</name>
+			<job>
+				return L_SonosSystem1.actionSonosNotifyContentDirectoryChange( lul_device, lul_settings )
+			</job>
 		</action>
 		<!--
 
