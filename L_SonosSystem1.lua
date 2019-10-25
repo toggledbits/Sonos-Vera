@@ -13,7 +13,7 @@ PLUGIN_ID = 4226
 
 local _CONFIGVERSION = 1
 
-local DEBUG_MODE = false	-- Don't hardcode true--use state variable config
+local DEBUG_MODE = true	-- Don't hardcode true--use state variable config
 
 local MIN_UPNP_VERSION = 19191	-- Minimum version of L_SonosUPnP that works
 local MIN_TTS_VERSION = 19287	-- Minimum version of L_SonosTTS that works
@@ -767,9 +767,11 @@ local function extractDataFromMetaData(zoneUUID, currentUri, currentUriMetaData,
 		statusString = statusString .. info
 	end
 	if (albumArt ~= "") then
-		albumArt = url.absolute(string.format("http://%s:%s/", ip[uuid], port), albumArt)
+		local ip = luup.attr_get( "ip", Zones[uuid]) or ""
+		albumArt = url.absolute(string.format("http://%s:%s/", ip, port), albumArt)
 	elseif (serviceId ~= nil) then
-		albumArt = string.format("http://%s:%s/getaa?s=1&u=%s", ip[uuid], port, url.escape(currentUri))
+		local ip = luup.attr_get( "ip", Zones[uuid]) or ""
+		albumArt = string.format("http://%s:%s/getaa?s=1&u=%s", ip, port, url.escape(currentUri))
 	else
 		albumArt = iconURL
 	end
@@ -859,7 +861,7 @@ local function refreshNow(uuid, force, refreshQueue)
 		groupsState = upnp.extractElement("ZoneGroupState", tmp, "")
 		changed = setData("ZoneGroupState", groupsState, uuid, changed)
 		if changed or not zoneInfo then
-			updateZoneInfo( device )
+			updateZoneInfo( uuid )
 		end
 		local members, coordinator = getGroupInfos( uuid )
 		changed = setData("ZonePlayerUUIDsInGroup", members, uuid, changed)
@@ -2166,7 +2168,7 @@ setup = function(zoneDevice, flag)
 	elseif (values.modelNumber == "S1") then
 		model = 6
 	elseif values.modelNumber == "S22" then
-		model = 7 -- 2019-01-25 SL One gen 2
+		model = 7 -- 2019-01-25 One SL gen 2
 	elseif values.modelNumber == "S12" then
 		-- Newer hardware revision of Play 1
 		model = 6 -- 2019-07-05 rigpapa; from @cranb https://community.getvera.com/t/version-1-4-3-development/209171/11
@@ -2277,8 +2279,8 @@ function deferredStartup(device)
 	local cvars = {}
 	local reload = false
 	local count, started = 0, 0
+	local children = {}
 	for k,v in pairs( luup.devices ) do
-		debug(k.."="..dump(v))
 		if v.device_type == SONOS_ZONE_DEVICE_TYPE then
 			debug("found child "..k.." parent "..v.device_num_parent)
 			if v.device_num_parent == 0 then
@@ -2286,17 +2288,19 @@ function deferredStartup(device)
 				warning("Converting standalone (old) Sonos instance to child of " .. device)
 				luup.attr_set( "impl_file", "", k )
 				luup.attr_set( "id_parent", device, k )
-				luup.set_failure( k, 1 )
+				luup.attr_set( "altid", getVar( "SonosID", tostring(k), k, SONOS_ZONE_SID ), k )
+				luup.set_failure( 1, k )
 				reload = true
-			elseif not reload and v.device_num_parent == device then
+			elseif v.device_num_parent == device then
+				children[k] = v
 				count = count + 1
 				log("Starting zone device "..v.description.." (#"..k..")")
 				local status,success = pcall( startZone, k )
 				if status and success then
-					luup.set_failure( k, 0 )
+					luup.set_failure( 0, k )
 					started = started + 1
 				else
-					luup.set_failure( k, 1 )
+					luup.set_failure( 1, k )
 				end
 			end
 		end
@@ -2311,6 +2315,7 @@ function deferredStartup(device)
 	end
 	-- And reload if devices were upgraded.
 	if reload then
+		setVar( SONOS_SYS_SID, "Message", "Upgrading devices... please wait", pluginDevice )
 		warning("Converted old standalone devices to children; reloading Luup")
 		luup.reload()
 		return false, "Reload required", MSG_CLASS
@@ -2318,32 +2323,40 @@ function deferredStartup(device)
 
 	-- Update children from zone topology
 	if zoneInfo and getVarNumeric( "StartupInventory", 1, device, SONOS_SYS_SID ) ~= 0 then
+		debug("deferredStartup() taking inventory")
 		local newZones = {}
 		for uuid in pairs( zoneInfo.zones ) do
+			debug("checking for "..uuid)
 			if not findDeviceByUUID( uuid ) then
+				debug(uuid.." is a new zone!")
 				newZones[uuid] = getIPFromUUID( uuid ) or ""
 			end
 		end
-		if #newZones then
+		if next(newZones) then
+			setVar( SONOS_SYS_SID, "Message", "New device(s) found... please wait", pluginDevice )
 			local ptr = luup.chdev.start( device )
-			for k,v in pairs( luup.devices ) do
+			for k,v in pairs( children ) do
 				if v.device_type == SONOS_ZONE_DEVICE_TYPE and v.device_num_parent == device then
 					debug("Appending existing child dev "..v.id.." #"..k.." device_file "..tostring(luup.attr_get('device_file',k)))
 					luup.chdev.append( device, ptr, v.id, v.description, "", "D_Sonos1.xml", "", "", false )
 				end
 			end
-			for uuid,ip in ipairs( newZones ) do
-				debug("Appending new zone "..uuid)
+			for uuid,ip in pairs( newZones ) do
+				debug("Appending new zone "..uuid.." ip "..ip)
 				cvars[uuid] = cvars[uuid] or {}
 				table.insert( cvars[uuid], string.format( ",ip=%s", ip ) )
 				table.insert( cvars[uuid], string.format( ",altid=%s", uuid ) )
 				table.insert( cvars[uuid], string.format( "%s,SonosID=%s", SONOS_ZONE_SID, uuid ) )
+				local name = zoneInfo.zones[uuid].ZoneName or uuid
 				local vv = table.concat( cvars[uuid], "\n" )
-				luup.chdev.append( device, ptr, uuid, uuid, "", "D_Sonos1.xml", "", vv, false )
+				luup.chdev.append( device, ptr, uuid, name, "", "D_Sonos1.xml", "", vv, false )
 			end
 			luup.chdev.sync( device, ptr )
 		end
 	end
+
+	debug("deferredStartup() done. We're up and running!")
+	setVar( SONOS_SYS_SID, "Message", string.format("Running %d zones", count), device )
 end
 
 function startup( lul_device )
@@ -2361,6 +2374,9 @@ function startup( lul_device )
 	end
 
 	systemRunOnce( lul_device )
+
+	setVar( SONOS_SYS_SID, "PluginVersion", PLUGIN_VERSION, lul_device )
+	setVar( SONOS_SYS_SID, "Message", "Starting...", lul_device )
 
 	if not isOpenLuup and luup.short_version then
 		-- Real Vera 7.30+
@@ -2381,8 +2397,6 @@ function startup( lul_device )
 			warning "The L_SonosTTS module installed may not be compatible with this version of the plugin core."
 		end
 	end
-
-	setVar( SONOS_SYS_SID, "PluginVersion", PLUGIN_VERSION, lul_device )
 
 	local enabled = initVar( "Enabled", "1", lul_device, SONOS_SYS_SID )
 	if "0" == enabled then
@@ -3087,7 +3101,7 @@ function actionSonosNotifyZoneGroupTopologyChange( lul_device, lul_settings )
 
 		local changed = setData("ZoneGroupState", groupsState, uuid, false)
 		if changed or not zoneInfo then
-			updateZoneInfo( lul_device )
+			updateZoneInfo( uuid )
 		end
 
 		local members, coordinator = getGroupInfos( uuid )
