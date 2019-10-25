@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<!-- D_Sonos1.xml -->
+<!-- D_SonosSystem1.xml -->
 <root xmlns="urn:schemas-upnp-org:device-1-0">
 	<specVersion>
 		<major>1</major>

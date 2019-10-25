@@ -2326,9 +2326,18 @@ function deferredStartup(device)
 		end
 		if #newZones then
 			local ptr = luup.chdev.start( device )
+			for k,v in pairs( luup.devices ) do
+				if v.device_type == SONOS_ZONE_DEVICE_TYPE and v.device_num_parent == device then
+					debug("Appending existing child dev "..v.id.." #"..k.." device_file "..tostring(luup.attr_get('device_file',k)))
+					luup.chdev.append( device, ptr, v.id, v.description, "", "D_Sonos1.xml", "", "", false )
+				end
+			end
 			for uuid,ip in ipairs( newZones ) do
+				debug("Appending new zone "..uuid)
 				cvars[uuid] = cvars[uuid] or {}
 				table.insert( cvars[uuid], string.format( ",ip=%s", ip ) )
+				table.insert( cvars[uuid], string.format( ",altid=%s", uuid ) )
+				table.insert( cvars[uuid], string.format( "%s,SonosID=%s", SONOS_ZONE_SID, uuid ) )
 				local vv = table.concat( cvars[uuid], "\n" )
 				luup.chdev.append( device, ptr, uuid, uuid, "", "D_Sonos1.xml", "", vv, false )
 			end

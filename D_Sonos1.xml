@@ -52,6 +52,5 @@
 				<SCPDURL>S_HaDevice1.xml</SCPDURL>
 			</service>
 		</serviceList>
-		<implementationList/>
 	</device>
 </root>
