@@ -830,7 +830,7 @@ end
     if (xml ~= nil) then
         local pattern = string.format("<%s%%s?[^>]->", tag)
         local pos0, pos1 = xml:find(pattern)
-        if (pos0 ~= nil and pos1 ~= nil) then
+        if pos0 and pos1 then
             if (xml:sub(pos1-1, pos1-1) == "/") then
                 result = ""
             else
@@ -838,8 +838,12 @@ end
                 local pos2 = xml:find(pattern, pos1)
                 if (pos2 ~= nil) then
                     result = xml:sub(pos1+1, pos2-1)
+				else
+					debug("upnp:extractElementValue() lost end for "..tag.." in \n"..xml)
                 end
             end
+		else
+			debug("upnp:extractElementValue() tag "..tag.." not found in \n"..xml)
         end
     end
     return result

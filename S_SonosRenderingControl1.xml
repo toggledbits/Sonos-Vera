@@ -148,7 +148,7 @@
 			<name>Loudness</name>
 			<dataType>boolean</dataType>
 		</stateVariable>
-		<stateVariable sendEvents="no">
+		<stateVariable sendEvents="yes">
 			<name>Mute</name>
 			<shortCode>mute</shortCode>
 			<dataType>boolean</dataType>

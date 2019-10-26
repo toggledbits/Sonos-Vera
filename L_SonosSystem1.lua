@@ -115,7 +115,7 @@ local Zones = {} -- key is UUID, value is device
 local metaDataKeys = {}
 local dataTable = {}
 
-local sonosServices = {}
+local sonosServices = false
 
 
 local variableSidTable = {
@@ -143,6 +143,7 @@ local variableSidTable = {
 	CurrentAlbumArt = UPNP_AVTRANSPORT_SID,
 	RelativeTimePosition = UPNP_AVTRANSPORT_SID,
 
+	Volume = UPNP_RENDERING_CONTROL_SID,
 	Mute = UPNP_RENDERING_CONTROL_SID,
 	Bass = UPNP_RENDERING_CONTROL_SID,
 	Treble = UPNP_RENDERING_CONTROL_SID,
@@ -361,11 +362,7 @@ function clearTask()
 end
 
 local function defaultValue(arr, val, default)
-	if (arr == nil or arr[val] == nil or arr[val] == "") then
-		return default
-	else
-		return arr[val]
-	end
+	return (arr or {})[val] or default
 end
 
 -- Set local and state variable data for zone. `zoneident` can be device number or zone UUID.
@@ -381,7 +378,9 @@ local function setData(name, value, zoneident, default)
 			dataTable[uuid][name] = value
 			local device = Zones[uuid] or 0
 			if device ~= 0 and variableSidTable[name] then
-				luup.variable_set( variableSidTable[name], name, value == nil and "" or tostring(value), device )
+				setVar( variableSidTable[name], name, value == nil and "" or tostring(value), device )
+			else
+				debug("No serviceId defined for " .. name .. "; state variable value not saved");
 			end
 			return true -- flag something changed
 		end
@@ -644,9 +643,9 @@ local function deviceIsOffline(device)
 end
 
 local function commsFailure(device, text)
-	warning("Sonos "..tostring(UUIDs[device]).." device #" .. tostring(device) .. 
+	warning("Sonos "..tostring(UUIDs[device]).." device #" .. tostring(device) ..
 		" (" .. tostring((luup.devices[device] or {}).description) ..
-		" @" .. (luup.attr_get("ip", device or -1) or "") .. ") comm failure. " .. 
+		" @" .. (luup.attr_get("ip", device or -1) or "") .. ") comm failure. " ..
 		tostring(text or ""))
 	deviceIsOffline(device)
 end
@@ -687,7 +686,7 @@ local function getServiceFromURI(transportUri, trackUri)
 			serviceCmd, serviceId = trackUri:match("x%-sonos%-http:([^%?]+%?sid=(%d+).*)")
 		end
 		if (serviceCmd ~= nil and serviceId ~= nil) then
-			serviceName = sonosServices[serviceId] or ""
+			serviceName = (sonosServices or {})[serviceId] or ""
 		end
 	end
 	return serviceName, serviceId
@@ -938,7 +937,7 @@ local function refreshNow(uuid, force, refreshQueue)
 
 		-- Get Volume
 		status, tmp = Rendering.GetVolume({OrderedArgs={"InstanceID=0", "Channel=Master"}})
-		if status ~= true then
+		if not status then
 			commsFailure(device, tmp)
 			return ""
 		end
@@ -994,7 +993,7 @@ local function refreshNow(uuid, force, refreshQueue)
 end
 
 local function refreshVolumeNow(uuid, force)
-	debug("refreshVolumeNow: start")
+	debug("refreshVolumeNow() "..tostring(uuid)..(force and " force" or ""))
 
 	if upnp.proxyVersionAtLeast(1) and not force then
 		return
@@ -1425,7 +1424,7 @@ local function restorePlaybackContext(device, uuid, cxt)
 		end
 	end
 
-	if (Rendering ~= nil) then
+	if Rendering then
 		Rendering.SetMute(
 			{OrderedArgs={"InstanceID=" .. instanceId,
 							"Channel=" .. channel,
@@ -1447,7 +1446,7 @@ local function restorePlaybackContext(device, uuid, cxt)
 	end
 
 	if (device or 0) ~= 0 then
-		refreshNow(UUIDs[device], false, true)
+		refreshNow(uuid, false, true)
 	end
 end
 
@@ -1499,9 +1498,10 @@ end
 
 local function updateGroupMembers(gc, members)
 	local prevMembers, coordinator = getGroupInfos(gc)
-	local targets = {}
+	local targetMap = {}
 	if members:upper() == "ALL" then
-		_, targets = getAllUUIDs()
+		local _, zones = getAllUUIDs()
+		targetMap = map( zones )
 	else
 		for zone in members:gmatch("[^,]+") do
 			local uuid
@@ -1511,13 +1511,13 @@ local function updateGroupMembers(gc, members)
 				uuid = getUUIDFromZoneName(zone)
 			end
 			if ( uuid or "" ) ~= "" then
-				targets[uuid] = true
+				targetMap[uuid] = true
 			end
 		end
 	end
 
 	-- Make any new members part of the group
-	for uuid in pairs( targets ) do
+	for uuid in pairs( targetMap ) do
 		if not prevMembers:find(uuid) then
 			playURI(uuid, "0", "x-rincon:" .. coordinator, "1", nil, nil, false, nil, false, false)
 		end
@@ -1525,7 +1525,7 @@ local function updateGroupMembers(gc, members)
 
 	-- Remove previous members that are no longer in group
 	for uuid in prevMembers:gmatch("RINCON_%x+") do
-		if not targets[uuid] then
+		if not targetMap[uuid] then
 			if controlAnotherZone(uuid, gc) then
 				local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
 				if AVTransport then
@@ -1537,10 +1537,10 @@ local function updateGroupMembers(gc, members)
 end
 
 local function pauseAll(device)
-	local uuids = getAllUUIDs()
-	for uuid in uuids:gmatch("RINCON_%x+") do
-		local device2 = controlAnotherZone(uuid, UUIDs[device])
-		if device2 then
+	local localUUID = UUIDs[device]
+	local _, uuids = getAllUUIDs()
+	for uuid in ipairs( uuids ) do
+		if controlAnotherZone(uuid, localUUID) then
 			local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
 			if AVTransport then
 				AVTransport.Pause({InstanceID="0"})
@@ -1920,7 +1920,6 @@ local function handleAVTransportChange(uuid, event)
 				attrTable[attr] = value
 			end
 			if (attrTable.val ~= nil) then
-log("handleAVTransportChange() "..tostring(token).." = "..tostring(attrTable.val))
 				changed = setData(token, upnp.decode(attrTable.val), uuid, changed)
 			end
 		end
@@ -2094,12 +2093,12 @@ setup = function(zoneDevice, flag)
 	local changed = false
 
 	local newIP = luup.attr_get( "ip", zoneDevice ) or "" -- ??? move away from this, use state.
-	if newIP == "" then 
+	if newIP == "" then
 		setVar("SonosOnline", "0", zoneDevice, SONOS_ZONE_SID)
 		setVar("CurrentStatus", "Offline", zoneDevice, UPNP_AVTRANSPORT_SID)
 		setVar("ProxyUsed", "", zoneDevice, SONOS_ZONE_SID) -- plugin variable??? not different per zone!
 		error("No/invalid IP address for #"..zoneDevice)
-		return false 
+		return false
 	end
 	local uuid = luup.attr_get( "altid", zoneDevice ) or ""
 	if uuid ~= "" then
@@ -2179,7 +2178,8 @@ setup = function(zoneDevice, flag)
 		tostring( zoneDevice ),
 		tostring( newIP ),
 		tostring( modelName ),
-		tostring( values.modelNumber ), model,
+		tostring( values.modelNumber ), 
+		model,
 		tostring( uuid )
 		)
 	)
@@ -2198,7 +2198,9 @@ setup = function(zoneDevice, flag)
 		BROWSE_TIMEOUT = 5
 	end
 
-	sonosServices = getAvailableServices(uuid)
+	if not sonosServices then
+		sonosServices = getAvailableServices(uuid)
+	end
 	metaDataKeys[uuid] = loadServicesMetaDataKeys(zoneDevice)
 
 	-- Sonos playlists
@@ -3147,7 +3149,7 @@ function actionVolumeMute( lul_device, lul_settings )
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
 	local channel = defaultValue(lul_settings, "Channel", "Master")
 
-	local isMuted = (tonumber( dataTable[uuid].Mute ) or 0) ~= 0
+	local isMuted = tostring( dataTable[uuid].Mute or 0 ) ~= "0"
 	local desiredMute = isMuted and 0 or 1
 
 	Rendering.SetMute(
@@ -3899,12 +3901,12 @@ function actionRCSetMute( lul_device, lul_settings )
 	end
 
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
-	local desiredMute = defaultValue(lul_settings, "DesiredMute", nil)
+	local desiredMute = defaultValue(lul_settings, "DesiredMute", false)
 	local channel = defaultValue(lul_settings, "Channel", "Master")
 
 	-- If parameter is nill, we consider the callback as a toggle
-	if desiredMute == nil then
-		local isMuted = (dataTable[uuid].Mute or 0) ~= 0
+	if not desiredMute then
+		local isMuted = tostring( dataTable[uuid].Mute or 0 ) ~= "0"
 		desiredMute = isMuted and 0 or 1
 	end
 
