@@ -3185,7 +3185,13 @@ end
 function actionVolumeUp( lul_device, lul_settings )
 	assert(luup.devices[lul_device].device_type == SONOS_ZONE_DEVICE_TYPE)
 	-- Volume up
-	local Rendering = upnp.getService(UUIDs[lul_device], UPNP_RENDERING_CONTROL_SERVICE)
+	local uuid = UUIDs[lul_device]
+	if (dataTable[uuid].OutputFixed or 0) ~= 0 then
+		W("Can't change volume on fixed output zone %1 (#%2)", luup.devices[lul_device].description, lul_device)
+		return
+	end
+
+	local Rendering = upnp.getService(uuid, UPNP_RENDERING_CONTROL_SERVICE)
 	if not Rendering then
 		return
 	end
@@ -3198,15 +3204,21 @@ function actionVolumeUp( lul_device, lul_settings )
 					 "Channel=" .. channel,
 					 "Adjustment=3"}})
 
-	refreshVolumeNow(UUIDs[lul_device])
+	refreshVolumeNow(uuid)
 end
 
 function actionVolumeDown( lul_device, lul_settings )
 	assert(luup.devices[lul_device].device_type == SONOS_ZONE_DEVICE_TYPE)
 	-- Volume down
-	local Rendering = upnp.getService(UUIDs[lul_device], UPNP_RENDERING_CONTROL_SERVICE)
-	if not Rendering then
+	local uuid = UUIDs[lul_device]
+	if (dataTable[uuid].OutputFixed or 0) ~= 0 then
+		W("Can't change volume on fixed output zone %1 (#%2)", luup.devices[lul_device].description, lul_device)
 		return
+	end
+
+	local Rendering = upnp.getService(uuid, UPNP_RENDERING_CONTROL_SERVICE)
+	if not Rendering then
+		return false
 	end
 
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
@@ -3217,7 +3229,7 @@ function actionVolumeDown( lul_device, lul_settings )
 					 "Channel=" .. channel,
 					 "Adjustment=-3"}})
 
-	refreshVolumeNow(UUIDs[lul_device])
+	refreshVolumeNow(uuid)
 end
 
 --[[
@@ -3972,7 +3984,7 @@ function actionRCSetVolume( lul_device, lul_settings )
 	if (dataTable[uuid].OutputFixed or 0) ~= 0 then
 		W("SetVolume on %1 (#%2) not possible, configured for fixed output volume (action ignored)",
 			luup.devices[lul_device].description, lul_device)
-		return false
+		return
 	end
 
 	local Rendering = upnp.getService(uuid, UPNP_RENDERING_CONTROL_SERVICE)
@@ -3998,7 +4010,7 @@ function actionRCSetRelativeVolume( lul_device, lul_settings )
 	if (dataTable[uuid].OutputFixed or 0) ~= 0 then
 		W("SetRelativeVolume on %1 (#%2) not possible, configured for fixed output volume (action ignored)",
 			luup.devices[lul_device].description, lul_device)
-		return false
+		return
 	end
 
 	local Rendering = upnp.getService(uuid, UPNP_RENDERING_CONTROL_SERVICE)
@@ -4023,7 +4035,7 @@ function actionRCSetVolumeDB( lul_device, lul_settings )
 	if (dataTable[uuid].OutputFixed or 0) ~= 0 then
 		W("SetVolumeDB on %1 (#%2) not possible, configured for fixed output volume (action ignored)",
 			luup.devices[lul_device].description, lul_device)
-		return false
+		return
 	end
 
 	local Rendering = upnp.getService(uuid, UPNP_RENDERING_CONTROL_SERVICE)
