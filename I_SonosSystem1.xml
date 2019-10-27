@@ -12,16 +12,10 @@
 				return false, "Invalid install", "Sonos"
 			end
 			-- Promote callbacks to global
-			SonosReload = L_SonosSystem1.SonosReload
-			clearTask = L_SonosSystem1.clearTask
-			endSayAlert = L_SonosSystem1.endSayAlert
-			updateWithoutProxy = L_SonosSystem1.updateWithoutProxy
-			checkDeviceState = L_SonosSystem1.checkDeviceState
-			checkProxy = L_SonosSystem1.checkProxy
+			sonosTick = L_SonosSystem1.sonosTick
 			processProxySubscriptions = L_SonosSystem1.processProxySubscriptions
 			renewSubscriptions = L_SonosSystem1.renewSubscriptions
 			cancelProxySubscription = L_SonosSystem1.cancelProxySubscription
-			deferredStartup = L_SonosSystem1.deferredStartup
 			-- Get going
 			return L_SonosSystem1.startup( dev )
 		end

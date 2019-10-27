@@ -22,7 +22,7 @@ local MSG_CLASS = "Sonos"
 local isOpenLuup = false
 local pluginDevice
 
-local taskHandle = -1
+local taskHandle = -1 -- luup.task use
 local TASK_ERROR = 2
 local TASK_ERROR_PERM = -2
 local TASK_SUCCESS = 4
@@ -75,26 +75,26 @@ local SONOS_SYS_SID = "urn:toggledbits-com:serviceId:SonosSystem1"
 local SONOS_SYS_DEVICE_TYPE = "urn:schemas-toggledbits-com:device:SonosSystem:1"
 
 local EventSubscriptionsTemplate = {
-	{ service = UPNP_AVTRANSPORT_SERVICE,
-	eventVariable = "LastChange",
-	actionName = "NotifyAVTransportChange",
-	id = "",
-	expiry = "" },
-	{ service = UPNP_RENDERING_CONTROL_SERVICE,
-	eventVariable = "LastChange",
-	actionName = "NotifyRenderingChange",
-	id = "",
-	expiry = "" },
-	{ service = UPNP_ZONEGROUPTOPOLOGY_SERVICE,
-	eventVariable = "ZoneGroupState",
-	actionName = "NotifyZoneGroupTopologyChange",
-	id = "",
-	expiry = "" },
-	{ service = UPNP_MR_CONTENT_DIRECTORY_SERVICE,
-	eventVariable = "ContainerUpdateIDs",
-	actionName = "NotifyContentDirectoryChange",
-	id = "",
-	expiry = "" }
+	{
+		service=UPNP_AVTRANSPORT_SERVICE,
+		eventVariable="LastChange",
+		actionName="NotifyAVTransportChange"
+	},
+	{
+		service=UPNP_RENDERING_CONTROL_SERVICE,
+		eventVariable="LastChange",
+		actionName="NotifyRenderingChange"
+	},
+	{
+		service=UPNP_ZONEGROUPTOPOLOGY_SERVICE,
+		eventVariable="ZoneGroupState",
+		actionName="NotifyZoneGroupTopologyChange"
+	},
+	{
+		service=UPNP_MR_CONTENT_DIRECTORY_SERVICE,
+		eventVariable="ContainerUpdateIDs",
+		actionName="NotifyContentDirectoryChange"
+	}
 }
 
 local EventSubscriptions = {} -- per UUID
@@ -185,6 +185,8 @@ local TTS_METADATA = [[<DIDL-Lite xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-
 </DIDL-Lite>]]
 local TTSChime
 
+local scheduler
+
 local function Q(str) return "'" .. string.gsub(tostring(str), "(')", "\\%1") .. "'" end
 
 local function dump(t, seen)
@@ -238,7 +240,7 @@ local function L(msg, ...) -- luacheck: ignore 212
 		end
 	)
 	luup.log(str, math.max(1, level))
-	if level == 0 and debug and debug.traceback then luup.log( debug.traceback(), 1 ) end
+	if level == 0 and debug and debug.traceback then luup.log( debug.traceback(), 1 ) error(str) end
 end
 
 local function W(msg, ...)
@@ -258,6 +260,18 @@ local function clone( sourceArray )
 	local newArray = {}
 	for ix,element in pairs( sourceArray or {} ) do
 		newArray[ix] = element
+	end
+	return newArray
+end
+
+local function deepCopy( sourceArray )
+	local newArray = {}
+	for key,val in pairs( sourceArray or {} ) do
+		if type(val) == "table" then
+			newArray[key] = deepCopy( val )
+		else
+			newArray[key] = val
+		end
 	end
 	return newArray
 end
@@ -362,8 +376,202 @@ local function getInstallPath()
 	return "/etc/cmh-ludl/"
 end
 
-local function task(text, mode)
-	D("task(%1,%2)", text, mode)
+TaskManager = function( luupCallbackName )
+	local callback = luupCallbackName
+	local runStamp = 1
+	local tickTasks = { __sched={ id="__sched" } }
+	local Task = { id=false, when=0 }
+	local nextident = 0
+
+	-- Schedule a timer tick for a future (absolute) time. If the time is sooner than
+	-- any currently scheduled time, the task tick is advanced; otherwise, it is
+	-- ignored (as the existing task will come sooner), unless repl=true, in which
+	-- case the existing task will be deferred until the provided time.
+	local function scheduleTick( tkey, timeTick, flags )
+		local tinfo = tickTasks[tkey]
+		assert( tinfo, "Task not found" )
+		assert( type(timeTick) == "number" and timeTick > 0, "Invalid schedule time" )
+		flags = flags or {}
+		if ( tinfo.when or 0 ) == 0 or timeTick < tinfo.when or flags.replace then
+			-- Not scheduled, requested sooner than currently scheduled, or forced replacement
+			tinfo.when = timeTick
+		end
+		-- If new tick is earlier than next plugin tick, reschedule Luup timer
+		if tickTasks.__sched.when == 0 then return end -- in queue processing
+		if tickTasks.__sched.when == nil or timeTick < tickTasks.__sched.when then
+			tickTasks.__sched.when = timeTick
+			local delay = timeTick - os.time()
+			if delay < 0 then delay = 0 end
+			runStamp = runStamp + 1
+			luup.call_delay( callback, delay, runStamp )
+		end
+	end
+
+	-- Remove tasks from queue. Should only be called from Task::close()
+	local function removeTask( tkey )
+		tickTasks[ tkey ] = nil
+	end
+
+	-- Plugin timer tick. Using the tickTasks table, we keep track of
+	-- tasks that need to be run and when, and try to stay on schedule. This
+	-- keeps us light on resources: typically one system timer only for any
+	-- number of devices.
+	local function runReadyTasks( luupCallbackArg )
+		local stamp = tonumber(luupCallbackArg)
+		if stamp ~= runStamp then
+			-- runStamp changed, different from stamp on this call, just exit.
+			return
+		end
+
+		local now = os.time()
+		local nextTick = nil
+		tickTasks.__sched.when = 0 -- marker (run in progress)
+
+		-- Since the tasks can manipulate the tickTasks table (via calls to
+		-- scheduleTick()), the iterator is likely to be disrupted, so make a
+		-- separate list of tasks that need service (to-do list).
+		local todo = {}
+		for t,v in pairs(tickTasks) do
+			if t ~= "__sched" and ( v.when or 0 ) ~= 0 and v.when <= now then
+				D("Task:runReadyTasks() ready %1 %2", v.id, v.when)
+				table.insert( todo, v )
+			end
+		end
+
+		-- Run the to-do list tasks.
+		table.sort( todo, function( a, b ) return a.when < b.when end )
+		for _,v in ipairs(todo) do
+			v:run()
+		end
+
+		-- Things change while we work. Take another pass to find next task.
+		for t,v in pairs(tickTasks) do
+			D("Task:runReadyTasks() waiting %1 %2", v.id, v.when)
+			if t ~= "__sched" and ( v.when or 0 ) ~= 0 then
+				if nextTick == nil or v.when < nextTick then
+					nextTick = v.when
+				end
+			end
+		end
+
+		-- Reschedule scheduler if scheduled tasks pending
+		if nextTick ~= nil then
+			now = os.time() -- Get the actual time now; above tasks can take a while.
+			local delay = nextTick - now
+			if delay < 0 then delay = 0 end
+			tickTasks.__sched.when = now + delay -- that may not be nextTick
+			D("Task:runReadyTasks() next in %1", delay)
+			luup.call_delay( callback, delay, luupCallbackArg )
+		else
+			tickTasks.__sched.when = nil -- remove when to signal no timer running
+		end
+	end
+
+	function Task:schedule( when, flags, args )
+		assert(self.id, "Can't reschedule() a closed task")
+		if args then self.args = args end
+		scheduleTick( self.id, when, flags )
+		return self
+	end
+
+	function Task:delay( delay, flags, args )
+		assert(self.id, "Can't delay() a closed task")
+		if args then self.args = args end
+		scheduleTick( self.id, os.time()+delay, flags )
+		return self
+	end
+
+	function Task:suspend()
+		self.when = 0
+		return self
+	end
+
+	function Task:run()
+		assert(self.id, "Can't run() a closed task")
+		self.when = 0
+		local success, err = pcall( self.func, self, unpack( self.args or {} ) )
+		if not success then L({level=1, msg="Task:run() task %1 failed: %2"}, self, err) end
+		return self
+	end
+
+	function Task:close()
+		removeTask( self.id )
+		self.id = nil
+		self.when = nil
+		self.args = nil
+		self.func = nil
+		setmetatable(self,nil)
+		return self
+	end
+
+	function Task:new( id, owner, tickFunction, args, desc )
+		assert( id == nil or tickTasks[tostring(id)] == nil,
+			"Task already exists with id "..tostring(id)..": "..tostring(tickTasks[tostring(id)]) )
+		assert( type(owner) == "number" )
+		assert( type(tickFunction) == "function" )
+
+		local obj = { when=0, owner=owner, func=tickFunction, name=desc or tostring(owner), args=args }
+		obj.id = tostring( id or obj )
+		setmetatable(obj, self)
+		self.__index = self
+		self.__tostring = function(e) return string.format("Task(%s)", e.id) end
+
+		tickTasks[ obj.id ] = obj
+		return obj
+	end
+
+	local function getOwnerTasks( owner )
+		local res = {}
+		for k,v in pairs( tickTasks ) do
+			if owner == nil or v.owner == owner then
+				table.insert( res, k )
+			end
+		end
+		return res
+	end
+
+	local function getTask( id )
+		return tickTasks[tostring(id)]
+	end
+
+	-- Convenience function to create a delayed call to the given func in its own task
+	local function delay( func, delaySecs, args )
+		nextident = nextident + 1
+		local t = Task:new( "_delay"..nextident, pluginDevice, func, args )
+		t:delay( math.max(0, delaySecs) )
+		return t
+	end
+
+	return {
+		runReadyTasks = runReadyTasks,
+		getOwnerTasks = getOwnerTasks,
+		getTask = getTask,
+		delay = delay,
+		Task = Task,
+		_tt = tickTasks
+	}
+end
+
+-- Tick handler for scheduler (TaskManager)
+-- @export
+function sonosTick( stamp )
+	D("sonosTick(%1)", stamp)
+	scheduler.runReadyTasks( stamp )
+end
+
+local function SonosReload()
+	W( 'Requesting luup reload...' )
+	luup.reload()
+end
+
+local luupTask
+local function clearLuupTask( stask )
+	luupTask("Clearing...", TASK_SUCCESS)
+	stask:close()
+end
+
+luupTask = function(text, mode)
+	D("luupTask(%1,%2)", text, mode)
 	if (mode == TASK_ERROR_PERM) then
 		taskHandle = luup.task(text, TASK_ERROR, MSG_CLASS, taskHandle)
 	else
@@ -371,16 +579,13 @@ local function task(text, mode)
 
 		-- Clear the previous error, since they're all transient
 		if (mode ~= TASK_SUCCESS) then
-			luup.call_delay("clearTask", 30, "", false)
+			local t = scheduler.getTask("clearLuupTask")
+			if not t then
+				t = scheduler.Task:new( "clearLuupTask", pluginDevice, clearLuupTask)
+			end
+			t:delay(30, { replace=true })
 		end
 	end
-end
-
---
--- Has to be "non-local" in order for MiOS to call it :(
---
-function clearTask()
-	task("Clearing...", TASK_SUCCESS)
 end
 
 local function defaultValue(arr, val, default)
@@ -392,6 +597,7 @@ end
 local function setData(name, value, zoneident, default)
 	local uuid = UUIDs[tonumber(zoneident) or -999] or zoneident
 	if uuid then
+if uuid == "RINCON_48A6B813879001400" and name == "OutputFixed" and value ~= "0" then L{msg="stop",level=0} end -- ??? FIXME
 		-- The shadow table stores the value whether there's a device for the zone or not
 		dataTable[uuid] = dataTable[uuid] or {}
 		local curValue = dataTable[uuid][name]
@@ -557,10 +763,13 @@ local function getUUIDFromZoneName(name)
 	return nil
 end
 
+-- Get IP for zone from zoneInfo (specifically)
 local function getIPFromUUID(uuid)
-	local location = (zoneInfo.zones[uuid] or {}).Location
-	if location then
-		return location:match( "^https?://([^:/]+)")
+	if zoneInfo then
+		local location = (zoneInfo.zones[uuid] or {}).Location
+		if location then
+			return location:match( "^https?://([^:/]+)")
+		end
 	end
 	return nil
 end
@@ -601,6 +810,15 @@ local function getAllUUIDs()
 		end
 	end
 	return table.concat( zones, "," ), zones
+end
+
+-- Return bool if device is online; pass device number or zone uuid
+local function isOnline(zone)
+	local uuid = tonumber(zone) and UUIDs[zone] or zone
+	if uuid and Zones[uuid] then
+		return tostring(dataTable[uuid].SonosOnline or 0) ~= "0"
+	end
+	return false
 end
 
 local function deviceIsOnline(device)
@@ -838,17 +1056,46 @@ local function parseQueue(xml)
 	return result
 end
 
-local setup -- forward declaration
-local function refreshNow(uuid, force, refreshQueue)
-	local device = Zones[uuid]
-	D("refreshNow(%1)", device)
+-- Check transport state to see if stopped. If so and TTS alerts running, rush the endSayAlert
+-- task for the device.
+local function checkTransportState( uuid )
+	D("checkTransportState(%1) state %2", uuid, (dataTable[uuid] or {}).TransportState)
+	if dataTable[uuid].TransportState == "STOPPED" then
+		local device = Zones[uuid]
+		local task = scheduler.getTask("endSayAlert"..(device or 0))
+		D("checkTransportState() device %1 task %2 queue %3", device, task, sayQueue[device])
+		if device and task and sayQueue[device] then
+			D("checkTransportState() stopped playing %1, waiting for %2",
+				dataTable[uuid].CurrentTrackURI, sayQueue[device][1].URI)
+			if dataTable[uuid].CurrentTrackURI == sayQueue[device][1].URI then
+				D("refreshNow() rushing %1 for STOPPED transport status", tostring(task))
+				task:delay( 0, { replace=true } )
+			end
+		end
+	end
+end
 
-	if upnp.proxyVersionAtLeast(1) and not force then
-		return ""
+local setup -- forward declaration
+-- refreshNow is the refresh handle for updateWithoutProxy (task). DO NOT call this function
+-- directly. To get proper scheduling of refreshing, including on-demand refreshes, always
+-- use updateNow()
+local function refreshNow(uuid, force, refreshQueue)
+	D("refreshNow(%1)", uuid, force, refreshQueue)
+	if (uuid or "") == "" then
+		return
+	end
+	local device = Zones[uuid]
+	if (device or 0) == 0 then
+		W("Can't refresh unknown zone %1; reload Luup to add this device.", uuid)
 	end
 
-	if (uuid == nil or uuid == "") then
-		return ""
+	if upnp.proxyVersionAtLeast(1) and not force then
+		return
+	end
+
+	if not ( isOnline(uuid) or setup(device, true) ) then
+		D("refreshNow() zone is offline and cannot be started %1", uuid)
+		return
 	end
 
 	local status, tmp
@@ -875,9 +1122,6 @@ local function refreshNow(uuid, force, refreshQueue)
 			commsFailure(device, tmp)
 			return ""
 		end
-		if deviceIsOnline(device) then
-			setup(device, true)
-		end
 		groupsState = upnp.extractElement("ZoneGroupState", tmp, "")
 		changed = setData("ZoneGroupState", groupsState, uuid, changed)
 		if changed or not zoneInfo then
@@ -893,11 +1137,14 @@ local function refreshNow(uuid, force, refreshQueue)
 		D("refreshNow() refreshing transport state")
 		-- GetCurrentTransportState  (PLAYING, STOPPED, etc)
 		status, tmp = AVTransport.GetTransportInfo({InstanceID="0"})
-		if (status ~= true) then
+		if not status then
 			commsFailure(device, tmp)
 			return ""
 		end
-		changed = setData("TransportState", upnp.extractElement("CurrentTransportState", tmp, ""), uuid, changed)
+
+		-- Special handling TransportState: if now STOPPED, and TTS/alerts are playing, rush endSay
+		local tschanged = setData("TransportState", upnp.extractElement("CurrentTransportState", tmp, ""), uuid, false)
+
 		changed = setData("TransportStatus", upnp.extractElement("CurrentTransportStatus", tmp, ""), uuid, changed)
 		changed = setData("TransportPlaySpeed", upnp.extractElement("CurrentSpeed", tmp, ""), uuid, changed)
 
@@ -943,6 +1190,13 @@ local function refreshNow(uuid, force, refreshQueue)
 		changed = setData("CurrentAlbum", album, uuid, changed)
 		changed = setData("CurrentDetails", details, uuid, changed)
 		changed = setData("CurrentAlbumArt", albumArt, uuid, changed)
+
+		-- Now that we've updated everything, if TransportState has changed to stop, check
+		if tschanged then
+			changed = true
+			checkTransportState( uuid )
+		end
+
 	end
 
 	local Rendering = upnp.getService(uuid, UPNP_RENDERING_CONTROL_SERVICE)
@@ -1066,6 +1320,39 @@ local function refreshMuteNow(uuid)
 
 	if changed and Zones[uuid] then
 		setVariableValue(HADEVICE_SID, "LastUpdate", os.time(), Zones[uuid])
+	end
+end
+
+local function updateWithoutProxy(task, device)
+	D("updateWithoutProxy(%1,%2)", tostring(task), device)
+	local uuid = UUIDs[device]
+	refreshNow(uuid, true, true)
+	if not upnp.proxyVersionAtLeast(1) then
+		local ts = dataTable[uuid].TransportState or "STOPPED"
+		local rp,rs = getVar("PollDelays", "15,60", device, SONOS_ZONE_SID):match( '^(%S+)%,%s*(.*)$' )
+		rp = tonumber(rp) or 15
+		rs = tonumber(rs) or 60
+		-- Schedule next
+		if not task then
+			task = scheduler.getTask("update"..device)
+		end
+		if not task then
+			task = scheduler.Task:new( "update"..device, device, updateWithoutProxy, { device } )
+		end
+		-- If player is stopped or is not group coordinator, use long delay.
+		task:delay( (ts == "STOPPED" or not isGroupCoordinator(uuid)) and rs or rp )
+		D("Scheduled update for no proxy, state %1", ts)
+		return
+	else
+		-- Not reschedulling, but leave task
+	end
+	D("Proxy found, skipping poll reschedule")
+end
+
+local function updateNow(device)
+	if UUIDs[device] then
+		local task = scheduler.getTask("update"..device) or scheduler.Task:new( "update"..device, device, updateWithoutProxy, { device } )
+		task:delay(0, { replace=true } )
 	end
 end
 
@@ -1345,12 +1632,12 @@ local function playURI(zoneUUID, instanceId, uri, speed, volume, uuids, sameVolu
 
 		if (volume or "") ~= "" then
 			-- Don't attempt to set volume on fixed output volume zone.
-			if (dataTable[uuid].OutputFixed or 0) ~= 0 then
+			if tostring(dataTable[uuid].OutputFixed or 0) ~= "0" then
 				-- Setting volume on fixed output device? If specific device, warn; otherwise quietly ignore.
 				if not sameVolumeForAll then
 					local device = Zones[uuid]
-					W("(playURI) can't set volume on %1 (#%2), configured for fixed output",
-						(luup.devices[device] or {}).description, device)
+					W("(playURI) can't set volume on %1 (#%2) %3, configured for fixed output",
+						(luup.devices[device] or {}).description, device, uuid)
 				end
 			elseif Rendering then
 				D("playURI() setting volume %1", volume)
@@ -1361,12 +1648,11 @@ local function playURI(zoneUUID, instanceId, uri, speed, volume, uuids, sameVolu
 			end
 		end
 
-		if tonumber(speed) then
-			D("playURI() starting play")
-			AVTransport.Play(
-				 {OrderedArgs={"InstanceID=" .. instanceId,
-							 "Speed=" .. speed}})
-		end
+		speed = tonumber(speed) or 1
+		D("playURI() starting play on %1 at speed %2", uuid, speed)
+		AVTransport.Play(
+			 {OrderedArgs={"InstanceID=" .. instanceId,
+						 "Speed=" .. speed}})
 	end
 end
 
@@ -1458,7 +1744,7 @@ local function restorePlaybackContext(device, uuid, cxt)
 							"DesiredMute=" .. cxt.Mute}})
 
 		-- Don't set volume on fixed output device
-		if (dataTable[uuid].OutputFixed or 0) ~= 0 then
+		if tostring(dataTable[uuid].OutputFixed or 0) == "0" then
 			Rendering.SetVolume(
 				{OrderedArgs={"InstanceID=" .. instanceId,
 								"Channel=" .. channel,
@@ -1475,9 +1761,7 @@ local function restorePlaybackContext(device, uuid, cxt)
 							"Speed=" .. cxt.TransportPlaySpeed}})
 	end
 
-	if (device or 0) ~= 0 then
-		refreshNow(uuid, false, true)
-	end
+	updateNow( device )
 end
 
 local function restorePlaybackContexts(device, playCxt)
@@ -1697,21 +1981,6 @@ local function setupTTSSettings(device)
 	end
 end
 
-function updateWithoutProxy(device)
-	local dn = tonumber(device) or error "updateWithoutProxy() invalid device: "..tostring(device)
-	refreshNow(UUIDs[dn], true, true)
-	if not upnp.proxyVersionAtLeast(1) then
-		local ts = getVar( "TransportState", "STOPPED", dn, UPNP_AVTRANSPORT_SID )
-		local rp,rs = getVar("PollDelays", "15,60", dn, SONOS_ZONE_SID):match( '^(%S+)%,%s*(.*)$' )
-		rp = tonumber(rp) or 15
-		rs = tonumber(rs) or 60
-		luup.call_delay("updateWithoutProxy", ( ts == "STOPPED" ) and rs or rp, device)
-		D("Scheduled update for no proxy, state %1", ts)
-		return
-	end
-	D("Proxy found, skipping poll reschedule")
-end
-
 local function getAvailableServices(uuid)
 	D("getAvailableServices(%1)", uuid)
 	local services = {}
@@ -1873,7 +2142,11 @@ local function setDeviceIcon( device, icon, model, uuid )
 		luup.attr_set( 'device_json', staticJSONFile, device )
 		-- rigpapa: by using a delay here, we increase the chances that changes for multiple
 		-- players can be captured in one reload, rather than one per.
-		luup.call_delay( 'SonosReload', 15, "" )
+		local t = scheduler.getTask("reload")
+		if not t then
+			t = scheduler.Task:new("reload", device, SonosReload)
+		end
+		t:delay( 15, { replace=true } )
 	end
 	setVar( SONOS_ZONE_SID, "_icorev", ICONREV, device )
 end
@@ -1882,20 +2155,14 @@ local function getCheckStateRate(device)
 	return getVarNumeric("CheckStateRate", 0, device, SONOS_ZONE_SID) * 60
 end
 
-function checkDeviceState(data)
-	D("checkDeviceState(%1)", data)
-	local cpt, device = data:match("(%d+):(%d+)")
-	if (cpt ~= nil and device ~= nil) then
-		cpt = tonumber(cpt)
-		if (cpt == nil or cpt ~= idConfRefresh) then
-			return
-		end
-		device = tonumber(device)
-		local rate = getCheckStateRate(device)
-		if rate > 0 then
-			luup.call_delay("checkDeviceState", rate, idConfRefresh .. ":" .. device)
-			setup(device, false)
-		end
+function checkDeviceState(task, device)
+	D("checkDeviceState(%1,%2)", tostring(task), device)
+	local rate = getCheckStateRate(device)
+	if rate > 0 then
+		task:delay( rate )
+		setup(device, false)
+	else
+		task:close()
 	end
 end
 
@@ -1932,9 +2199,11 @@ end
 
 local function handleAVTransportChange(uuid, event)
 	D("handleAVTransportChange(%1,%2)", uuid, event)
+	local device = Zones[uuid] or 0
 	local statusString, title, title2, artist, album, details, albumArt, desc
 	local currentUri, currentUriMetaData, trackUri, trackUriMetaData, service, serviceId
 	local changed = false
+	local tschanged = false
 	local tmp = event:match("<Event%s?[^>]-><InstanceID%s?[^>]->(.+)</InstanceID></Event>")
 	if tmp ~= nil then
 		local found = false
@@ -1950,7 +2219,10 @@ local function handleAVTransportChange(uuid, event)
 				attrTable[attr] = value
 			end
 			if (attrTable.val ~= nil) then
-				changed = setData(token, upnp.decode(attrTable.val), uuid, changed)
+				-- Special handling for TransportState/TTS interaction (see also below)
+				local vchanged = setData(token, upnp.decode(attrTable.val), uuid, false)
+				if token == "TransportState" then tschanged = vchanged end
+				changed = vchanged or changed
 			end
 		end
 
@@ -1982,6 +2254,11 @@ local function handleAVTransportChange(uuid, event)
 				getSimpleDIDLStatus(dataTable[uuid]["r:EnqueuedTransportURIMetaData"])
 			_, serviceId = getServiceFromURI(currentUri, trackUri)
 			updateServicesMetaDataKeys(uuid, serviceId, desc)
+		end
+
+		if tschanged then
+			-- Finally, after all other updates, check transport state if changed.
+			checkTransportState(uuid)
 		end
 	end
 	if changed and Zones[uuid] then
@@ -2057,7 +2334,7 @@ local function setDebugLogs(device, enable)
 	end
 	if ((enable ~= "0") and (enable ~= "1"))
 	then
-		task("SetDebugLogs: invalid argument", TASK_ERROR)
+		luupTask("SetDebugLogs: invalid argument", TASK_ERROR)
 		return
 	end
 
@@ -2082,7 +2359,7 @@ local function setReadQueueContent(device, enable)
 	end
 	if ((enable ~= "0") and (enable ~= "1"))
 	then
-		task("SetReadQueueContent: invalid argument", TASK_ERROR)
+		luupTask("SetReadQueueContent: invalid argument", TASK_ERROR)
 		return
 	end
 
@@ -2096,51 +2373,53 @@ local function setReadQueueContent(device, enable)
 	handleContentDirectoryChange(device, UUIDs[device], "Q:0,")
 end
 
-function SonosReload()
-	W( 'Requesting luup reload...' )
-	luup.reload()
-end
-
 -- Check that the proxy is running.
-function checkProxy(data) -- luacheck: ignore 212
-	local proxy = false
+function checkProxy( task, device )
+	D("checkProxy(%1,%2)", tostring(task), device)
 	local version = upnp.getProxyApiVersion()
+	local proxy = version ~= nil and version
 	if version then
 		L("UPnP Event Proxy identified - API version %1", version)
-		proxy = true
 	else
 		W("UPnP Event Proxy plugin could not be contacted; polling for status will be used. This is inefficient; please consider installing the plugin from the marketplace.")
 	end
-
-	if ( not proxy ) then
+	if not proxy then
 		upnp.unuseProxy()
 	end
-
-	luup.call_delay("checkProxy", 300)
+	task:delay(300)
 end
 
 setup = function(zoneDevice, flag)
+	D("setup(%1,%2)", zoneDevice, flag)
 	local changed = false
 
-	local newIP = luup.attr_get( "ip", zoneDevice ) or "" -- ??? move away from this, use state.
-	if newIP == "" then
+	local uuid = luup.attr_get( "altid", zoneDevice ) or error("Invalid UUID on device "..zoneDevice) -- "shouldn't happen"
+	D("setup() uuid %1", uuid)
+	upnp.resetServices( uuid )
+	if EventSubscriptions[uuid] then
+		upnp.cancelProxySubscriptions(EventSubscriptions)
+		EventSubscriptions[uuid] = nil
+	end
+	Zones[uuid] = nil
+	UUIDs[zoneDevice] = nil
+	dataTable[uuid] = nil
+
+	local newIP = getIPFromUUID( uuid )
+	local oldIP = luup.attr_get( "ip", zoneDevice )
+	D("setup() new IP %1 old %2", newIP, oldIP)
+	if (newIP or "") == "" then
+		-- Zone not currently in zone info (may be offline); use last known
+		newIP = oldIP
+	elseif newIP ~= oldIP then
+		-- Update last known
+		luup.attr_set( "ip", newIP, zoneDevice )
+	end
+	if (newIP or "") == "" then
 		setVar("SonosOnline", "0", zoneDevice, SONOS_ZONE_SID)
 		setVar("CurrentStatus", "Offline", zoneDevice, UPNP_AVTRANSPORT_SID)
 		setVar("ProxyUsed", "", zoneDevice, SONOS_ZONE_SID) -- plugin variable??? different per zone?
 		E("No/invalid IP address for #%1", zoneDevice)
 		return false
-	end
-	local uuid = luup.attr_get( "altid", zoneDevice ) or ""
-	if uuid ~= "" then
-		-- Reset UPnP for last known UUID. In DHCP environment, ZPs can swap addresses and
-		-- move around, so make sure prior pointers are cleared.
-		upnp.resetServices( uuid )
-		if EventSubscriptions[uuid] then
-			upnp.cancelProxySubscriptions(EventSubscriptions)
-			EventSubscriptions[uuid] = nil
-		end
-		Zones[uuid] = nil
-		UUIDs[zoneDevice] = nil
 	end
 
 	local descrURL = string.format(descriptionURL, newIP, port)
@@ -2162,11 +2441,12 @@ setup = function(zoneDevice, flag)
 		setVar("SonosOnline", "0", zoneDevice, SONOS_ZONE_SID)
 		setVar("CurrentStatus", "Offline", zoneDevice, UPNP_AVTRANSPORT_SID)
 		setVar("ProxyUsed", "", zoneDevice, SONOS_ZONE_SID) -- ??? plugin variable? see above
-		return
+		W("Zone %1 (#%2) appears to be offline. %3", (luup.devices[zoneDevice] or {}).description,
+			zoneDevice, uuid)
+		return false
 	end
 
 	uuid = values.UDN:match("uuid:(.+)") or ""
-	luup.attr_set( "altid", uuid, zoneDevice ) -- ??? does it ever change?
 	UUIDs[zoneDevice] = uuid
 	Zones[uuid] = zoneDevice
 	dataTable[uuid] = {}
@@ -2217,8 +2497,13 @@ setup = function(zoneDevice, flag)
 	pcall( setDeviceIcon, zoneDevice, icon, values.modelNumber, uuid )
 
 	if upnp.proxyVersionAtLeast(1) then
-		EventSubscriptions[uuid] = clone( EventSubscriptionsTemplate )
+		EventSubscriptions[uuid] = deepCopy( EventSubscriptionsTemplate )
 		upnp.subscribeToEvents(zoneDevice, VERA_IP, EventSubscriptions[uuid], SONOS_ZONE_SID, uuid)
+		if DEBUG_MODE then
+			for _,sub in ipairs(EventSubscriptions[uuid]) do
+				D("%1 event service %2 sid %3 expiry %4", uuid, sub.service, sub.id, sub.expiry)
+			end
+		end
 
 		setVar(SONOS_SYS_SID, "ProxyUsed", "proxy is in use", zoneDevice)
 		BROWSE_TIMEOUT = 30
@@ -2251,14 +2536,16 @@ setup = function(zoneDevice, flag)
 		setVariableValue(HADEVICE_SID, "LastUpdate", os.time(), zoneDevice)
 	end
 
-	idConfRefresh = 0
 	local rate = getCheckStateRate(zoneDevice)
 	if rate > 0 then
-		luup.call_delay("checkDeviceState", rate, idConfRefresh .. ":" .. zoneDevice)
+		local t = scheduler.getTask("checkState"..zoneDevice) or
+			scheduler.Task:new("checkState"..zoneDevice, zoneDevice, checkDeviceState, { zoneDevice } )
+		t:delay( rate, { replace=true } )
 	end
-	updateWithoutProxy(zoneDevice)
 
-	refreshNow(uuid, true, true)
+	refreshNow( uuid, true, true ) -- direct call for inline
+
+	return true
 end
 
 local function zoneRunOnce( dev )
@@ -2292,16 +2579,22 @@ local function startZone( zoneDevice )
 	return true
 end
 
+local function runMasterTick( task )
+	D("runMasterTick(%1)", task)
+	-- At the moment, nothing to do, so don't reschedule, just go away.
+	task:close()
+end
+
 -- Complete startup tasks. Hopefully everything is initialized by now.
-function deferredStartup(device)
+local function deferredStartup(device)
 	D("deferredStartup(%1)", device)
 	device = tonumber(device)
 
 	-- Allow configured no-proxy operation
-	if getVarNumeric( "UseProxy", 1, device, SONOS_SYS_SID ) == 0 then
+	if getVarNumeric( "UseProxy", 1, device, SONOS_SYS_SID, true ) == 0 then
 		upnp.unuseProxy()
 	else
-		checkProxy(device)
+		scheduler.Task:new("checkProxy", device, checkProxy, { device }):delay(300)
 	end
 
 	-- Start zones
@@ -2387,6 +2680,25 @@ function deferredStartup(device)
 
 	D("deferredStartup() done. We're up and running!")
 	setVar( SONOS_SYS_SID, "Message", string.format("Running %d zones", count), device )
+
+	-- Start a new master task
+	local t = scheduler.Task:new( "master", device, runMasterTick, { device } )
+	t:delay( 60 )
+end
+
+local function waitForProxy( task, device, tries )
+	D("waitForProxy(%1,%2,%3)", tostring(task), device, tries)
+	tries = (tries or 0) + 1
+	if getVarNumeric( "UseProxy", 1, device, SONOS_SYS_SID ) == 0
+		or upnp.getProxyApiVersion() or tries >= 10 then
+		-- Success or too long or no proxy, get going.
+		task:close() -- close current master task; deferredStartup will create anew
+		deferredStartup(device)
+		return
+	end
+	D("waitForProxy() proxy not ready, retrying")
+	setVar( SONOS_SYS_SID, "Message", "Searching for UPnP Proxy...", device )
+	task:delay(3, nil, { device, tries })
 end
 
 function startup( lul_device )
@@ -2398,7 +2710,7 @@ function startup( lul_device )
 
 	local debugLogs = getVarNumeric("DebugLogs", 0, lul_device, SONOS_SYS_SID)
 	if debugLogs ~= 0 then
-		DEBUG_MODE = true
+		DEBUG_MODE = (debugLogs % 2) ~= 0
 		if upnp and math.floor( debugLogs / 2 ) % 2 == 1 then upnp.DEBUG_MODE = true end
 		if tts and math.floor( debugLogs / 4 ) % 2 == 1 then tts.DEBUG_MODE = true end
 	end
@@ -2407,6 +2719,8 @@ function startup( lul_device )
 
 	setVar( SONOS_SYS_SID, "PluginVersion", PLUGIN_VERSION, lul_device )
 	setVar( SONOS_SYS_SID, "Message", "Starting...", lul_device )
+
+	scheduler = TaskManager( 'sonosTick' )
 
 	if not isOpenLuup and luup.short_version then
 		-- Real Vera 7.30+
@@ -2493,9 +2807,9 @@ function startup( lul_device )
 	luup.variable_set(SONOS_SYS_SID, "DiscoveryPatchInstalled",
 		upnp.isDiscoveryPatchInstalled(VERA_LOCAL_IP) and "1" or "0", lul_device)
 
-	local delay = getVarNumeric( "StartupDelay", 10, lul_device, SONOS_SYS_SID )
-	L("Deferring zone startup for %1 seconds to allow system to settle", delay)
-	luup.call_delay( 'deferredStartup', delay, lul_device )
+	-- Deferred startup, on the master tick task.
+	local t = scheduler.Task:new( "master", lul_device, waitForProxy, { lul_device } )
+	t:delay( 3 )
 
 	luup.set_failure( 0, lul_device )
 	return true, "", MSG_CLASS
@@ -2524,9 +2838,18 @@ local function sayOrAlert(device, parameters, saveAndRestore)
 		sameVolume = true
 	end
 
+	-- If empty URI is passed, abandon all TTS/alerts
 	if (uri or "") == "" then
-		if saveAndRestore then
-			endSayAlert( device )
+		if sayPlayback[device] then
+			-- Leave queue with currently playing element
+			while sayQueue[device] and #sayQueue[device] > 1 do
+				table.remove( sayQueue[device] )
+			end
+			-- Rush the end task
+			local task = scheduler.getTask( "endSayAlert"..device)
+			if task then
+				task:delay( 0, { replace=true } )
+			end
 		end
 		return
 	end
@@ -2613,16 +2936,18 @@ local function sayOrAlert(device, parameters, saveAndRestore)
 
 	playURI(localUUID, instanceId, uri, "1", volume, newGroup and keys(targets) or nil, sameVolume, nil, newGroup, true)
 
-	if saveAndRestore and (duration or 0) > 0 then
+	if saveAndRestore then
+		if (tonumber(duration) or 0) <= 0 then duration = 30 end
 		D("sayOrAlert() delaying for duration %1", duration)
-		luup.call_delay("endSayAlert", duration, device)
+		local t = scheduler.getTask("endSayAlert"..device) or scheduler.Task:new("endSayAlert"..device, device, endSayAlert, { device })
+		t:delay( duration, { replace=true } )
 	end
 
-	refreshNow(localUUID, false, false)
+	updateNow( device )
 end
 
 local function queueAlert(device, settings)
-	D("TTS queueAlert for device %1", device)
+	D("queueAlert(%1,%2)", device, settings)
 	sayQueue[device] = sayQueue[device] or {}
 	local first = #sayQueue[device] == 0
 	table.insert(sayQueue[device], settings)
@@ -2634,6 +2959,7 @@ end
 
 -- This TTS audio is done. More?
 local function endTTSPlayback(device)
+	D("endTTSPlayback(%1)", device)
 	if sayQueue[device] and #sayQueue[device] > 0 then
 		local settings = sayQueue[device][1]
 		D("endTTSPlayback() finished %1", settings.URI)
@@ -2653,43 +2979,46 @@ local function endTTSPlayback(device)
 	return true -- finished
 end
 
--- Callback for end of alert/Say.
-endSayAlert = function(device)
-	D("endSayAlert(%1)", device)
-	if not tts then return end
-	device = tonumber(device) or E("Invalid parameter/device number for endSayAlert")
-	if endTTSPlayback(device) and sayPlayback[device] then
-		local playCxt = sayPlayback[device]
-		if playCxt.newGroup then
-			-- Temporary group was used; reset group structure.
-			-- First remove all to-be-restored devices from their current groups.
-			D("endSayAlert() restoring group structure after temporary group")
-			for uuid in pairs( playCxt.context or {} ) do
-				D("endSayAlert() clearing group for %1", uuid)
-				local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
-				if AVTransport ~= nil then
-					AVTransport.Stop({InstanceID="0"})
-					AVTransport.BecomeCoordinatorOfStandaloneGroup({InstanceID="0"})
-				end
-			end
-			D("endSayAlert() restoring group structure")
-			for uuid,cxt in pairs( playCxt.context or {} ) do
-				-- D("endSayAlert() affected %1 context ", uuid, cxt)
-				if cxt.GroupCoordinator ~= uuid then
-					D("endSayAlert() restoring member %1 to %2", uuid, cxt.GroupCoordinator)
-					-- Add this uuid to its prior GroupCoordinator
-					if controlAnotherZone( uuid, UUIDs[device] ) then
-						playURI(uuid, "0", "x-rincon:" .. cxt.GroupCoordinator, "1", nil, nil, false, nil, false, false)
+-- Callback (task) for end of Alert/Say action.
+endSayAlert = function(task, device)
+	D("endSayAlert(%1,%2)", tostring(task), device)
+	if endTTSPlayback(device) then
+		task:close() -- no longer needed
+		if sayPlayback[device] then
+			-- Playback state was saved, so restore it.
+			local playCxt = sayPlayback[device]
+			if playCxt.newGroup then
+				-- Temporary group was used; reset group structure.
+				-- First remove all to-be-restored devices from their current groups.
+				D("endSayAlert() restoring group structure after temporary group")
+				for uuid in pairs( playCxt.context or {} ) do
+					D("endSayAlert() clearing group for %1", uuid)
+					local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
+					if AVTransport ~= nil then
+						AVTransport.Stop({InstanceID="0"})
+						AVTransport.BecomeCoordinatorOfStandaloneGroup({InstanceID="0"})
 					end
-				else
-					D("endSayAlert() %1 is its own group coordinator", uuid)
+				end
+
+				D("endSayAlert() restoring group structure")
+				for uuid,cxt in pairs( playCxt.context or {} ) do
+					-- D("endSayAlert() affected %1 context ", uuid, cxt)
+					if cxt.GroupCoordinator ~= uuid then
+						D("endSayAlert() restoring member %1 to %2", uuid, cxt.GroupCoordinator)
+						-- Add this uuid to its prior GroupCoordinator
+						if controlAnotherZone( uuid, UUIDs[device] ) then
+							playURI(uuid, "0", "x-rincon:" .. cxt.GroupCoordinator, "1", nil, nil, false, nil, false, false)
+						end
+					else
+						D("endSayAlert() %1 is its own group coordinator", uuid)
+					end
 				end
 			end
-		end
 
-		D("endSayAlert() restoring saved playback contexts")
-		restorePlaybackContexts(device, playCxt)
-		sayPlayback[device] = nil
+			D("endSayAlert() restoring saved playback contexts")
+			restorePlaybackContexts(device, playCxt)
+			sayPlayback[device] = nil
+		end
 	end
 end
 
@@ -2865,7 +3194,7 @@ function actionSonosSetURIToPlay( lul_device, lul_settings )
 
 	playURI(UUIDs[lul_device], instanceId, uri, nil, nil, nil, false, nil, false, true)
 
-	refreshNow(UUIDs[lul_device], false, true)
+	updateNow( lul_device )
 
 	-- URI must include protocol as prefix.
 	-- x-file-cifs:
@@ -2887,7 +3216,7 @@ function actionSonosPlayURI( lul_device, lul_settings )
 
 	playURI(UUIDs[lul_device], instanceId, uri, speed, volume, nil, false, nil, false, true)
 
-	refreshNow(UUIDs[lul_device], false, true)
+	updateNow( lul_device )
 
 	-- URI must include protocol as prefix.
 	-- x-file-cifs:
@@ -2908,20 +3237,14 @@ function actionSonosEnqueueURI( lul_device, lul_settings )
 
 	playURI(UUIDs[lul_device], instanceId, uri, "1", nil, nil, false, enqueueMode, false, true)
 
-	refreshNow(UUIDs[lul_device], false, true)
+	updateNow( lul_device )
 end
 
 function actionSonosAlert( lul_device, lul_settings )
 	D("actionSonosAlert(%1,%2)", lul_device, lul_settings)
 	assert(luup.devices[lul_device].device_type == SONOS_ZONE_DEVICE_TYPE)
 	L("Alert action on device %1 URI %2 duration %3", lul_device, lul_settings.URI, lul_settings.Duration)
-	local duration = tonumber(defaultValue(lul_settings, "Duration", "0")) or 0
-	if duration > 0 then
-		-- Sound already defined
-		queueAlert(lul_device, lul_settings)
-	else
-		sayOrAlert(lul_device, lul_settings, false)
-	end
+	queueAlert(lul_device, lul_settings)
 end
 
 function actionSonosPauseAll( lul_device, lul_settings ) -- luacheck: ignore 212
@@ -3053,7 +3376,7 @@ function actionSonosInstallDiscoveryPatch( lul_device, lul_settings ) -- luachec
 	luup.variable_set(SONOS_SYS_SID, "DiscoveryPatchInstalled",
 		upnp.isDiscoveryPatchInstalled(VERA_LOCAL_IP) and "1" or "0", lul_device)
 	if reload then
-		luup.call_delay("SonosReload", 2, "")
+		scheduler.delay( SonosReload, 2 )
 	end
 end
 
@@ -3069,7 +3392,7 @@ function actionSonosUninstallDiscoveryPatch( lul_device, lul_settings ) -- luach
 	luup.variable_set(SONOS_SYS_SID, "DiscoveryPatchInstalled",
 		upnp.isDiscoveryPatchInstalled(VERA_LOCAL_IP) and "1" or "0", lul_device)
 	if reload then
-		luup.call_delay("SonosReload", 2, "")
+		scheduler.delay( SonosReload, 2 )
 	end
 end
 
@@ -3186,7 +3509,7 @@ function actionVolumeUp( lul_device, lul_settings )
 	assert(luup.devices[lul_device].device_type == SONOS_ZONE_DEVICE_TYPE)
 	-- Volume up
 	local uuid = UUIDs[lul_device]
-	if (dataTable[uuid].OutputFixed or 0) ~= 0 then
+	if tostring(dataTable[uuid].OutputFixed or 0) ~= "0" then
 		W("Can't change volume on fixed output zone %1 (#%2)", luup.devices[lul_device].description, lul_device)
 		return
 	end
@@ -3211,7 +3534,7 @@ function actionVolumeDown( lul_device, lul_settings )
 	assert(luup.devices[lul_device].device_type == SONOS_ZONE_DEVICE_TYPE)
 	-- Volume down
 	local uuid = UUIDs[lul_device]
-	if (dataTable[uuid].OutputFixed or 0) ~= 0 then
+	if tostring(dataTable[uuid].OutputFixed or 0) ~= "0" then
 		W("Can't change volume on fixed output zone %1 (#%2)", luup.devices[lul_device].description, lul_device)
 		return
 	end
@@ -3256,9 +3579,8 @@ function actionMediaNavigationSkipDown( lul_device, lul_settings )
 	if (currentUri ~= nil and currentUri:find("pndrradio:") == 1) then
 		force = true
 	end
-	if (device ~= 0) then
-		refreshNow(uuid, force, false)
-	end
+
+	updateNow( device )
 end
 
 function actionMediaNavigationSkipUp( lul_device, lul_settings )
@@ -3273,9 +3595,7 @@ function actionMediaNavigationSkipUp( lul_device, lul_settings )
 
 	AVTransport.Previous({InstanceID=instanceId})
 
-	if (device ~= 0) then
-		refreshNow(uuid, false, false)
-	end
+	updateNow( device )
 end
 
 --[[
@@ -3305,9 +3625,8 @@ function actionAVTransportPlayMedia( lul_device, lul_settings )
 	if (currentUri ~= nil and currentUri:find("pndrradio:") == 1) then
 		force = true
 	end
-	if (device ~= 0) then
-		refreshNow(uuid, force, false)
-	end
+
+	updateNow( device )
 end
 
 function actionAVTransportSeek( lul_device, lul_settings )
@@ -3346,9 +3665,8 @@ function actionAVTransportPause( lul_device, lul_settings )
 	if (currentUri ~= nil and currentUri:find("pndrradio:") == 1) then
 		force = true
 	end
-	if (device ~= 0) then
-		refreshNow(uuid, force, false)
-	end
+
+	updateNow( device )
 end
 
 function actionAVTransportStop( lul_device, lul_settings )
@@ -3363,14 +3681,12 @@ function actionAVTransportStop( lul_device, lul_settings )
 
 	AVTransport.Stop({InstanceID=instanceId})
 
-	if (device ~= 0) then
-		refreshNow(uuid, false, false)
-	end
+	updateNow( device )
 end
 
 function actionAVTransportNext( lul_device, lul_settings )
 	assert(luup.devices[lul_device].device_type == SONOS_ZONE_DEVICE_TYPE)
-	local _, uuid = controlByCoordinator(UUIDs[lul_device])
+	local device, uuid = controlByCoordinator(UUIDs[lul_device])
 	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
 	if not AVTransport then
 		return
@@ -3379,11 +3695,13 @@ function actionAVTransportNext( lul_device, lul_settings )
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
 
 	AVTransport.Next({InstanceID=instanceId})
+
+	updateNow( device )
 end
 
 function actionAVTransportPrevious( lul_device, lul_settings )
 	assert(luup.devices[lul_device].device_type == SONOS_ZONE_DEVICE_TYPE)
-	local _, uuid = controlByCoordinator(UUIDs[lul_device])
+	local device, uuid = controlByCoordinator(UUIDs[lul_device])
 	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
 	if not AVTransport then
 		return
@@ -3392,11 +3710,13 @@ function actionAVTransportPrevious( lul_device, lul_settings )
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
 
 	AVTransport.Previous({InstanceID=instanceId})
+
+	updateNow( device )
 end
 
 function actionAVTransportNextSection( lul_device, lul_settings )
 	assert(luup.devices[lul_device].device_type == SONOS_ZONE_DEVICE_TYPE)
-	local _, uuid = controlByCoordinator(UUIDs[lul_device])
+	local device, uuid = controlByCoordinator(UUIDs[lul_device])
 	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
 	if not AVTransport then
 		return
@@ -3405,11 +3725,13 @@ function actionAVTransportNextSection( lul_device, lul_settings )
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
 
 	AVTransport.NextSection({InstanceID=instanceId})
+
+	updateNow( device )
 end
 
 function actionAVTransportPreviousSection( lul_device, lul_settings )
 	assert(luup.devices[lul_device].device_type == SONOS_ZONE_DEVICE_TYPE)
-	local _, uuid = controlByCoordinator(UUIDs[lul_device])
+	local device, uuid = controlByCoordinator(UUIDs[lul_device])
 	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
 	if not AVTransport then
 		return
@@ -3418,11 +3740,13 @@ function actionAVTransportPreviousSection( lul_device, lul_settings )
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
 
 	AVTransport.PreviousSection({InstanceID=instanceId})
+
+	updateNow( device )
 end
 
 function actionAVTransportNextProgrammedRadioTracks( lul_device, lul_settings )
 	assert(luup.devices[lul_device].device_type == SONOS_ZONE_DEVICE_TYPE)
-	local _, uuid = controlByCoordinator(UUIDs[lul_device])
+	local device, uuid = controlByCoordinator(UUIDs[lul_device])
 	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
 	if not AVTransport then
 		return
@@ -3431,6 +3755,8 @@ function actionAVTransportNextProgrammedRadioTracks( lul_device, lul_settings )
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
 
 	AVTransport.NextProgrammedRadioTracks({InstanceID=instanceId})
+
+	updateNow( device )
 end
 
 function actionAVTransportGetPositionInfo( lul_device, lul_settings )
@@ -3479,6 +3805,8 @@ function actionAVTransportSetURI( lul_device, lul_settings )
 		{OrderedArgs={"InstanceID=" .. instanceId,
 						"CurrentURI=" .. currentURI,
 						"CurrentURIMetaData=" .. currentURIMetaData}})
+
+	updateNow( lul_device )
 end
 
 function actionAVTransportSetNextURI( lul_device, lul_settings )
@@ -3810,9 +4138,7 @@ function actionAVTransportSetCrossfadeMode( lul_device, lul_settings )
 		{OrderedArgs={"InstanceID=" .. instanceId,
 						"CrossfadeMode=" .. desiredMode}})
 
-	if (device ~= 0) then
-		refreshNow(uuid, false, false)
-	end
+	updateNow( device )
 end
 
 function actionAVTransportNotifyDeletedURI( lul_device, lul_settings )
@@ -3981,7 +4307,7 @@ end
 function actionRCSetVolume( lul_device, lul_settings )
 	assert(luup.devices[lul_device].device_type == SONOS_ZONE_DEVICE_TYPE)
 	local uuid = UUIDs[lul_device]
-	if (dataTable[uuid].OutputFixed or 0) ~= 0 then
+	if tostring(dataTable[uuid].OutputFixed or 0) ~= "0" then
 		W("SetVolume on %1 (#%2) not possible, configured for fixed output volume (action ignored)",
 			luup.devices[lul_device].description, lul_device)
 		return
@@ -4007,7 +4333,7 @@ end
 function actionRCSetRelativeVolume( lul_device, lul_settings )
 	assert(luup.devices[lul_device].device_type == SONOS_ZONE_DEVICE_TYPE)
 	local uuid = UUIDs[lul_device]
-	if (dataTable[uuid].OutputFixed or 0) ~= 0 then
+	if tostring(dataTable[uuid].OutputFixed or 0) ~= "0" then
 		W("SetRelativeVolume on %1 (#%2) not possible, configured for fixed output volume (action ignored)",
 			luup.devices[lul_device].description, lul_device)
 		return
@@ -4032,7 +4358,7 @@ end
 function actionRCSetVolumeDB( lul_device, lul_settings )
 	assert(luup.devices[lul_device].device_type == SONOS_ZONE_DEVICE_TYPE)
 	local uuid = UUIDs[lul_device]
-	if (dataTable[uuid].OutputFixed or 0) ~= 0 then
+	if tostring(dataTable[uuid].OutputFixed or 0) ~= "0" then
 		W("SetVolumeDB on %1 (#%2) not possible, configured for fixed output volume (action ignored)",
 			luup.devices[lul_device].description, lul_device)
 		return
@@ -4248,6 +4574,6 @@ end
 
 function actionPoll( lul_device, lul_settings ) -- luacheck: ignore 212
 	assert(luup.devices[lul_device].device_type == SONOS_ZONE_DEVICE_TYPE)
-	refreshNow( UUIDs[lul_device], true, true )
+	updateNow(lul_device)
 	return 4,0
 end

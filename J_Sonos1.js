@@ -271,12 +271,12 @@ function Sonos_showHelp(device)
 	html += '<td>' + version + '</td>';
 	html += '</tr>';
 	html += '<tr>';
-	html += '<td>Wiki:</td>';
-	html += '<td><a href="http://code.mios.com/trac/mios_sonos-wireless-music-systems#">link</a></td>';
+	html += '<td>Github/Wiki:</td>';
+	html += '<td><a href="https://github.com/toggledbits/Sonos-Vera">link</a></td>';
 	html += '</tr>';
 	html += '<tr>';
-	html += '<td>Forum:</td>';
-	html += '<td><a href="http://forum.micasaverde.com/index.php/board,47.0.html">link</a></td>';
+	html += '<td>Community Forum:</td>';
+	html += '<td><a href="https://community.getvera.com/c/plugins-and-plugin-development/sonos-plugin">link</a></td>';
 	html += '</tr>';
 	html += '<tr>';
 	html += '<td>Sonos zone:</td>';
@@ -473,7 +473,9 @@ function Sonos_refreshGroupSelection(device)
 						html += ' checked';
 						disabled = false;
 					}
-					html += ' value="' + name + '" onchange="Sonos_updateGroupSelection();">' + name + '<BR>';
+					html += ' value="' + name + '" onchange="Sonos_updateGroupSelection();">' + 
+						(false /* ??? */ ? "&nbsp;(group coordinator)" : "")
+						name + '<BR>';
 					nb++;
 				}
 			}
@@ -1707,7 +1709,7 @@ function Sonos_setupTTS(device)
 	var option = encodeURIComponent(jQuery('#Option').val());
 	var rate = encodeURIComponent(jQuery('#TTSRate').val());
 	var pitch = encodeURIComponent(jQuery('#TTSPitch').val());
-	Sonos_callAction(device, Sonos.SONOS_SID, 'SetupTTS', {'DefaultLanguage':language, 'DefaultEngine':engine, 'GoogleTTSServerURL':url, 'OSXTTSServerURL':url2, 'MaryTTSServerURL':url3, 'ResponsiveVoiceTTSServerURL': url4 ,'MicrosoftClientId':clientId, 'MicrosoftClientSecret':clientSecret, 'MicrosoftOption':option, 'Rate':rate, 'Pitch':pitch} );
+	SonosSystem_callAction(device, 'SetupTTS', {'DefaultLanguage':language, 'DefaultEngine':engine, 'GoogleTTSServerURL':url, 'OSXTTSServerURL':url2, 'MaryTTSServerURL':url3, 'ResponsiveVoiceTTSServerURL': url4 ,'MicrosoftClientId':clientId, 'MicrosoftClientSecret':clientSecret, 'MicrosoftOption':option, 'Rate':rate, 'Pitch':pitch} );
 }
 
 function Sonos_selectAllMembers(state)
@@ -1762,17 +1764,17 @@ function Sonos_updateGroup(device)
 
 function Sonos_installPatch(device)
 {
-	Sonos_callAction(device, Sonos.SONOS_SID, 'InstallDiscoveryPatch', {} );
+	SonosSystem_callAction(device, 'InstallDiscoveryPatch', {} );
 }
 
 function Sonos_uninstallPatch(device)
 {
-	Sonos_callAction(device, Sonos.SONOS_SID, 'UninstallDiscoveryPatch', {} );
+	SonosSystem_callAction(device, 'UninstallDiscoveryPatch', {} );
 }
 
 function Sonos_startSonosDiscovery(device)
 {
-	Sonos_callAction(device, Sonos.SONOS_SID, 'StartSonosDiscovery', {} );
+	SonosSystem_callAction(device, 'StartSonosDiscovery', {} );
 }
 
 function Sonos_selectDiscovery(device)
@@ -1831,7 +1833,7 @@ function Sonos_setDebugLogs(device) {
 		enable = 'false';
 	}
 	if (enable != undefined) {
-		Sonos_callAction(device, Sonos.SONOS_SID, 'SetDebugLogs', { 'enable':enable } );
+		SonosSystem_callAction(device, 'SetDebugLogs', { 'enable':enable } );
 	}
 }
 
@@ -1873,4 +1875,12 @@ function Sonos_callAction(device, sid, actname, args) {
 		onComplete: function (response) {
 		}
 	});
+}
+
+function SonosSystem_callAction(device, actname, args) {
+	var devobj = jsonp.ud.devices[device]
+	if (devobj.device_type == "urn:schemas-micasaverde-com:device:Sonos:1") {
+		device = device.id_parent;
+	}
+	return Sonos_callAction(device, "urn:toggledbits-com:serviceId:SonosSystem1", actname, args);
 }
