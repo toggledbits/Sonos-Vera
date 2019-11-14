@@ -184,7 +184,7 @@ GoogleTTSEngine = HTTPGetTTSEngine:new{
 	title="Google TTS",
 	fileType="mp3",
 	bitrate=32,
-	protocol="http-get:*:audio/mpeg:*", 
+	protocol="http-get:*:audio/mpeg:*",
 	serverURL="https://translate.google.com",
 	shellCmd=[[rm -- '%{destFile:s}' ; wget --output-document '%{destFile:s}' \
 --quiet \
@@ -196,10 +196,10 @@ GoogleTTSEngine = HTTPGetTTSEngine:new{
 	maxTextLength=100}
 
 OSXTTSEngine = HTTPGetTTSEngine:new{
-	title="OSX TTS Server", 
+	title="OSX TTS Server",
 	fileType="mp3",
 	bitrate=64,
-	protocol="http-get:*:audio/mpeg:*", 
+	protocol="http-get:*:audio/mpeg:*",
 	serverURL="http://127.0.0.1",
 	shellCmd=[[rm -- '%{destFile:s}' ; wget --output-document '%{destFile:s}' \
 --quiet \
@@ -405,7 +405,7 @@ function ConvertTTS(text, destFile, language, engineId, engineOptions)
 		return engine.fct(text, destFile, language, engine.bitrate)
 	else
 		local duration,err = engine:say( text, language, destFile, engineOptions )
-		if not duration then 
+		if not duration then
 			warning("(tts) engine " .. (engine.title or "title?") .. " error: " .. tostring(err))
 			return nil, err
 		end

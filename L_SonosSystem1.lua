@@ -13,7 +13,7 @@ PLUGIN_ID = 4226
 
 local _CONFIGVERSION = 19298
 
-local DEBUG_MODE = true	-- Don't hardcode true--use state variable config
+local DEBUG_MODE = false	-- Don't hardcode true--use state variable config
 
 local MIN_UPNP_VERSION = 19191	-- Minimum version of L_SonosUPnP that works
 local MIN_TTS_VERSION = 19287	-- Minimum version of L_SonosTTS that works
@@ -304,6 +304,7 @@ local function initVar( name, dflt, dev, sid )
 	local currVal = luup.variable_get( sid, name, dev )
 	if currVal == nil then
 		luup.variable_set( sid, name, tostring(dflt), dev )
+		return dflt
 	end
 	return currVal
 end
@@ -314,7 +315,7 @@ local function setVar( sid, name, val, dev )
 	assert( dev > 0, "Invalid device number "..tostring(dev) )
 	assert( sid ~= nil, "SID required for "..tostring(name) )
 	val = (val == nil) and "" or tostring(val)
-	local s = luup.variable_get( sid, name, dev ) or ""
+	local s = luup.variable_get( sid, name, dev )
 	-- D("setVar(%1,%2,%3,%4) old value %5", sid, name, val, dev, s )
 	if s ~= val then
 		luup.variable_set( sid, name, val, dev )
@@ -2322,29 +2323,11 @@ function cancelProxySubscription(sid)
 	upnp.cancelProxySubscription(sid)
 end
 
-local function setDebugLogs(device, enable)
-	D("setDebugLogs(%1,%2)", device, enable)
-
-	if ((enable == "true") or (enable == "yes"))
-	then
-		enable = "1"
-	elseif ((enable == "false") or (enable == "no"))
-	then
-		enable = "0"
-	end
-	if ((enable ~= "0") and (enable ~= "1"))
-	then
-		luupTask("SetDebugLogs: invalid argument", TASK_ERROR)
-		return
-	end
-
-	luup.variable_set(SONOS_SYS_SID, "DebugLogs", enable, pluginDevice)
-	if (enable == "1")
-	then
-		DEBUG_MODE = true
-	else
-		DEBUG_MODE = false
-	end
+local function setDebugLogs(val)
+	D("setDebugLogs(%1)", val)
+	DEBUG_MODE = (val % 2) ~= 0
+	if upnp then upnp.DEBUG_MODE = (math.floor( val / 2 ) % 2) ~= 0 end
+	if tts then tts.DEBUG_MODE = (math.floor( val / 4 ) % 2) ~= 0 end
 end
 
 local function setReadQueueContent(device, enable)
@@ -2600,7 +2583,6 @@ local function deferredStartup(device)
 	-- Start zones
 	UUIDs = {}
 	Zones = {}
-	local cvars = {}
 	local reload = false
 	local count, started = 0, 0
 	local children = {}
@@ -2644,8 +2626,12 @@ local function deferredStartup(device)
 		return false, "Reload required", MSG_CLASS
 	end
 
-	-- Update children from zone topology
-	if zoneInfo and getVarNumeric( "StartupInventory", 1, device, SONOS_SYS_SID ) ~= 0 then
+	-- If there are no children, launch discovery and see if we can find some.
+	-- Otherwise, check the zone topology to see if there are zones we don't have.
+	if count == 0 then
+		L"No children; launching discovery to see who I can find."
+		luup.call_action( SONOS_SYS_SID, "StartSonosDiscovery", {}, device )
+	elseif zoneInfo and getVarNumeric( "StartupInventory", 1, device, SONOS_SYS_SID ) ~= 0 then
 		D("deferredStartup() taking inventory")
 		local newZones = {}
 		for uuid in pairs( zoneInfo.zones ) do
@@ -2653,7 +2639,7 @@ local function deferredStartup(device)
 				newZones[uuid] = getIPFromUUID( uuid ) or ""
 			end
 		end
-		if next(newZones) then
+		if next( newZones ) then
 			setVar( SONOS_SYS_SID, "Message", "New device(s) found... please wait", pluginDevice )
 			D("deferredStartup() rebuilding family")
 			local ptr = luup.chdev.start( device )
@@ -2666,13 +2652,13 @@ local function deferredStartup(device)
 			end
 			for uuid,ip in pairs( newZones ) do
 				D("deferredStartup() appending new zone %1 ip %2", uuid, ip)
-				cvars[uuid] = cvars[uuid] or {}
-				table.insert( cvars[uuid], string.format( ",ip=%s", ip ) )
-				table.insert( cvars[uuid], string.format( ",altid=%s", uuid ) )
-				table.insert( cvars[uuid], string.format( "%s,SonosID=%s", SONOS_ZONE_SID, uuid ) )
-				local name = zoneInfo.zones[uuid].ZoneName or uuid
-				local vv = table.concat( cvars[uuid], "\n" )
-				luup.chdev.append( device, ptr, uuid, name, "", "D_Sonos1.xml", "", vv, false )
+				local cv = {
+					string.format( ",ip=%s", ip ),
+					string.format( "%s,SonosID=%s", SONOS_ZONE_SID, uuid )
+				}
+				local name = zoneInfo.zones[uuid].ZoneName or uuid:gsub("RINCON_", "")
+				luup.chdev.append( device, ptr, uuid, name, "", "D_Sonos1.xml", "",
+					table.concat( cv, "\n" ), false )
 			end
 			luup.chdev.sync( device, ptr )
 		end
@@ -2709,11 +2695,7 @@ function startup( lul_device )
 	pluginDevice = lul_device
 
 	local debugLogs = getVarNumeric("DebugLogs", 0, lul_device, SONOS_SYS_SID)
-	if debugLogs ~= 0 then
-		DEBUG_MODE = (debugLogs % 2) ~= 0
-		if upnp and math.floor( debugLogs / 2 ) % 2 == 1 then upnp.DEBUG_MODE = true end
-		if tts and math.floor( debugLogs / 4 ) % 2 == 1 then tts.DEBUG_MODE = true end
-	end
+	setDebugLogs(debugLogs)
 
 	systemRunOnce( lul_device )
 
@@ -2747,13 +2729,11 @@ function startup( lul_device )
 		W("%1 (#%2) disabled by configuration; startup aborting.", luup.devices[lul_device].description,
 			lul_device)
 		-- ??? offline children?
+		setVar( SONOS_SYS_SID, "Message", "Disabled", lul_device )
 		return true, "Disabled", MSG_CLASS
 	end
 
-	if (luup.variable_get(SONOS_SYS_SID, "DiscoveryResult", lul_device) == nil
-			or luup.variable_get(SONOS_SYS_SID, "DiscoveryResult", lul_device) == "scanning") then
-		luup.variable_set(SONOS_SYS_SID, "DiscoveryResult", "", lul_device)
-	end
+	setVar( SONOS_SYS_SID, "DiscoveryMessage", "", lul_device )
 
 	local routerIp = getVar("RouterIp", "", lul_device, SONOS_SYS_SID, true)
 	local routerPort = getVar("RouterPort", "", lul_device, SONOS_SYS_SID, true)
@@ -2889,6 +2869,7 @@ local function sayOrAlert(device, parameters, saveAndRestore)
 			else
 				uuid = getUUIDFromZoneName( zone )
 			end
+			-- ??? FIXME -- here we need to find coordinator, and add it and all group members
 			if (uuid or "") ~= "" then
 				targets[uuid] = true
 			end
@@ -3314,9 +3295,72 @@ end
 
 function actionSonosStartDiscovery( lul_device, lul_settings ) -- luacheck: ignore 212
 	assert(luup.devices[lul_device].device_type == SONOS_SYS_DEVICE_TYPE)
-	setVariableValue(SONOS_SYS_SID, "DiscoveryResult", "scanning", lul_device)
-	local xml = upnp.scanUPnPDevices("urn:schemas-upnp-org:device:ZonePlayer:1", { "modelName", "friendlyName", "roomName" })
+	setVariableValue(SONOS_SYS_SID, "DiscoveryMessage", "Scanning...", lul_device)
+	local xml, devices = upnp.scanUPnPDevices("urn:schemas-upnp-org:device:ZonePlayer:1", { "modelName", "friendlyName", "roomName" })
 	setVariableValue(SONOS_SYS_SID, "DiscoveryResult", xml, lul_device)
+	if not devices then
+		setVariableValue(SONOS_SYS_SID, "DiscoveryMessage", "Aborted. See log for errors.", lul_device)
+	else
+		D("actionSonosStartDiscovery() discovered %1", devices)
+		local children = {}
+		for n,v in pairs(luup.devices) do
+			if v.device_type == SONOS_ZONE_DEVICE_TYPE and v.device_num_parent == lul_device then
+				children[v.id] = n
+			end
+		end
+		local newChildren = {}
+		for _,zone in ipairs(devices) do
+			if zone.udn then
+				local zoneDev = children[zone.udn]
+				if not zoneDev then
+					-- New zone
+					D("actionSonosStartDiscovery() new zone %1", zone.udn)
+					table.insert( newChildren, zone )
+				elseif zone.ip ~= luup.attr_get( "ip", zoneDev ) then
+					-- Existing zone, IP changed
+					L("Discovery detected IP address change for %1 (#%3 %4) to %2",
+						zone.udn, zone.ip, zoneDev, luup.devices[zoneDev].description)
+					luup.attr_set( "ip", zone.ip, zoneDev )
+					-- Force zoneInfo to agree with discovery
+					if zoneInfo and zoneInfo.zones[zone.udn] then
+						D("actionSonosStartDiscovery() forcing zoneInfo location for %1 to %2",
+							zone.udn, zone.descriptionURL)
+						zoneInfo.zones[zone.udn].Location = zone.descriptionURL
+					end
+					setup( zoneDev, true )
+				end
+			end
+		end
+		D("actionSonosStartDiscovery() new zones %1", newChildren)
+		if #newChildren > 0 then
+			setVariableValue(SONOS_SYS_SID, "DiscoveryMessage",
+				string.format("Found %d new zones; creating devices...", #newChildren), lul_device)
+			local ptr = luup.chdev.start( lul_device )
+			for uuid,k in pairs( children ) do
+				local df = luup.attr_get('device_file', k)
+				D("actionSonosStartDiscovery() appending existing child dev #%1 %2 uuid %3 device_file %4",
+					k, luup.devices[k].description, uuid, df)
+				luup.chdev.append( lul_device, ptr, uuid, luup.devices[k].description, "", df, "", "", false )
+			end
+			for _,zone in ipairs( newChildren ) do
+				D("actionSonosStartDiscovery() appending new zone %1 ip %2:%3", zone.udn, zone.ip, zone.port or 1400)
+				local cv = {}
+				table.insert( cv, string.format( ",ip=%s", zone.ip ) )
+				table.insert( cv, string.format( "%s,SonosID=%s", SONOS_ZONE_SID, zone.udn ) )
+				table.insert( cv, string.format( "%s,Port=%s", SONOS_ZONE_SID, zone.port or 1400 ) )
+				local name = zone.udn:upper():gsub("RINCON_","")
+				luup.chdev.append( lul_device, ptr, zone.udn, name, "", "D_Sonos1.xml", "",
+					table.concat( cv, "\n" ), false )
+			end
+			setVariableValue(SONOS_SYS_SID, "DiscoveryMessage",
+				string.format("Completed. %d new zones added.", #newChildren), lul_device)
+			L("Discovery complete. %d new zones added. Requesting Luup reload.", #newChildren)
+			luup.chdev.sync( lul_device, ptr )
+		else
+			setVariableValue(SONOS_SYS_SID, "DiscoveryMessage", "Completed. No new devices found.", lul_device)
+			L"Discovery complete. No new zones found."
+		end
+	end
 	return 4,0
 end
 
@@ -3357,7 +3401,13 @@ end
 
 function actionSonosSetDebugLogs( lul_device, lul_settings )
 	assert(luup.devices[lul_device].device_type == SONOS_SYS_DEVICE_TYPE)
-	setDebugLogs(lul_device, lul_settings.enable)
+	local val = tonumber(lul_settings.enable)
+	if not val then
+		val = string.find(":true:t:yes:y:1:", tostring(lul_settings.enable):lower()) and 1 or 0
+	end
+	luup.variable_set(SONOS_SYS_SID, "DebugLogs", val, lul_device)
+	setDebugLogs(val)
+	return true
 end
 
 function actionSonosSetReadQueueContent( lul_device, lul_settings )

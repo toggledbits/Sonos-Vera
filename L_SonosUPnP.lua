@@ -363,28 +363,32 @@ end
 function UPnP_discover(target)
     local devices = {}
     local udp = socket.udp()
-    if (udp ~= nil) then
+    if udp then
         local result = udp:sendto(UPNP_DISCOVERY:format(target), "239.255.255.250", 1900)
         if result ~= nil then
             udp:settimeout(5)
             local endtime = os.time() + 30
             while endtime > os.time() do
                 result = udp:receivefrom()
-                if result == nil then
+                if not result then
                     break
                 else
                     local location, ip, port = result:match("[Ll][Oo][Cc][Aa][Tt][Ii][Oo][Nn]:%s?(http://([%d%.]-):(%d+)/.-)\r\n")
                     local st = result:match("[Ss][Tt]:%s?(.-)\r\n")
+					local usn = result:match("[Uu][Ss][Nn]:%s*(.-)\r\n")
+					local udn = usn and usn:match("uuid:([^:]+)")
+					debug("discovery response from "..tostring(ip).." usn "..tostring(usn).." udn "..tostring(udn))
+					debug(tostring(result))
                     if (location ~= nil and ip ~= nil and port ~= nil and st ~= nil) then
                         local new = true
                         for _,device in ipairs( devices ) do
-                            if (device.descriptionURL == location and device.st == st) then
+                            if device.descriptionURL == location and device.st == st then
                                 new = false
                                 break
                             end
                         end
-                        if (new) then
-                            table.insert(devices, { descriptionURL=location, ip=ip, port=port, st=st })
+                        if new then
+                            table.insert(devices, { descriptionURL=location, ip=ip, port=port, st=st, udn=udn })
                         end
                     end
                 end
@@ -418,7 +422,7 @@ function scanUPnPDevices(deviceType, infos)
         end
     end
     xml = xml .. "</devices>"
-    return xml
+    return xml, devices
 end
 
 

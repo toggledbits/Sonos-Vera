@@ -9,9 +9,9 @@
 	"imgIconMax": "",
 	"state_icons": [],
 	"halloIconsDir": "pics/hallo",
-	"x": "3",
-	"y": "4",
-	"inScene": "1",
+	"x": 3,
+	"y": 4,
+	"inScene": 1,
 	"doc_url": {
 		"doc_language": 1,
 		"doc_manual": 1,
@@ -24,41 +24,42 @@
 				"lang_tag": "tabname_control",
 				"text": "Control"
 			},
-			"Position": "0",
+			"Position": 0,
+			"TopNavigationTab": 1,
 			"TabType": "flash",
 			"SceneGroup": [{
-					"id": "1",
+					"id": 1,
 					"top": "0.25",
-					"left": "0",
-					"x": "3",
-					"y": "1"
+					"left": 0,
+					"x": 3,
+					"y": 1
 				},
 				{
-					"id": "2",
-					"top": "1",
-					"left": "0",
-					"x": "3",
-					"y": "3"
+					"id": 2,
+					"top": 1,
+					"left": 0,
+					"x": 3,
+					"y": 3
 				}
 			],
 			"ControlGroup": [{
-					"id": "1",
+					"id": 1,
 					"type": "info",
-					"scenegroup": "1"
+					"scenegroup": 1
 				},
 				{
-					"id": "2",
-					"scenegroup": "2",
-					"isSingle": "1"
+					"id": 2,
+					"scenegroup": 2,
+					"isSingle": 1
 				}
 			],
 			"Control": [{
-				"ControlGroup": "1",
+				"ControlGroup": 1,
 				"ControlType": "variable",
-				"top": "0",
-				"left": "0",
-				"x": "3",
-				"y": "1",
+				"top": 0,
+				"left": 0,
+				"x": 3,
+				"y": 1,
 				"text_align": "left",
 				"Display": {
 					"Service": "urn:toggledbits-com:serviceId:SonosSystem1",
@@ -72,60 +73,32 @@
 		},
 		{
 			"Label": {
-				"lang_tag": "tabname_player",
-				"text": "Player"
-			},
-			"Position": "1",
-			"TabType": "javascript",
-			"ScriptName": "J_Sonos1.js",
-			"Function": "Sonos_showPlayer"
-		},
-		{
-			"Label": {
-				"lang_tag": "tabname_tts",
-				"text": "TTS"
-			},
-			"Position": "2",
-			"TabType": "javascript",
-			"ScriptName": "J_Sonos1.js",
-			"Function": "Sonos_showTTS"
-		},
-		{
-			"Label": {
-				"lang_tag": "tabname_group",
-				"text": "Group"
-			},
-			"Position": "3",
-			"TabType": "javascript",
-			"ScriptName": "J_Sonos1.js",
-			"Function": "Sonos_showGroup"
-		},
-		{
-			"Label": {
 				"lang_tag": "settings",
 				"text": "Settings"
 			},
-			"Position": "4",
+			"Position": 1,
+			"TopNavigationTab": 1,
 			"TabType": "javascript",
-			"ScriptName": "J_Sonos1.js",
-			"Function": "Sonos_showSettings"
+			"ScriptName": "J_SonosSystem1_UI7.js",
+			"Function": "SonosSystem.doSettings"
 		},
 		{
 			"Label": {
-				"lang_tag": "tabname_uri_help",
-				"text": "Help"
+				"lang_tag": "tabname_groups",
+				"text": "Groups"
 			},
-			"Position": "5",
+			"Position": 2,
+			"TopNavigationTab": 1,
 			"TabType": "javascript",
-			"ScriptName": "J_Sonos1.js",
-			"Function": "Sonos_showHelp"
+			"ScriptName": "J_SonosSystem1_UI7.js",
+			"Function": "SonosSystem.doGroups"
 		},
 		{
 			"Label": {
 				"lang_tag": "advanced",
 				"text": "Advanced"
 			},
-			"Position": "6",
+			"Position": 3,
 			"TabType": "javascript",
 			"ScriptName": "shared.js",
 			"Function": "advanced_device"
