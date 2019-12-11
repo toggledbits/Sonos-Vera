@@ -79,7 +79,7 @@
 			"Position": 1,
 			"TopNavigationTab": 1,
 			"TabType": "javascript",
-			"ScriptName": "J_SonosSystem1_UI7.js",
+			"ScriptName": "J_SonosSystem1.js",
 			"Function": "SonosSystem.doSettings"
 		},
 		{
@@ -90,7 +90,7 @@
 			"Position": 2,
 			"TopNavigationTab": 1,
 			"TabType": "javascript",
-			"ScriptName": "J_SonosSystem1_UI7.js",
+			"ScriptName": "J_SonosSystem1.js",
 			"Function": "SonosSystem.doGroups"
 		},
 		{
