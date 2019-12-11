@@ -13,18 +13,18 @@
 				"service": "urn:micasaverde-com:serviceId:Sonos1",
 				"variable": "SonosOnline",
 				"operator": "!=",
-				"value": "1"
+				"value": 1
 			}]
 	}],
 	"halloIconsDir": "pics/hallo",
-	"x": "3",
-	"y": "4",
-	"inScene": "1",
+	"x": 3,
+	"y": 4,
+	"inScene": 1,
 	"DisplayStatus": {
 		"Service": "urn:micasaverde-com:serviceId:Sonos1",
 		"Variable": "SonosModel",
-		"MinValue": "0",
-		"MaxValue": "4"
+		"MinValue": 0,
+		"MaxValue": 4
 	},
 	"doc_url": {
 		"doc_language": 1,
@@ -38,39 +38,39 @@
 				"lang_tag": "tabname_control",
 				"text": "Control"
 			},
-			"Position": "0",
+			"Position": 0,
 			"TabType": "flash",
 			"SceneGroup": [{
-					"id": "1",
+					"id": 1,
 					"top": "0.25",
-					"left": "0",
-					"x": "3",
-					"y": "1"
+					"left": 0,
+					"x": 3,
+					"y": 1
 				},
 				{
-					"id": "2",
-					"top": "1",
-					"left": "0",
-					"x": "3",
-					"y": "3"
+					"id": 2,
+					"top": 1,
+					"left": 0,
+					"x": 3,
+					"y": 3
 				}
 			],
 			"ControlGroup": [{
-					"id": "1",
+					"id": 1,
 					"type": "info",
-					"scenegroup": "1"
+					"scenegroup": 1
 				},
 				{
-					"id": "2",
-					"scenegroup": "2",
-					"isSingle": "1"
+					"id": 2,
+					"scenegroup": 2,
+					"isSingle": 1
 				}
 			],
 			"Control": [{
-					"ControlGroup": "2",
+					"ControlGroup": 2,
 					"ControlType": "button",
-					"top": "0",
-					"left": "0",
+					"top": 0,
+					"left": 0,
 					"Label": {
 						"lang_tag": "cmd_play",
 						"text": "Play"
@@ -91,10 +91,10 @@
 					}
 				},
 				{
-					"ControlGroup": "2",
+					"ControlGroup": 2,
 					"ControlType": "button",
-					"top": "0",
-					"left": "1",
+					"top": 0,
+					"left": 1,
 					"Label": {
 						"lang_tag": "cmd_pause",
 						"text": "Pause"
@@ -115,10 +115,10 @@
 					}
 				},
 				{
-					"ControlGroup": "2",
+					"ControlGroup": 2,
 					"ControlType": "button",
-					"top": "0",
-					"left": "2",
+					"top": 0,
+					"left": 2,
 					"Label": {
 						"lang_tag": "cmd_stop",
 						"text": "Stop"
@@ -151,10 +151,10 @@
 					}
 				},
 				{
-					"ControlGroup": "2",
+					"ControlGroup": 2,
 					"ControlType": "button",
-					"top": "2",
-					"left": "0",
+					"top": 2,
+					"left": 0,
 					"Label": {
 						"lang_tag": "cmd_volume_down",
 						"text": "Vol -"
@@ -173,10 +173,10 @@
 					}
 				},
 				{
-					"ControlGroup": "2",
+					"ControlGroup": 2,
 					"ControlType": "button",
-					"top": "2",
-					"left": "1",
+					"top": 2,
+					"left": 1,
 					"Label": {
 						"lang_tag": "cmd_volume_up",
 						"text": "Vol +"
@@ -195,10 +195,10 @@
 					}
 				},
 				{
-					"ControlGroup": "2",
+					"ControlGroup": 2,
 					"ControlType": "button",
-					"top": "2",
-					"left": "2",
+					"top": 2,
+					"left": 2,
 					"Label": {
 						"lang_tag": "cmd_mute",
 						"text": "Mute"
@@ -206,7 +206,7 @@
 					"Display": {
 						"Service": "urn:upnp-org:serviceId:RenderingControl",
 						"Variable": "Mute",
-						"Value": "1",
+						"Value": 1,
 						"Top": 30,
 						"Left": 460,
 						"Width": 50,
@@ -219,9 +219,9 @@
 					}
 				},
 				{
-					"ControlGroup": "2",
+					"ControlGroup": 2,
 					"ControlType": "button",
-					"top": "1",
+					"top": 1,
 					"left": "0.5",
 					"Label": {
 						"lang_tag": "cmd_prev",
@@ -241,9 +241,9 @@
 					}
 				},
 				{
-					"ControlGroup": "2",
+					"ControlGroup": 2,
 					"ControlType": "button",
-					"top": "1",
+					"top": 1,
 					"left": "1.5",
 					"Label": {
 						"lang_tag": "cmd_next",
@@ -277,14 +277,14 @@
 					}
 				},
 				{
-					"ControlGroup": "1",
-					"ControlPair": "1",
-					"ControlHeader": "1",
+					"ControlGroup": 1,
+					"ControlPair": 1,
+					"ControlHeader": 1,
 					"ControlType": "variable",
-					"top": "0",
-					"left": "0",
-					"x": "3",
-					"y": "1",
+					"top": 0,
+					"left": 0,
+					"x": 3,
+					"y": 1,
 					"text_align": "left",
 					"Display": {
 						"Service": "urn:upnp-org:serviceId:AVTransport",
@@ -302,57 +302,47 @@
 				"lang_tag": "tabname_player",
 				"text": "Player"
 			},
-			"Position": "1",
+			"Position": 1,
 			"TabType": "javascript",
 			"ScriptName": "J_Sonos1.js",
-			"Function": "Sonos_showPlayer"
+			"Function": "Sonos.doPlayer"
 		},
 		{
 			"Label": {
 				"lang_tag": "tabname_tts",
 				"text": "TTS"
 			},
-			"Position": "2",
+			"Position": 2,
 			"TabType": "javascript",
 			"ScriptName": "J_Sonos1.js",
-			"Function": "Sonos_showTTS"
+			"Function": "Sonos.doTTS"
 		},
 		{
 			"Label": {
 				"lang_tag": "tabname_group",
 				"text": "Group"
 			},
-			"Position": "3",
+			"Position": 3,
 			"TabType": "javascript",
 			"ScriptName": "J_Sonos1.js",
-			"Function": "Sonos_showGroup"
-		},
-		{
-			"Label": {
-				"lang_tag": "settings",
-				"text": "Settings"
-			},
-			"Position": "4",
-			"TabType": "javascript",
-			"ScriptName": "J_Sonos1.js",
-			"Function": "Sonos_showSettings"
+			"Function": "Sonos.doGroup"
 		},
 		{
 			"Label": {
 				"lang_tag": "tabname_uri_help",
 				"text": "Help"
 			},
-			"Position": "5",
+			"Position": 4,
 			"TabType": "javascript",
 			"ScriptName": "J_Sonos1.js",
-			"Function": "Sonos_showHelp"
+			"Function": "Sonos.doHelp"
 		},
 		{
 			"Label": {
 				"lang_tag": "advanced",
 				"text": "Advanced"
 			},
-			"Position": "6",
+			"Position": 5,
 			"TabType": "javascript",
 			"ScriptName": "shared.js",
 			"Function": "advanced_device"

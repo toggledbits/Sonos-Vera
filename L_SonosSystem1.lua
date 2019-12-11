@@ -8,7 +8,7 @@
 module( "L_SonosSystem1", package.seeall )
 
 PLUGIN_NAME = "Sonos"
-PLUGIN_VERSION = "1.5-19299"
+PLUGIN_VERSION = "2.0-19345"
 PLUGIN_ID = 4226
 
 local _CONFIGVERSION = 19298
