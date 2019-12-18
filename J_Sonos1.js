@@ -81,6 +81,11 @@ var Sonos = (function(api, $) {
 		return api.setDeviceStatePersistent( me.id_parent || me.id, SONOS_SYS_SID, varName, val );
 	}
 
+	function isEmpty( s ) {
+		return undefined === s || null === s || "" === s ||
+			( "string" === typeof( s ) && null !== s.match( /^\s*$/ ) );
+	}
+
 	function doPlayer(device)
 	{
 		if (typeof timeoutVar != 'undefined') {
@@ -263,20 +268,20 @@ var Sonos = (function(api, $) {
 
 		Sonos_initXMLParser();
 
-		var zone = api.getDeviceState(device, DEVICE_PROPERTIES_SID, "ZoneName", 1);
-		var uuid = api.getDeviceState(device, DEVICE_PROPERTIES_SID, "SonosID", 1);
-		var groups = api.getDeviceState(device, ZONEGROUPTOPOLOGY_SID, "ZoneGroupState", 1);
+		var uuid = api.getDeviceState(device, DEVICE_PROPERTIES_SID, "SonosID", 1) || "";
+		var zone = api.getDeviceState(device, DEVICE_PROPERTIES_SID, "ZoneName", 1) || "";
+		var groups = api.getDeviceState(device, ZONEGROUPTOPOLOGY_SID, "ZoneGroupState", 1) || "";
 
 		var members;
-		if (groups != undefined && groups != "") {
+		if ( ! isEmpty( groups ) ) {
 			var xmlgroups = parseXml(groups);
-			if (typeof xmlgroups != 'undefined') {
+			if ( ! isEmpty( xmlgroups ) ) {
 				members = xmlgroups.getElementsByTagName("ZoneGroupMember");
 			}
 		}
 
 		var version = getParentState("PluginVersion", device);
-		if (version == undefined) {
+		if ( !version ) {
 			version = '';
 		}
 
@@ -326,13 +331,13 @@ var Sonos = (function(api, $) {
 		
 		var zoneUUID, zoneName, channelMapSet, isZoneBridge;
 
-		if (typeof members != 'undefined') {
+		if ( ! isEmpty( members ) ) {
 			for (i=0; i<members.length; i++) {
 				zoneUUID = Sonos_extractXmlAttribute(members[i], 'UUID');
 				zoneName = Sonos_extractXmlAttribute(members[i], 'ZoneName');
 				channelMapSet = Sonos_extractXmlAttribute(members[i], 'ChannelMapSet');
 				isZoneBridge = Sonos_extractXmlAttribute(members[i], 'IsZoneBridge');
-				if (zoneName != zone && channelMapSet == undefined && isZoneBridge != "1") {
+				if (zoneName != zone && channelMapSet === undefined && isZoneBridge != "1") {
 					html += '<tr>';
 					html += '<td>Group with master zone "' + zoneName + '"</td>';
 					html += '<td>x-rincon:' + zoneUUID + '</td>';
@@ -348,7 +353,7 @@ var Sonos = (function(api, $) {
 		html += '<td>AI:</td>';
 		html += '</tr>';
 
-		if (typeof members != 'undefined') {
+		if ( ! isEmpty( members ) ) {
 			for (i=0; i<members.length; i++) {
 				zoneUUID = Sonos_extractXmlAttribute(members[i], 'UUID');
 				zoneName = Sonos_extractXmlAttribute(members[i], 'ZoneName');
@@ -378,8 +383,8 @@ var Sonos = (function(api, $) {
 
 		var line, pos, title, value;
 		
-		var favRadios = api.getDeviceState(device, CONTENT_DIRECTORY_SID, "FavoritesRadios", 1);
-		if (favRadios != undefined && favRadios != "") {
+		var favRadios = api.getDeviceState(device, CONTENT_DIRECTORY_SID, "FavoritesRadios", 1) || "";
+		if ( ! isEmpty( favRadios ) ) {
 			pos = favRadios.indexOf('\n', 0);
 			if (pos >= 0) {
 				line = favRadios.substring(0, pos);
@@ -395,8 +400,8 @@ var Sonos = (function(api, $) {
 			}
 		}
 
-		var savedQueues = api.getDeviceState(device, CONTENT_DIRECTORY_SID, "SavedQueues", 1);
-		if (savedQueues != undefined && savedQueues != "") {
+		var savedQueues = api.getDeviceState(device, CONTENT_DIRECTORY_SID, "SavedQueues", 1) || "";
+		if ( ! isEmpty( savedQueues ) ) {
 			pos1 = 0;
 			pos2 = savedQueues.indexOf('\n', pos1);
 			while (pos2 >= 0) {
@@ -432,10 +437,7 @@ var Sonos = (function(api, $) {
 		html += '<th>Value</td>';
 		html += '</tr>';
 		for (i=0; i<variables.length; i++) {
-			value = api.getDeviceState(device, variables[i][0], variables[i][1], 1);
-			if (value == undefined) {
-				value = '';
-			}
+			value = api.getDeviceState(device, variables[i][0], variables[i][1], 1) || "";
 			html += '<tr>';
 			html += '<td>' + variables[i][1] + '</td>';
 			html += '<td>' + Sonos_escapeHtmlSpecialChars(value) + '</td>';
@@ -455,17 +457,18 @@ var Sonos = (function(api, $) {
 
 		Sonos_initXMLParser();
 
-		var html = '<DIV id="groupSelection"/>';
+		var html = '<div id="groupSelection"/>';
 
-		html += '<BR>';
-		html += '<button type="button" style="background-color:' + buttonBgColor + '; color: white; height: 25px; width: 100px; -moz-border-radius: 6px; -webkit-border-radius: 6px; -khtml-border-radius: 6px; border-radius: 6px" onclick="Sonos_refreshGroupSelection('+device+');">Refresh</button>';
-		html += '<button type="button" style="margin-left: 10px; background-color:' + buttonBgColor + '; color: white; height: 25px; width: 100px; -moz-border-radius: 6px; -webkit-border-radius: 6px; -khtml-border-radius: 6px; border-radius: 6px" onclick="Sonos_selectAllMembers(true);">Select All</button>';
-		html += '<button type="button" style="margin-left: 10px; background-color:' + buttonBgColor + '; color: white; height: 25px; width: 100px; -moz-border-radius: 6px; -webkit-border-radius: 6px; -khtml-border-radius: 6px; border-radius: 6px" onclick="Sonos_selectAllMembers(false);">Unselect All</button>';
-		html += '<button id="applyGroup" type="button" style="margin-left: 10px; background-color:' + buttonBgColor + '; color: white; height: 25px; width: 100px; -moz-border-radius: 6px; -webkit-border-radius: 6px; -khtml-border-radius: 6px; border-radius: 6px" onclick="Sonos_updateGroup('+device+');">Apply</button>';
+		html += '<br/>';
+		html += '<button id="refreshGroup" type="button" class="btn btn-sm sonosbtn">Refresh</button>';
+		html += '<button id="applyGroup" type="button" class="btn btn-sm sonosbtn">Apply Changes</button>';
 
 		//html += '<p id="debug">';
 
 		api.setCpanelContent(html);
+
+		jQuery( "button#refreshGroup" ).on( 'click.sonos', function() { Sonos_refreshGroupSelection(device); } );
+		jQuery( "button#applyGroup" ).on( 'click.sonos', function() { Sonos_updateGroup(device); } );
 
 		Sonos_refreshGroupSelection(device);
 	}
@@ -475,41 +478,46 @@ var Sonos = (function(api, $) {
 		var html = '';
 		var disabled = true;
 
-		var groupMembers = api.getDeviceState(device, ZONEGROUPTOPOLOGY_SID, "ZonePlayerUUIDsInGroup", 1);
-		var groups = api.getDeviceState(device, ZONEGROUPTOPOLOGY_SID, "ZoneGroupState", 1);
-		if (groups != undefined && groups != "") {
+		var groupMembers = api.getDeviceState(device, ZONEGROUPTOPOLOGY_SID, "ZonePlayerUUIDsInGroup", 1) || "";
+		var groups = api.getDeviceState(device, ZONEGROUPTOPOLOGY_SID, "ZoneGroupState", 1) || "";
+		if ( ! isEmpty( groups ) ) {
 			var xmlgroups = parseXml(groups);
-			if (typeof xmlgroups != 'undefined') {
-				var members = xmlgroups.getElementsByTagName("ZoneGroupMember");
-				var nb=0;
-				for (i=0; i<members.length; i++) {
-					var name = Sonos_extractXmlAttribute(members[i], 'ZoneName');
-					var uuid = Sonos_extractXmlAttribute(members[i], 'UUID');
-					var invisible = Sonos_extractXmlAttribute(members[i], 'Invisible');
-					var channelMapSet = Sonos_extractXmlAttribute(members[i], 'ChannelMapSet');
-					var isZoneBridge = Sonos_extractXmlAttribute(members[i], 'IsZoneBridge');
+			if ( xmlgroups ) {
+				var nb = 0;
+				var members = xmlgroups.getElementsByTagName("ZoneGroupMember") || [];
+				var coord = "???";
+				for (var i=0; i<members.length; ++i) {
+					var member = members.item(i);
+					var name = Sonos_extractXmlAttribute(member, 'ZoneName');
+					var uuid = Sonos_extractXmlAttribute(member, 'UUID');
+					var invisible = Sonos_extractXmlAttribute(member, 'Invisible');
+					var channelMapSet = Sonos_extractXmlAttribute(member, 'ChannelMapSet');
+					var isZoneBridge = Sonos_extractXmlAttribute(member, 'IsZoneBridge');
 					if (isZoneBridge != "1" && (channelMapSet == undefined || invisible == '1')) {
-						html += '<input id="GroupMember' + nb +'" type="checkbox"';
+						html += '<label>';
+						html += '<input id="' + uuid +'" class="zonemem" type="checkbox"';
 						if (groupMembers.search(uuid) >= 0) {
 							html += ' checked';
 							disabled = false;
 						}
-						html += ' value="' + name + '" onchange="Sonos_updateGroupSelection();">' +
-							(false /* ??? */ ? "&nbsp;(group coordinator)" : "") +
-							name + '<BR>';
+						html += ' value="' + name + '">' +
+							(uuid==coord ? "&nbsp;(group coordinator)" : "") +
+							name + '</label><br/>';
 						nb++;
 					}
 				}
+				html += "<hr/>\n";
 			}
 		}
 
-		jQuery('#groupSelection').html(html);
-		jQuery('#applyGroup').get(0).disabled = disabled;
+		jQuery('#groupSelection').html( html );
+		jQuery('input.zonemem').on( 'change.sonos', function() { Sonos_updateGroupSelection(); } );
+		Sonos_updateGroupSelection();
 	}
 
-	function Sonos_showTTS(device)
+	function doTTS(device)
 	{
-		if (typeof timeoutVar3 != 'undefined') {
+		if ( timeoutVar3 ) {
 			clearTimeout(timeoutVar3);
 		}
 
@@ -526,10 +534,11 @@ var Sonos = (function(api, $) {
 						[ "MICROSOFT", "Microsoft" ],
 						[ "MARY", "Mary" ],
 						[ "RV", "ResponsiveVoice" ] ];
-		var defaultEngine = api.getDeviceState(device, SONOS_SID, "DefaultEngineTTS", 1);
-		if (defaultEngine == undefined) {
+		var defaultEngine = getParentState("DefaultEngineTTS", device) || "";
+		if ( isEmpty( defaultEngine ) ) {
 			defaultEngine = 'GOOGLE';
 		}
+
 		var languages = [	[ "en", "English" ],
 							[ "en-GB", "English (British)" ],
 							[ "en-US", "English (American)" ],
@@ -548,49 +557,9 @@ var Sonos = (function(api, $) {
 							[ "es", "Spanish" ],
 							[ "es-mx", "Spanish (Mexican)" ],
 							[ "es-es", "Spanish (Spanish)" ] ];
-		var defaultLanguage = getParentState("DefaultLanguageTTS", device);
-		if (defaultLanguage == undefined) {
+		var defaultLanguage = getParentState("DefaultLanguageTTS", device) || "";
+		if ( isEmpty( defaultLanguage ) ) {
 			defaultLanguage = 'en';
-		}
-
-		var GoogleServerURL = api.getDeviceState(device, SONOS_SID, "GoogleTTSServerURL", 1);
-		if (GoogleServerURL == undefined) {
-			GoogleServerURL = '';
-		}
-
-		var serverURL = api.getDeviceState(device, SONOS_SID, "OSXTTSServerURL", 1);
-		if (serverURL == undefined) {
-			serverURL = '';
-		}
-
-		var MaryServerURL = api.getDeviceState(device, SONOS_SID, "MaryTTSServerURL", 1);
-		if (MaryServerURL == undefined) {
-			MaryServerURL = '';
-		}
-
-		var RVServerURL = api.getDeviceState(device, SONOS_SID, "ResponsiveVoiceTTSServerURL", 1);
-		if (RVServerURL == undefined) {
-			RVServerURL = '';
-		}
-		var clientId = api.getDeviceState(device, SONOS_SID, "MicrosoftClientId", 1);
-		if (clientId == undefined) {
-			clientId = '';
-		}
-		var clientSecret = api.getDeviceState(device, SONOS_SID, "MicrosoftClientSecret", 1);
-		if (clientSecret == undefined) {
-			clientSecret = '';
-		}
-		var option = api.getDeviceState(device, SONOS_SID, "MicrosoftOption", 1);
-		if (option == undefined) {
-			option = '';
-		}
-		var rate = api.getDeviceState(device, SONOS_SID, "TTSRate", 1);
-		if (rate == undefined) {
-			rate = '';
-		}
-		var pitch = api.getDeviceState(device, SONOS_SID, "TTSPitch", 1);
-		if (pitch == undefined) {
-			pitch = '';
 		}
 
 		html += '<table>';
@@ -606,6 +575,7 @@ var Sonos = (function(api, $) {
 		html += '<td>Language:</td>';
 		html += '<td>';
 		html += '<select id="language1" onChange="Sonos_selectLang();">';
+		html += '<option value="">(default: ' + defaultLanguage + ')</option>';
 		for (i=0; i<languages.length; i++) {
 			html += '<option';
 			if (languages[i][0] == defaultLanguage) {
@@ -614,7 +584,7 @@ var Sonos = (function(api, $) {
 			html += ' value="' + languages[i][0] + '">' + languages[i][1] + '</option>';
 		}
 		html += '</select>';
-		html += '<input id="language" type="text" value="' + defaultLanguage + '" style="margin-left: 5px; width: 50px"/>';
+		html += '<input id="language" type="text" value="" style="margin-left: 5px; width: 50px"/>';
 		html += '</td>';
 		html += '</tr>';
 
@@ -622,6 +592,7 @@ var Sonos = (function(api, $) {
 		html += '<td>Engine:</td>';
 		html += '<td>';
 		html += '<select id="engine">';
+		html += '<option value="">(default: ' + defaultEngine + ')</option>';
 		for (i=0; i<engines.length; i++) {
 			html += '<option';
 			if (engines[i][0] == defaultEngine) {
@@ -658,7 +629,7 @@ var Sonos = (function(api, $) {
 
 		html += '<tr>';
 		html += '<td>';
-		html += '<button id="say" type="button" style="background-color:' + buttonBgColor + '; color: white; height: 25px; width: 50px; -moz-border-radius: 6px; -webkit-border-radius: 6px; -khtml-border-radius: 6px; border-radius: 6px" onclick="Sonos_say('+device+');">Say</button>';
+		html += '<button id="say" type="button" class="btn btn-sm sonosbtn">Say</button>';
 		html += '</td>';
 		html += '<td></td>';
 		html += '</tr>';
@@ -668,6 +639,13 @@ var Sonos = (function(api, $) {
 		//html += '<p id="debug">';
 
 		api.setCpanelContent(html);
+
+		jQuery( 'button#say' ).on( 'click.sonos', function() { Sonos_say( device ); } );
+		jQuery( 'select#engine' ).val( "" );
+		jQuery( 'select#language1' ).val( "" ).on( 'change.sonos', function() {
+			jQuery( 'input#language' ).val( jQuery( this ).val() );
+		});
+		jQuery( 'input#language' ).val( "" );
 
 		prevOnlineState3 = undefined;
 
@@ -687,7 +665,7 @@ var Sonos = (function(api, $) {
 
 	function Sonos_defineUIStyle()
 	{
-		if (typeof api !== 'undefined') {
+		if ( 'undefined' !== typeof api ) {
 			buttonBgColor = '#006E47';
 			offButtonBgColor = '#006E47';
 			onButtonBgColor = '#00A652';
@@ -710,8 +688,8 @@ button.sonosbtn.sonoson { background-color: ' + onButtonBgColor + '; } \
 
 	function Sonos_initXMLParser()
 	{
-		if (typeof parseXml == 'undefined') {
-			if (typeof window.DOMParser != "undefined") {
+		if ( isEmpty( parseXml ) ) {
+			if ( undefined !== typeof window.DOMParser ) {
 				parseXml = function(xmlStr) {
 					return ( new window.DOMParser() ).parseFromString(xmlStr, "text/xml");
 				};
@@ -761,19 +739,19 @@ button.sonosbtn.sonoson { background-color: ' + onButtonBgColor + '; } \
 	function Sonos_refreshPlayer(device)
 	{
 		var html, pos1, pos2;
-		var uuid = api.getDeviceState(device, DEVICE_PROPERTIES_SID, "SonosID", 1);
+		var uuid = api.getDeviceState(device, DEVICE_PROPERTIES_SID, "SonosID", 1) || "";
 
-		var groups = api.getDeviceState(device, ZONEGROUPTOPOLOGY_SID, "ZoneGroupState", 1);
-		if (groups != undefined && groups != "" && prevGroups != groups) {
+		var groups = api.getDeviceState(device, ZONEGROUPTOPOLOGY_SID, "ZoneGroupState", 1) || "";
+		if ( ! isEmpty(groups) && prevGroups != groups) {
 			var xmlgroups = parseXml(groups);
-			if (typeof xmlgroups != 'undefined') {
+			if (typeof xmlgroups !== 'undefined') {
 				var html = "";
 				var members = xmlgroups.getElementsByTagName("ZoneGroupMember");
 				for (i=0; i<members.length; i++) {
 					var name = Sonos_extractXmlAttribute(members[i], 'ZoneName');
 					var channelMapSet = Sonos_extractXmlAttribute(members[i], 'ChannelMapSet');
 					var isZoneBridge = Sonos_extractXmlAttribute(members[i], 'IsZoneBridge');
-					if (typeof name != 'undefined' && channelMapSet == undefined && isZoneBridge != "1") {
+					if (typeof name !== 'undefined' && channelMapSet === undefined && isZoneBridge != "1") {
 						var title = name;
 						if (title.length > 60) {
 							title = title.substr(0, 60) + '...';
@@ -786,8 +764,8 @@ button.sonosbtn.sonoson { background-color: ' + onButtonBgColor + '; } \
 			prevGroups = groups;
 		}
 
-		var savedQueues = api.getDeviceState(device, CONTENT_DIRECTORY_SID, "SavedQueues", 1);
-		if (savedQueues != undefined && savedQueues != prevSavedQueues) {
+		var savedQueues = api.getDeviceState(device, CONTENT_DIRECTORY_SID, "SavedQueues", 1) || "";
+		if ( ! isEmpty( savedQueues ) && savedQueues != prevSavedQueues) {
 			html = "";
 			pos1 = 0;
 			pos2 = savedQueues.indexOf('\n', pos1);
@@ -809,8 +787,8 @@ button.sonosbtn.sonoson { background-color: ' + onButtonBgColor + '; } \
 			prevSavedQueues = savedQueues;
 		}
 
-		var queue = api.getDeviceState(device, CONTENT_DIRECTORY_SID, "Queue", 1);
-		if (queue != undefined && queue != prevQueue) {
+		var queue = api.getDeviceState(device, CONTENT_DIRECTORY_SID, "Queue", 1) || "";
+		if ( ! isEmpty( queue ) && queue != prevQueue) {
 			html = "";
 			pos1 = 0;
 			pos2 = queue.indexOf('\n', pos1);
@@ -827,8 +805,8 @@ button.sonosbtn.sonoson { background-color: ' + onButtonBgColor + '; } \
 			prevQueue = queue;
 		}
 
-		var favRadios = api.getDeviceState(device, CONTENT_DIRECTORY_SID, "FavoritesRadios", 1);
-		if (favRadios != undefined && favRadios != prevFavRadios) {
+		var favRadios = api.getDeviceState(device, CONTENT_DIRECTORY_SID, "FavoritesRadios", 1) | "";
+		if ( ! isEmpty( favRadios ) && favRadios != prevFavRadios) {
 			html = "";
 			pos1 = 0;
 			pos2 = favRadios.indexOf('\n', pos1);
@@ -850,8 +828,8 @@ button.sonosbtn.sonoson { background-color: ' + onButtonBgColor + '; } \
 			prevFavRadios = favRadios;
 		}
 
-		var favorites = api.getDeviceState(device, CONTENT_DIRECTORY_SID, "Favorites", 1);
-		if (favorites != undefined && favorites != prevFavorites) {
+		var favorites = api.getDeviceState(device, CONTENT_DIRECTORY_SID, "Favorites", 1) || "";
+		if ( ! isEmpty( favorites ) && favorites != prevFavorites) {
 			html = "";
 			pos1 = 0;
 			pos2 = favorites.indexOf('\n', pos1);
@@ -873,70 +851,42 @@ button.sonosbtn.sonoson { background-color: ' + onButtonBgColor + '; } \
 			prevFavorites = favorites;
 		}
 
-		var coordinator = api.getDeviceState(device, SONOS_SID, "GroupCoordinator", 1);
-		if (coordinator == undefined) {
+		var coordinator = api.getDeviceState(device, SONOS_SID, "GroupCoordinator", 1) | "";
+		if ( isEmpty( coordinator ) ) {
 			coordinator = uuid;
 		}
-		var onlineState = api.getDeviceState(device, SONOS_SID, "SonosOnline", 1);
-		if (onlineState == undefined) {
+		var onlineState = api.getDeviceState(device, SONOS_SID, "SonosOnline", 1) || "";
+		if ( isEmpty( onlineState ) ) {
 			onlineState = '1';
 		}
-		var currentAlbumArtUrl = api.getDeviceState(device, AVTRANSPORT_SID, "CurrentAlbumArt", 1);
-		if (currentAlbumArtUrl == undefined) {
-			currentAlbumArtUrl = '';
-		}
-		var title = api.getDeviceState(device, AVTRANSPORT_SID, "CurrentTitle", 1);
-		if (title == undefined) {
-			title = '';
-		}
-		var album = api.getDeviceState(device, AVTRANSPORT_SID, "CurrentAlbum", 1);
-		if (album == undefined) {
-			album = '';
-		}
-		var artist = api.getDeviceState(device, AVTRANSPORT_SID, "CurrentArtist", 1);
-		if (artist == undefined) {
-			artist = '';
-		}
-		var details = api.getDeviceState(device, AVTRANSPORT_SID, "CurrentDetails", 1);
-		if (details == undefined) {
-			details = '';
-		}
-		var currentTrack = api.getDeviceState(device, AVTRANSPORT_SID, "CurrentTrack", 1);
-		if (currentTrack == undefined || currentTrack == "") {
+		var currentAlbumArtUrl = api.getDeviceState(device, AVTRANSPORT_SID, "CurrentAlbumArt", 1) || "";
+		var title = api.getDeviceState(device, AVTRANSPORT_SID, "CurrentTitle", 1) || "";
+		var album = api.getDeviceState(device, AVTRANSPORT_SID, "CurrentAlbum", 1) || "";
+		var artist = api.getDeviceState(device, AVTRANSPORT_SID, "CurrentArtist", 1) || "";
+		var details = api.getDeviceState(device, AVTRANSPORT_SID, "CurrentDetails", 1) || "";
+		var currentTrack = api.getDeviceState(device, AVTRANSPORT_SID, "CurrentTrack", 1) || "";
+		if ( isEmpty( currentTrack ) ) {
 			currentTrack = '1';
 		}
-		var nbrTracks = api.getDeviceState(device, AVTRANSPORT_SID, "NumberOfTracks", 1);
-		if (nbrTracks == undefined || nbrTracks == "NOT_IMPLEMENTED") {
+		var nbrTracks = api.getDeviceState(device, AVTRANSPORT_SID, "NumberOfTracks", 1) || "";
+		if ( nbrTracks === "NOT_IMPLEMENTED") {
 			nbrTracks = '';
 		}
-		var playing = api.getDeviceState(device, AVTRANSPORT_SID, "TransportState", 1);
-		if (playing == undefined) {
-			playing = '';
-		}
-		var actions = api.getDeviceState(device, AVTRANSPORT_SID, "CurrentTransportActions", 1);
-		if (actions == undefined) {
-			actions = '';
-		}
+		var playing = api.getDeviceState(device, AVTRANSPORT_SID, "TransportState", 1) || "";
+		var actions = api.getDeviceState(device, AVTRANSPORT_SID, "CurrentTransportActions", 1) || "";
 		actions = actions.toLowerCase();
-		var transportUri = api.getDeviceState(device, AVTRANSPORT_SID, "AVTransportURI", 1);
-		if (transportUri == undefined) {
-			transportUri = '';
-		}
-		var currentService = api.getDeviceState(device, SONOS_SID, "CurrentService", 1);
-		if (currentService == undefined) {
-			currentService = '';
-		}
-		var currentRadio = api.getDeviceState(device, AVTRANSPORT_SID, "CurrentRadio", 1);
-		if (currentRadio == undefined) {
-			currentRadio = '';
-		}
-		var mute = api.getDeviceState(device, RENDERING_CONTROL_SID, "Mute", 1);
-		if (mute == undefined || mute == "") {
+		var transportUri = api.getDeviceState(device, AVTRANSPORT_SID, "AVTransportURI", 1) || "";
+		var currentService = api.getDeviceState(device, SONOS_SID, "CurrentService", 1) || "";
+		var currentRadio = api.getDeviceState(device, AVTRANSPORT_SID, "CurrentRadio", 1) || "";
+		var mute = api.getDeviceState(device, RENDERING_CONTROL_SID, "Mute", 1) || "";
+		if ( isEmpty( mute ) ) {
 			mute = '0';
 		}
-		var volume = api.getDeviceState(device, RENDERING_CONTROL_SID, "Volume", 1);
-		if (volume == undefined || volume == "") {
+		var volume = api.getDeviceState(device, RENDERING_CONTROL_SID, "Volume", 1) || "";
+		if ( isEmpty( volume ) ) {
 			volume = 0;
+		} else {
+			volume = parseInt( volume ) || 0;
 		}
 
 		if (coordinator != prevCoordinator ||
@@ -1149,8 +1099,8 @@ button.sonosbtn.sonoson { background-color: ' + onButtonBgColor + '; } \
 
 	function Sonos_refreshTTS(device)
 	{
-		var onlineState = api.getDeviceState(device, SONOS_SID, "SonosOnline", 1);
-		if (onlineState == undefined) {
+		var onlineState = api.getDeviceState(device, SONOS_SID, "SonosOnline", 1) || "";
+		if ( isEmpty( onlineState ) ) {
 			onlineState = '1';
 		}
 
@@ -1289,8 +1239,8 @@ button.sonosbtn.sonoson { background-color: ' + onButtonBgColor + '; } \
 	function Sonos_say(device)
 	{
 		var text = encodeURIComponent(jQuery('#text').val());
-		var language = jQuery('#language').val();
-		var engine = jQuery('#engine').val();
+		var language = jQuery('input#language').val();
+		var engine = jQuery('select#engine').val();
 		var volume = jQuery('#volumeTTS').val();
 		var zones = '';
 		if (jQuery('#CurrentGroup').is(':checked')) {
@@ -1305,7 +1255,12 @@ button.sonosbtn.sonoson { background-color: ' + onButtonBgColor + '; } \
 		}
 		//jQuery('#debug').html('_' + text + '_ ' + language + ' ' + engine + ' ' + volume + ' ' + zones + ' ' + sameVolume);
 		if (text != "") {
-			api.performActionOnDevice(device, SONOS_SID, 'Say', { actionArguments: {'Text':text, 'Language':language, 'Engine':engine, 'Volume':volume, 'GroupZones':zones, 'SameVolumeForAll':sameVolume} } );
+			var args = { 'Text': text, 'SameVolumeForAll': sameVolume };
+			if ( ! isEmpty( language ) ) args.Language = language;
+			if ( ! isEmpty( engine ) ) args.Engine = engine;
+			if ( ! isEmpty( volume ) ) args.Volume = volume;
+			if ( ! isEmpty( zones ) ) args.GroupZones = zones;
+			api.performActionOnDevice(device, SONOS_SID, 'Say', { actionArguments: args } );
 		}
 	}
 
@@ -1329,33 +1284,17 @@ button.sonosbtn.sonoson { background-color: ' + onButtonBgColor + '; } \
 
 	function Sonos_updateGroupSelection(state)
 	{
-		var disabled = true;
-		var i=0;
-		while (jQuery('#GroupMember'+i).length > 0) {
-			if (jQuery('#GroupMember'+i).is(':checked')) {
-				disabled = false;
-				break;
-			}
-			i++;
-		}
-		jQuery('#applyGroup').get(0).disabled = disabled;
+		jQuery( 'button#applyGroup' ).prop( 'disabled', 0 === jQuery( 'input.zonemem:checked' ).length );
 	}
 
 	function Sonos_updateGroup(device)
 	{
-		var zones = "";
-		var i=0;
-		while (jQuery('#GroupMember'+i).length > 0) {
-			if (jQuery('#GroupMember'+i).is(':checked')) {
-				if (zones != "") {
-					zones += ',';
-				}
-				zones += jQuery('#GroupMember'+i).val();
-			}
-			i++;
-		}
-		zones = encodeURIComponent(zones);
-		api.performActionOnDevice(device, SONOS_SID, 'UpdateGroupMembers', { actionArguments: {'Zones':zones} } );
+		var zones = [];
+		jQuery( 'input.zonemem:checked' ).each( function( ix, obj ) {
+			zones.push( jQuery( obj ).attr( 'id' ) );
+		});
+		api.performActionOnDevice( device, SONOS_SID, 'UpdateGroupMembers',
+			{ actionArguments: { 'Zones': zones.join( ',' ) } } );
 	}
 
 	function Sonos_checkState(device)
