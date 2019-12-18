@@ -8,7 +8,7 @@
 module( "L_SonosSystem1", package.seeall )
 
 PLUGIN_NAME = "Sonos"
-PLUGIN_VERSION = "2.0-19345"
+PLUGIN_VERSION = "2.0-19352"
 PLUGIN_ID = 4226
 
 local _CONFIGVERSION = 19298
@@ -66,7 +66,7 @@ local lom = require "lxp.lom"
 -- Table of Sonos IP addresses indexed by Vera devices
 local port = 1400
 local descriptionURL = "http://%s:%s/xml/device_description.xml"
-local iconURL = "../../icons/Sonos.png"
+local iconURL = "/cmh/skins/default/icons/Sonos.png"
 
 local HADEVICE_SID = "urn:micasaverde-com:serviceId:HaDevice1"
 local SONOS_ZONE_SID = "urn:micasaverde-com:serviceId:Sonos1"

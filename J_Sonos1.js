@@ -15,7 +15,7 @@ var Sonos = (function(api, $) {
 	/* unique identifier for this plugin... */
 	var uuid = '79bf9374-f989-11e9-884c-dbb32f3fa64a'; /* SonosSystem 2019-12-11 19345 */
 
-	var pluginVersion = '2.0develop-19345';
+	var pluginVersion = '2.0develop-19352';
 
 	var _UIVERSION = 19301;     /* must coincide with Lua core */
 
@@ -97,7 +97,7 @@ var Sonos = (function(api, $) {
 		var minVolume = 0;
 		var maxVolume = 100;
 
-		html += '<table>';
+		html += '<table cellpadding="2">';
 		html += '<tr>';
 		html += '<td rowspan=6><img id="albumArt" width="100" height="100"/></td>';
 		html += '<td id="service"></td>';
@@ -703,7 +703,7 @@ var Sonos = (function(api, $) {
 		if ( $("style#sonos").length > 0 ) return;
 		
 		$( '<style id="sonos"> \
-button.sonosbtn { background-color: ' + buttonBgColor + '; } \
+button.sonosbtn { background-color: ' + buttonBgColor + '; color: white; } \
 button.sonosbtn.sonoson { background-color: ' + onButtonBgColor + '; } \
 </style>' ).appendTo( $('head') );
 	}
