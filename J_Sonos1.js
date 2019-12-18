@@ -805,7 +805,7 @@ button.sonosbtn.sonoson { background-color: ' + onButtonBgColor + '; } \
 			prevQueue = queue;
 		}
 
-		var favRadios = api.getDeviceState(device, CONTENT_DIRECTORY_SID, "FavoritesRadios", 1) | "";
+		var favRadios = api.getDeviceState(device, CONTENT_DIRECTORY_SID, "FavoritesRadios", 1) || "";
 		if ( ! isEmpty( favRadios ) && favRadios != prevFavRadios) {
 			html = "";
 			pos1 = 0;
@@ -851,7 +851,7 @@ button.sonosbtn.sonoson { background-color: ' + onButtonBgColor + '; } \
 			prevFavorites = favorites;
 		}
 
-		var coordinator = api.getDeviceState(device, SONOS_SID, "GroupCoordinator", 1) | "";
+		var coordinator = api.getDeviceState(device, SONOS_SID, "GroupCoordinator", 1) || "";
 		if ( isEmpty( coordinator ) ) {
 			coordinator = uuid;
 		}
