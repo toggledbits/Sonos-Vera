@@ -5,7 +5,7 @@
  * Current maintainer: rigpapa https://community.getvera.com/u/rigpapa/summary
  * For license information, see https://github.com/toggledbits/Sonos-Vera
  */
-/* globals api,jQuery,$,unescape,ace,Promise,setTimeout,MultiBox */
+/* globals api,jQuery,$,setTimeout,MultiBox */
 /* jshint multistr: true, laxcomma: true */
 
 //"use strict"; // fails on UI7, works fine with ALTUI
@@ -22,8 +22,6 @@ var Sonos = (function(api, $) {
 	var myModule = {};
 
 	var timeoutVar;
-	var timeoutVar2;
-	var timeoutVar3;
 	var browserIE = false;
 	var parseXml;
 	var prevGroups;
@@ -47,14 +45,7 @@ var Sonos = (function(api, $) {
 	var prevCurrentRadio;
 	var prevMute;
 	var prevVolume;
-	var prevModelName;
-	var prevIp;
-	var prevZone;
-	var prevOnlineState2;
-	var prevProxy;
-	var prevResultDiscovery;
-	var prevPatchInstalled;
-	var prevOnlineState3;
+
 	var SONOS_SID = 'urn:micasaverde-com:serviceId:Sonos1';
 	var SONOS_SYS_SID = 'urn:toggledbits-com:serviceId:SonosSystem1';
 	var AVTRANSPORT_SID = 'urn:upnp-org:serviceId:AVTransport';
@@ -75,12 +66,6 @@ var Sonos = (function(api, $) {
 		return api.getDeviceState( me.id_parent || me.id, SONOS_SYS_SID, varName );
 	}
 
-	/* Set parent state */
-	function setParentState( varName, val, myid ) {
-		var me = api.getDeviceObject( myid || api.getCpanelDeviceId() );
-		return api.setDeviceStatePersistent( me.id_parent || me.id, SONOS_SYS_SID, varName, val );
-	}
-
 	function isEmpty( s ) {
 		return undefined === s || null === s || "" === s ||
 			( "string" === typeof( s ) && null !== s.match( /^\s*$/ ) );
@@ -88,8 +73,9 @@ var Sonos = (function(api, $) {
 
 	function doPlayer(device)
 	{
-		if (typeof timeoutVar != 'undefined') {
+		if ( timeoutVar ) {
 			clearTimeout(timeoutVar);
+			timeoutVar = false;
 		}
 
 		Sonos_detectBrowser();
@@ -157,7 +143,7 @@ var Sonos = (function(api, $) {
 		html += '</td>';
 		html += '<td>';
 		html += '<select id="newVolume" class="form-control form-control-sm">';
-		for (i=minVolume; i<=maxVolume; i++) {
+		for (var i=minVolume; i<=maxVolume; i++) {
 			html += '<option value="' + i + '">' + i + '</option>';
 		}
 		html += '</select>';
@@ -241,6 +227,7 @@ var Sonos = (function(api, $) {
 		//html += '<p id="debug">';
 		
 		api.setCpanelContent(html);
+
 		$("button#prevTrack").on( "click.sonos", function( ev ) { Sonos_prevTrack(device); } );
 		$("button#play").on( "click.sonos", function( ev ) { Sonos_play(device); } );
 		$("button#pause").on( "click.sonos", function( ev ) { Sonos_pause(device); } );
@@ -257,6 +244,28 @@ var Sonos = (function(api, $) {
 		$("button#playFavRadio").on( "click.sonos", function( ev ) { Sonos_playFavRadio(device); } );
 		$("button#playFavorite").on( "click.sonos", function( ev ) { Sonos_playFavorite(device); } );
 		$("button#playUri").on( "click.sonos", function( ev ) { Sonos_playUri(device); } );
+
+		prevGroups = null;
+		prevSavedQueues = null;
+		prevQueue = null;
+		prevFavRadios = null;
+		prevFavorites = null;
+		prevCoordinator = null;
+		prevOnlineState = null;
+		prevCurrentAlbumArtUrl = null;
+		prevTitle = null;
+		prevAlbum = null;
+		prevArtist = null;
+		prevDetails = null;
+		prevCurrentTrack = null;
+		prevNbrTracks = null;
+		prevPlaying = null;
+		prevActions = null;
+		prevTransportUri = null;
+		prevCurrentService = null;
+		prevCurrentRadio = null;
+		prevMute = null;
+		prevVolume = null;
 
 		Sonos_refreshPlayer(device);
 	}
@@ -280,10 +289,7 @@ var Sonos = (function(api, $) {
 			}
 		}
 
-		var version = getParentState("PluginVersion", device);
-		if ( !version ) {
-			version = '';
-		}
+		var version = getParentState("PluginVersion", device) || "";
 
 		html = '';
 
@@ -332,7 +338,7 @@ var Sonos = (function(api, $) {
 		var zoneUUID, zoneName, channelMapSet, isZoneBridge;
 
 		if ( ! isEmpty( members ) ) {
-			for (i=0; i<members.length; i++) {
+			for (var i=0; i<members.length; i++) {
 				zoneUUID = Sonos_extractXmlAttribute(members[i], 'UUID');
 				zoneName = Sonos_extractXmlAttribute(members[i], 'ZoneName');
 				channelMapSet = Sonos_extractXmlAttribute(members[i], 'ChannelMapSet');
@@ -354,7 +360,7 @@ var Sonos = (function(api, $) {
 		html += '</tr>';
 
 		if ( ! isEmpty( members ) ) {
-			for (i=0; i<members.length; i++) {
+			for (var i=0; i<members.length; i++) {
 				zoneUUID = Sonos_extractXmlAttribute(members[i], 'UUID');
 				zoneName = Sonos_extractXmlAttribute(members[i], 'ZoneName');
 				channelMapSet = Sonos_extractXmlAttribute(members[i], 'ChannelMapSet');
@@ -436,7 +442,7 @@ var Sonos = (function(api, $) {
 		html += '<th>Variable</td>';
 		html += '<th>Value</td>';
 		html += '</tr>';
-		for (i=0; i<variables.length; i++) {
+		for (var i=0; i<variables.length; i++) {
 			value = api.getDeviceState(device, variables[i][0], variables[i][1], 1) || "";
 			html += '<tr>';
 			html += '<td>' + variables[i][1] + '</td>';
@@ -517,8 +523,9 @@ var Sonos = (function(api, $) {
 
 	function doTTS(device)
 	{
-		if ( timeoutVar3 ) {
-			clearTimeout(timeoutVar3);
+		if ( timeoutVar ) {
+			clearTimeout(timeoutVar);
+			timeoutVar = false;
 		}
 
 		Sonos_detectBrowser();
@@ -573,10 +580,10 @@ var Sonos = (function(api, $) {
 
 		html += '<tr>';
 		html += '<td>Language:</td>';
-		html += '<td>';
-		html += '<select id="language1" onChange="Sonos_selectLang();">';
+		html += '<td class="form-inline">';
+		html += '<select id="language1" class="form-control form-control-sm">';
 		html += '<option value="">(default: ' + defaultLanguage + ')</option>';
-		for (i=0; i<languages.length; i++) {
+		for (var i=0; i<languages.length; i++) {
 			html += '<option';
 			if (languages[i][0] == defaultLanguage) {
 				html += ' selected';
@@ -584,14 +591,14 @@ var Sonos = (function(api, $) {
 			html += ' value="' + languages[i][0] + '">' + languages[i][1] + '</option>';
 		}
 		html += '</select>';
-		html += '<input id="language" type="text" value="" style="margin-left: 5px; width: 50px"/>';
+		html += '<input id="language" type="text" value="" class="form-control form-control-sm" style="margin-left: 5px; width: 50px"/>';
 		html += '</td>';
 		html += '</tr>';
 
 		html += '<tr>';
 		html += '<td>Engine:</td>';
-		html += '<td>';
-		html += '<select id="engine">';
+		html += '<td class="form-inline">';
+		html += '<select id="engine" class="form-control form-control-sm">';
 		html += '<option value="">(default: ' + defaultEngine + ')</option>';
 		for (i=0; i<engines.length; i++) {
 			html += '<option';
@@ -646,8 +653,6 @@ var Sonos = (function(api, $) {
 			jQuery( 'input#language' ).val( jQuery( this ).val() );
 		});
 		jQuery( 'input#language' ).val( "" );
-
-		prevOnlineState3 = undefined;
 
 		Sonos_refreshTTS(device);
 	}
@@ -710,18 +715,6 @@ button.sonosbtn.sonoson { background-color: ' + onButtonBgColor + '; } \
 		}
 	}
 
-	function Sonos_extractXmlTag(parent, tag)
-	{
-		var value;
-		for (j=0; j<parent.childNodes.length; j++) {
-			if (parent.childNodes[j].tagName == tag) {
-				value = parent.childNodes[j].textContent;
-				break;
-			}
-		}
-		return value;
-	}
-
 	function Sonos_extractXmlAttribute(node, attribute)
 	{
 		return node.getAttribute(attribute);
@@ -747,7 +740,7 @@ button.sonosbtn.sonoson { background-color: ' + onButtonBgColor + '; } \
 			if (typeof xmlgroups !== 'undefined') {
 				var html = "";
 				var members = xmlgroups.getElementsByTagName("ZoneGroupMember");
-				for (i=0; i<members.length; i++) {
+				for (var i=0; i<members.length; i++) {
 					var name = Sonos_extractXmlAttribute(members[i], 'ZoneName');
 					var channelMapSet = Sonos_extractXmlAttribute(members[i], 'ChannelMapSet');
 					var isZoneBridge = Sonos_extractXmlAttribute(members[i], 'IsZoneBridge');
@@ -1074,8 +1067,6 @@ button.sonosbtn.sonoson { background-color: ' + onButtonBgColor + '; } \
 				jQuery('#clearQueue').prop( 'disabled', true );
 			}
 
-			jQuery('#volume').html(volume);
-
 			prevCoordinator = coordinator;
 			prevOnlineState = onlineState;
 			prevCurrentAlbumArtUrl = currentAlbumArtUrl;
@@ -1103,20 +1094,8 @@ button.sonosbtn.sonoson { background-color: ' + onButtonBgColor + '; } \
 		if ( isEmpty( onlineState ) ) {
 			onlineState = '1';
 		}
-
-		if (onlineState != prevOnlineState3) {
-
-			if (onlineState == '1') {
-				jQuery('#say').get(0).disabled = false;
-			}
-			else {
-				jQuery('#say').get(0).disabled = true;
-			}
-
-			prevOnlineState3 = onlineState;
-		}
-
-		timeoutVar3 = setTimeout( function() { Sonos_refreshTTS(device); }, 1000);
+		jQuery('#say').prop( 'disabled', '0' === onlineState );
+		timeoutVar = setTimeout( function() { Sonos_refreshTTS(device); }, 1000);
 	}
 
 	function Sonos_play(device)
@@ -1229,13 +1208,6 @@ button.sonosbtn.sonoson { background-color: ' + onButtonBgColor + '; } \
 		}
 	}
 
-	function Sonos_selectLang()
-	{
-		if (jQuery('#language1 option:selected').index() >= 0) {
-			jQuery('#language').val(jQuery('#language1').val());
-		}
-	}
-
 	function Sonos_say(device)
 	{
 		var text = encodeURIComponent(jQuery('#text').val());
@@ -1264,24 +1236,6 @@ button.sonosbtn.sonoson { background-color: ' + onButtonBgColor + '; } \
 		}
 	}
 
-	function Sonos_selectAllMembers(state)
-	{
-		var version = parseFloat(jQuery().jquery.substr(0,3));
-		var disabled = true;
-		var i=0;
-		while (jQuery('#GroupMember'+i).length > 0) {
-			if (version < 1.6) {
-				jQuery('#GroupMember'+i).attr('checked', state);
-			}
-			else {
-				jQuery('#GroupMember'+i).prop('checked', state);
-			}
-			disabled = ! state;
-			i++;
-		}
-		jQuery('#applyGroup').get(0).disabled = disabled;
-	}
-
 	function Sonos_updateGroupSelection(state)
 	{
 		jQuery( 'button#applyGroup' ).prop( 'disabled', 0 === jQuery( 'input.zonemem:checked' ).length );
@@ -1295,34 +1249,6 @@ button.sonosbtn.sonoson { background-color: ' + onButtonBgColor + '; } \
 		});
 		api.performActionOnDevice( device, SONOS_SID, 'UpdateGroupMembers',
 			{ actionArguments: { 'Zones': zones.join( ',' ) } } );
-	}
-
-	function Sonos_checkState(device)
-	{
-		if (jQuery('#IP').html() != "") {
-			var url = encodeURIComponent('http://' + jQuery('#IP').html() + ':1400/xml/device_description.xml');
-			api.performActionOnDevice(device, SONOS_SID, 'SelectSonosDevice', { actionArguments: {'URL':url} } );
-		}
-	}
-
-	function Sonos_updateCheckStateRate(device)
-	{
-		var rate;
-		if (jQuery('#stateAutoCheckOn').is(':checked')) {
-			var reg1 = new RegExp('^\\d+$', '');
-			if (jQuery('#rate').val() == '' ||
-					!jQuery('#rate').val().match(reg1) ||
-					jQuery('#rate').val() == 0) {
-				jQuery('#rate').val('5');
-			}
-			jQuery('#setCheckState').get(0).disabled = false;
-		}
-		else if (jQuery('#stateAutoCheckOff').is(':checked')) {
-			jQuery('#rate').val('0');
-			jQuery('#setCheckState').get(0).disabled = true;
-		}
-		var rate = jQuery('#rate').val();
-		api.performActionOnDevice(device, SONOS_SID, 'SetCheckStateRate', { actionArguments: { 'rate':rate } } );
 	}
 
 /** ***************************************************************************

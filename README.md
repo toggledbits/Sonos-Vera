@@ -19,7 +19,7 @@ Release in the Vera plugin marketplace is planned for later.
 
 **IMPORTANT** Currently, it is *highly* recommended that the "UPnP Event Proxy" plugin be installed on Vera when running this plugin. The event proxy makes it possible for the Sonos plugin to be proactively notified of state changes on the media player(s). If not used, the Sonos plugin will, by default, poll the player frequently, resulting in additional load on your Vera and additional network traffic (when most of time nothing of value is happening/changing). See the "Other Configuration" section below for additional information on controlling polling rate.
 
-### Installation on Vera (manually)
+### Manual Installation on Vera
 
 **If you have the Sonos plugin version 1.4 or earlier installed from the Vera App/Plugin Marketplace (with or without additional patches), you must uninstall the plugin first. See "Uninstalling the Last Released Version" below.** If you're not sure, go there for instructions on how to check.
 
@@ -29,12 +29,11 @@ Release in the Vera plugin marketplace is planned for later.
 4. Select the files (except the `.md` files and the `services` and `icons` directories and their contents--these are no longer required) as a group and drag them to the upload tool at *Apps > Develop apps > Luup files*. This will upload all the files as a single batch and then restart Luup.
 5. After the Luup restart, go to *Apps > Develop apps > Create device*, enter and submit:
   * Description: `Sonos` (or whatever you choose)
-  * Device UPnP Filename: `D_Sonos1.xml` (exactly as shown)
-  * Device UPnP Filename: `I_Sonos1.xml` (exactly as shown)
+  * Device UPnP Filename: `D_SonosSystem1.xml` (exactly as shown)
+  * Device UPnP Filename: `I_SonosSystem1.xml` (exactly as shown)
     > WARNING: You must enter the filenames exactly as shown above. Any error may cause your system to not restart and require intervention from Vera Support.
-  * IP Address: *enter the IP address of your Sonos player, if you know it*
-    > NOTE: If you enter the IP address here, you can skip step 8 below. If you do not know the IP address of your player, leave the field blank--step 8 should find it.
   * Hit the "Create device" button.
+  * **NOTE:** if you are upgrading to 2.0 from a prior version, DO NOT SKIP THIS STEP.
 6. Go to *Apps > Develop apps > Test Luup code (Lua)* and enter/run: `luup.reload()` 
 7. After Luup finishes reloading, [hard-refresh your browser](https://www.getfilecloud.com/blog/2015/03/tech-tip-how-to-do-hard-refresh-in-browsers/). This is a vital step that cannot be skipped!
 8. You can then go into the "Settings" tab of the Sonos device and use discovery to find your first Sonos media player. 
@@ -51,10 +50,8 @@ openLuup users, please note that additional configuration is required to use TTS
 
 ## State Variables
 
-### urn:micasaverde-com:serviceId:Sonos1
+### urn:micasaverde-com:serviceId:SonosSystem1
 
-* CurrentService - name of the current service, for example "TuneIn"
-* CheckStateRate - number of minutes between each automatic online check, "0" to disable the automatic check
 * DebugLogs - "1" when the debug logs are enabled or "0" when disabled
 * DefaultLanguageTTS - default language for TTS, for example "en" or "en-US"
 * DefaultEngineTTS - default engine for TTS, either "GOOGLE" or "MICROSOFT" or "OSX_TTS_SERVER" or "MARY"
@@ -62,7 +59,6 @@ openLuup users, please note that additional configuration is required to use TTS
 * DiscoveryResult - for plugin internal usage
 * FetchQueue - "1" when the Sonos queue is read by the plugin or "0" when not
 * GoogleTTSServerURL - the Google URL to be used for TTS
-* GroupCoordinator - UUID of the group coordinator
 * MaryTTSServerURL - URL of the MaryTTS server
 * ResponseVoiceTTSServerURL - URL of the ResponsiveVoice TTS service
 * MicrosoftClientId - Client ID you got when you regisered your application on the Microsoft Azure Marketplace
@@ -72,16 +68,24 @@ openLuup users, please note that additional configuration is required to use TTS
 * ProxyUsed - "proxy is in use" or "proxy is not in use" to indicate if the UPnP event proxy is in use
 * RouterIp - router/firewall IP when the Sonos unit can access the Vera only with a port forwarding rule
 * RouterPort - router/firewall port when the Sonos unit can access the Vera only with a port forwarding rule
+* TTSBasePath - Local directory path where TTS sound files will be written (must be retrievable at `TTSBaseURL` below)
+* TTSBaseURL - URL to TTS sound files (default: `http://vera-ip-addr/port_3480`)
+* TTSChime - Comma-separated WAV filename and duration (seconds) of chime file (set to "," to disable chime)
+
+> Note: See "Special TTS Configuration for openLuup" below for instructions on setting `TTSBasePath` and `TTSBaseURL` under openLuup.
+ 
+
+### urn:micasaverde-com:serviceId:Sonos1
+
+* CurrentService - name of the current service, for example "TuneIn"
+* CheckStateRate - number of minutes between each automatic online check, "0" to disable the automatic check
+* GroupCoordinator - UUID of the group coordinator
 * SonosModel - for plugin internal usage (icon management; legacy, not used after 1.4.3)
 * SonosModelName - model of the Sonos unit, for example "Sonos PLAY:5" or "Sonos CONNECT:AMP"
 * SonosModelNumber - model number as reported by Sonos unit (e.g. ZP100, S1, S12, etc.)
 * SonosOnline - "1" when the Sonos is online or "0" when it is offline
 * SonosServicesKeys - for plugin internal usage
-* TTSBasePath - Local directory path where TTS sound files will be written (must be retrievable at `TTSBaseURL` below)
-* TTSBaseURL - URL to TTS sound files (default: `http://vera-ip-addr/port_3480`)
 
-> Note: See "Special TTS Configuration for openLuup" below for instructions on setting `TTSBasePath` and `TTSBaseURL` under openLuup.
- 
 ### urn:upnp-org:serviceId:DeviceProperties
 
 * SonosID - UUID of the Sonos unit

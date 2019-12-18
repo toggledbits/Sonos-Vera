@@ -62,6 +62,7 @@ if type( tts ) ~= "table" then tts = nil end
 
 local url = require "socket.url"
 local lom = require "lxp.lom"
+local lfs = require "lfs"
 
 -- Table of Sonos IP addresses indexed by Vera devices
 local port = 1400
@@ -255,6 +256,15 @@ local function D(msg, ...)
 	if DEBUG_MODE then L({msg="[debug] "..msg, level=50}, ...) end
 end
 
+local function split( str, sep )
+	sep = sep or ","
+	local arr = {}
+	if str == nil or #str == 0 then return arr, 0 end
+	local rest = string.gsub( str or "", "([^" .. sep .. "]*)" .. sep, function( m ) table.insert( arr, m ) return "" end )
+	table.insert( arr, rest )
+	return arr, #arr
+end
+
 -- Clone table (shallow copy)
 local function clone( sourceArray )
 	local newArray = {}
@@ -345,6 +355,9 @@ end
 
 -- Return true if file exists; optionally returns handle to open file if exists.
 local function file_exists( fpath, leaveOpen )
+	if lfs and not leaveOpen then
+		return lfs.attributes( fpath, "size" ) and true or false
+	end
 	local f = io.open( fpath, "r" )
 	if not f then return false end
 	if not leaveOpen then f:close() f=nil end
@@ -357,7 +370,18 @@ local function file_exists_LZO( fpath )
 	return file_exists( fpath .. ".lzo" )
 end
 
+local function file_symlink( old, new )
+	if lfs then
+		lfs.link( old, new, true )
+	else
+		os.execute( "ln -sf '" .. old .. "' '" .. new .. "'" )
+	end
+end
+
 local function file_dtm( fpath )
+	if lfs then
+		return lfs.attributes( fpath, "modification" ) or 0
+	end
 	local f = io.popen( "stat -c %Y "..fpath )
 	if not f then return 0 end
 	local ts = tonumber( f:read("*a") ) or 0
@@ -1971,13 +1995,15 @@ local function setupTTSSettings(device)
 
 	TTSChime = nil
 	local installPath = getInstallPath()
-	if file_exists( installPath .. "Sonos_chime.wav" ) then
+	local chd = getVar( "TTSChime", "Sonos_chime.wav,3", device, SONOS_SYS_SID, true )
+	local chimefile, chimedur = unpack( split( chd, "," ) )
+	if chimefile ~= "" and file_exists( installPath .. chimefile ) then
 		if TTSBasePath ~= installPath then
-			os.execute( "ln -sf " .. installPath .. "Sonos_chime.wav " .. TTSBasePath )
+			file_symlink( installPath .. chimefile, TTSBasePath .. chimefile )
 		end
-		TTSChime = { URI=TTSBaseURL.."Sonos_chime.wav" }
+		TTSChime = { URI=TTSBaseURL..chimefile }
 		TTSChime.URIMetadata = TTS_METADATA:format( "TTS Chime", "http-get:*:audio/wav:*", TTSChime.URI )
-		TTSChime.Duration = getVarNumeric( "TTSChimeDuration", 3, device, SONOS_SYS_SID )
+		TTSChime.Duration = tonumber( chimedur ) or 5
 		TTSChime.TempFile = nil -- flag no delete in endPlayback
 	end
 end
@@ -2049,7 +2075,7 @@ local function fixLegacyIcons()
 		if file_exists( basePath .. p ) then
 			-- Apparently as of 7.30, this is new designated location.
 			if not file_exists( "/www/cmh/skins/default/icons/"..p ) then
-				os.execute( "ln -sf " .. basePath .. p .." /www/cmh/skins/default/icons/" )
+				file_symlink( basePath..p, "/www/cmh/skins/default/icons/" )
 			end
 		end
 	end
@@ -2063,7 +2089,7 @@ end
 local function setDeviceIcon( device, icon, model, uuid )
 	-- Set up local copy of icon from device and static JSON pointing to it
 	-- (so icon works both locally and remote)
-	local ICONREV = 19295
+	local ICONREV = 19345
 	local icorev = getVarNumeric("_icorev", 0, device, SONOS_ZONE_SID)
 	local installPath = getInstallPath()
 	local iconPath, iconURL
