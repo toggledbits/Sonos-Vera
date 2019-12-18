@@ -40,6 +40,7 @@
 			},
 			"Position": 0,
 			"TabType": "flash",
+			"TopNavigationTab": 1,
 			"SceneGroup": [{
 					"id": 1,
 					"top": "0.25",
@@ -304,6 +305,7 @@
 			},
 			"Position": 1,
 			"TabType": "javascript",
+			"TopNavigationTab": 1,
 			"ScriptName": "J_Sonos1.js",
 			"Function": "Sonos.doPlayer"
 		},
@@ -314,6 +316,7 @@
 			},
 			"Position": 2,
 			"TabType": "javascript",
+			"TopNavigationTab": 1,
 			"ScriptName": "J_Sonos1.js",
 			"Function": "Sonos.doTTS"
 		},
@@ -324,6 +327,7 @@
 			},
 			"Position": 3,
 			"TabType": "javascript",
+			"TopNavigationTab": 1,
 			"ScriptName": "J_Sonos1.js",
 			"Function": "Sonos.doGroup"
 		},
