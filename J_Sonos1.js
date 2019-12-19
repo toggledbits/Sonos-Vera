@@ -469,7 +469,8 @@ var Sonos = (function(api, $) {
 
 		var html = '<div id="groupSelection"/>';
 
-		html += '<br/>';
+		html += "<div>Select group members to be added or removed from this zone's group. Press 'Apply Changes' to save.</div>";
+
 		html += '<button id="refreshGroup" type="button" class="btn btn-sm sonosbtn">Refresh</button>';
 		html += '<button id="applyGroup" type="button" class="btn btn-sm sonosbtn">Apply Changes</button>';
 
