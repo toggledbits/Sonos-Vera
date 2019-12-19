@@ -36,23 +36,22 @@ local function Q(str) return "'" .. string.gsub(tostring(str), "(')", "\\%1") ..
 --            of the text to be converted. This function facilities a multi-request approach
 --            to creating a combined single audio file.
 local function cut_text( text, cutSize )
-	-- Cut the text in fragments of config.maxTextLength chars
-	if cutSize <= 0 then
-		return { text }
+	-- Canonicalize whitespace: trim ends, multis remaining are converted to single space
+	local remaining = tostring(text):gsub( "^%s+", "" ):gsub( "%s+$", "" ):gsub( "%s+", " " )
+	if cutSize <= 0 or #remaining <= cutSize then
+		return { remaining }
 	end
 	local tableTextFragments = {}
-	local remaining = text
 	while #remaining > 0 do
-		local pos = string.find(string.reverse(string.sub(remaining, 1, cutSize+1)), " ")
-		if pos ~= nil then
-			table.insert(tableTextFragments, string.sub(remaining, 1, cutSize+1-pos))
-			remaining = string.sub(remaining, cutSize+3-pos)
-		else
-			if #remaining > 0 then table.insert(tableTextFragments, remaining) end
-			remaining = ""
+		if #remaining <= cutSize then
+			table.insert( tableTextFragments, remaining )
+			return tableTextFragments
 		end
+		local pos = string.find(string.reverse(string.sub(remaining, 1, cutSize+1)), " ") or cutSize
+		local chunk = string.sub( remaining, 1, cutSize-pos+1 )
+		table.insert( tableTextFragments, chunk )
+		remaining = string.sub( remaining, cutSize+3-pos )
 	end
-	return tableTextFragments
 end
 
 -- Abstract base class for TTS engine for this module. Although its abstract-ness is not strictly
