@@ -5,7 +5,7 @@
  * Current maintainer: rigpapa https://community.getvera.com/u/rigpapa/summary
  * For license information, see https://github.com/toggledbits/Sonos-Vera
  */
-/* globals api,jQuery,$,unescape,ace,Promise,setTimeout,MultiBox */
+/* globals api,jQuery,$,unescape,setTimeout,MultiBox */
 /* jshint multistr: true, laxcomma: true */
 
 //"use strict"; // fails on UI7, works fine with ALTUI
@@ -15,7 +15,7 @@ var SonosSystem = (function(api, $) {
 	/* unique identifier for this plugin... */
 	var uuid = '79bf9374-f989-11e9-884c-dbb32f3fa64a'; /* SonosSystem 2019-12-11 19345 */
 
-	var pluginVersion = '2.0develop-19345';
+	var pluginVersion = '2.0develop-19353';
 
 	var _UIVERSION = 19301;     /* must coincide with Lua core */
 
@@ -109,75 +109,6 @@ var SonosSystem = (function(api, $) {
 	};
 
 	function TBD() { alert("TBD"); }
-
-/** ***************************************************************************
- *
- *  G R O U P S
- *
- ** **************************************************************************/
-
-	function Sonos_showGroup(device)
-	{
-		Sonos_detectBrowser();
-		Sonos_defineUIStyle();
-
-		Sonos_initXMLParser();
-
-		var html = '<DIV id="groupSelection"/>';
-
-		html += '<BR>';
-		html += '<button type="button" style="background-color:' + Sonos.buttonBgColor + '; color: white; height: 25px; width: 100px; -moz-border-radius: 6px; -webkit-border-radius: 6px; -khtml-border-radius: 6px; border-radius: 6px" onclick="Sonos_refreshGroupSelection('+device+');">Refresh</button>';
-		html += '<button type="button" style="margin-left: 10px; background-color:' + Sonos.buttonBgColor + '; color: white; height: 25px; width: 100px; -moz-border-radius: 6px; -webkit-border-radius: 6px; -khtml-border-radius: 6px; border-radius: 6px" onclick="Sonos_selectAllMembers(true);">Select All</button>';
-		html += '<button type="button" style="margin-left: 10px; background-color:' + Sonos.buttonBgColor + '; color: white; height: 25px; width: 100px; -moz-border-radius: 6px; -webkit-border-radius: 6px; -khtml-border-radius: 6px; border-radius: 6px" onclick="Sonos_selectAllMembers(false);">Unselect All</button>';
-		html += '<button id="applyGroup" type="button" style="margin-left: 10px; background-color:' + Sonos.buttonBgColor + '; color: white; height: 25px; width: 100px; -moz-border-radius: 6px; -webkit-border-radius: 6px; -khtml-border-radius: 6px; border-radius: 6px" onclick="Sonos_updateGroup('+device+');">Apply</button>';
-
-		//html += '<p id="debug">';
-
-		set_panel_html(html);
-
-		Sonos_refreshGroupSelection(device);
-	}
-
-	function Sonos_refreshGroupSelection(device)
-	{
-		var html = '';
-		var disabled = true;
-
-		var groupMembers = api.getDeviceState(device, Sonos.ZONEGROUPTOPOLOGY_SID, "ZonePlayerUUIDsInGroup", 1);
-		var groups = api.getDeviceState(device, Sonos.ZONEGROUPTOPOLOGY_SID, "ZoneGroupState", 1);
-		if (groups != undefined && groups != "") {
-			var xmlgroups = Sonos.parseXml(groups);
-			if (typeof xmlgroups != 'undefined') {
-				var members = xmlgroups.getElementsByTagName("ZoneGroupMember");
-				var nb=0;
-				for (i=0; i<members.length; i++) {
-					var name = Sonos_extractXmlAttribute(members[i], 'ZoneName');
-					var uuid = Sonos_extractXmlAttribute(members[i], 'UUID');
-					var invisible = Sonos_extractXmlAttribute(members[i], 'Invisible');
-					var channelMapSet = Sonos_extractXmlAttribute(members[i], 'ChannelMapSet');
-					var isZoneBridge = Sonos_extractXmlAttribute(members[i], 'IsZoneBridge');
-					if (isZoneBridge != "1" && (channelMapSet == undefined || invisible == '1')) {
-						html += '<input id="GroupMember' + nb +'" type="checkbox"';
-						if (groupMembers.search(uuid) >= 0) {
-							html += ' checked';
-							disabled = false;
-						}
-						html += ' value="' + name + '" onchange="Sonos_updateGroupSelection();">' +
-							(false /* ??? */ ? "&nbsp;(group coordinator)" : "") +
-							name + '<BR>';
-						nb++;
-					}
-				}
-			}
-		}
-
-		jQuery('#groupSelection').html(html);
-		jQuery('#applyGroup').get(0).disabled = disabled;
-	}
-
-	function doGroups() {
-		TBD();
-	}
 
 /** ***************************************************************************
  *
@@ -286,8 +217,8 @@ var SonosSystem = (function(api, $) {
 					'MicrosoftClientId':$( "input#tts-msftid" ).val() || "",
 					'MicrosoftClientSecret':$( "input#tts-msftsecret" ).val() || "",
 					'MicrosoftOption':$( "input#tts-msftopt" ).val() || "",
-					'Rate':$( "input#tts-rate" ).val() || "",
-					'Pitch':$( "input#tts-pitch" ).val() || ""
+					'Pitch':$( "input#tts-pitch" ).val() || "",
+					'Rate':$( "input#tts-rate" ).val() || ""
 				},
 				onSuccess: function() {
 					/* If that went well, these are assumed to go well. */
@@ -547,146 +478,6 @@ var SonosSystem = (function(api, $) {
 		}
 	}
 
-	function Sonos_extractXmlTag(parent, tag)
-	{
-		var value;
-		for (j=0; j<parent.childNodes.length; j++) {
-			if (parent.childNodes[j].tagName == tag) {
-				value = parent.childNodes[j].textContent;
-				break;
-			}
-		}
-		return value;
-	}
-
-	function Sonos_extractXmlAttribute(node, attribute)
-	{
-		return node.getAttribute(attribute);
-	}
-
-	function Sonos_escapeHtmlSpecialChars(unsafe)
-	{
-		return unsafe
-				.replace(/&/g, "&amp;")
-				.replace(/</g, "&lt;")
-				.replace(/>/g, "&gt;")
-				.replace(/"/g, "&quot;");
-	}
-
-	function Sonos_selectAllMembers(state)
-	{
-		var version = parseFloat(jQuery().jquery.substr(0,3));
-		var disabled = true;
-		var i=0;
-		while (jQuery('#GroupMember'+i).length > 0) {
-			if (version < 1.6) {
-				jQuery('#GroupMember'+i).attr('checked', state);
-			}
-			else {
-				jQuery('#GroupMember'+i).prop('checked', state);
-			}
-			disabled = ! state;
-			i++;
-		}
-		jQuery('#applyGroup').get(0).disabled = disabled;
-	}
-
-	function Sonos_updateGroupSelection(state)
-	{
-		var disabled = true;
-		var i=0;
-		while (jQuery('#GroupMember'+i).length > 0) {
-			if (jQuery('#GroupMember'+i).is(':checked')) {
-				disabled = false;
-				break;
-			}
-			i++;
-		}
-		jQuery('#applyGroup').get(0).disabled = disabled;
-	}
-
-	function Sonos_updateGroup(device)
-	{
-		var zones = "";
-		var i=0;
-		while (jQuery('#GroupMember'+i).length > 0) {
-			if (jQuery('#GroupMember'+i).is(':checked')) {
-				if (zones != "") {
-					zones += ',';
-				}
-				zones += jQuery('#GroupMember'+i).val();
-			}
-			i++;
-		}
-		zones = encodeURIComponent(zones);
-		//jQuery('#debug').html(zones);
-		Sonos_callAction(device, Sonos.SONOS_SID, 'UpdateGroupMembers', {'Zones':zones} );
-	}
-
-	function Sonos_checkState(device)
-	{
-		if (jQuery('#IP').html() != "") {
-			var url = encodeURIComponent('http://' + jQuery('#IP').html() + ':1400/xml/device_description.xml');
-			//jQuery('#debug').html(url);
-			Sonos_callAction(device, Sonos.SONOS_SID, 'SelectSonosDevice', {'URL':url} );
-		}
-	}
-
-	function Sonos_updateCheckStateRate(device)
-	{
-		var rate;
-		if (jQuery('#stateAutoCheckOn').is(':checked')) {
-			var reg1 = new RegExp('^\\d+$', '');
-			if (jQuery('#rate').val() == '' ||
-					! jQuery('#rate').val().match(reg1) ||
-					jQuery('#rate').val() == 0) {
-				jQuery('#rate').val('5');
-			}
-			jQuery('#setCheckState').get(0).disabled = false;
-		}
-		else if (jQuery('#stateAutoCheckOff').is(':checked')) {
-			jQuery('#rate').val('0');
-			jQuery('#setCheckState').get(0).disabled = true;
-		}
-		rate = jQuery('#rate').val();
-		Sonos_callAction(device, Sonos.SONOS_SID, 'SetCheckStateRate', { 'rate':rate } );
-	}
-
-	function Sonos_callAction(device, sid, actname, args) {
-		var q={
-			'id':'lu_action',
-			'output_format':'xml',
-			'DeviceNum':device,
-			'serviceId':sid,
-			'action':actname
-		};
-		var key;
-		for (key in args) {
-			q[key] = args[key];
-		}
-		if (Sonos.browserIE) {
-			q.timestamp = new Date().getTime(); //we need this to avoid IE caching of the AJAX get
-		}
-		new Ajax.Request (data_request_url+'/data_request', {
-			method: 'get',
-			parameters: q,
-			onSuccess: function (response) {
-			},
-			onFailure: function (response) {
-			},
-			onComplete: function (response) {
-			}
-		});
-	}
-
-	function SonosSystem_callAction(device, actname, args) {
-		var devobj = jsonp.ud.devices[device];
-		if (devobj.device_type == "urn:schemas-micasaverde-com:device:Sonos:1") {
-			device = device.id_parent;
-		}
-		return Sonos_callAction(device, "urn:toggledbits-com:serviceId:SonosSystem1", actname, args);
-	}
-
 /** ***************************************************************************
  *
  * C L O S I N G
@@ -697,10 +488,7 @@ var SonosSystem = (function(api, $) {
 
 	myModule = {
 		uuid: uuid,
-		//onBeforeCpanelClose: onBeforeCpanelClose,
-		//onUIDeviceStatusChanged: onUIDeviceStatusChanged,
-		doSettings: function() { try { doSettings(); } catch(e) { console.log(e); } },
-		doGroups: doGroups
+		doSettings: function() { try { doSettings(); } catch(e) { console.log(e); } }
 	};
 	return myModule;
 })(api, $ || jQuery);
