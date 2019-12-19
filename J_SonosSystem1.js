@@ -49,7 +49,7 @@ var SonosSystem = (function(api, $) {
 					[ "MARY", "Mary" ],
 					[ "RV", "ResponsiveVoice" ]
 	];
-	
+
 	var isOpenLuup = false;
 
 	var Sonos = {
@@ -112,7 +112,7 @@ var SonosSystem = (function(api, $) {
 
 /** ***************************************************************************
  *
- *  S E T T I N G S 
+ *  S E T T I N G S
  *
  ** **************************************************************************/
 
