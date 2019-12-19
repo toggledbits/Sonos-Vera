@@ -622,7 +622,6 @@ end
 local function setData(name, value, zoneident, default)
 	local uuid = UUIDs[tonumber(zoneident) or -999] or zoneident
 	if uuid then
-if uuid == "RINCON_48A6B813879001400" and name == "OutputFixed" and value ~= "0" then L{msg="stop",level=0} end -- ??? FIXME
 		-- The shadow table stores the value whether there's a device for the zone or not
 		dataTable[uuid] = dataTable[uuid] or {}
 		local curValue = dataTable[uuid][name]
@@ -633,7 +632,7 @@ if uuid == "RINCON_48A6B813879001400" and name == "OutputFixed" and value ~= "0"
 			if device ~= 0 and variableSidTable[name] then
 				setVar( variableSidTable[name], name, value == nil and "" or tostring(value), device )
 			else
-				D("No serviceId defined for %1; state variable value not saved", name);
+				D("No serviceId defined for %1; state variable value not saved", name)
 			end
 			return true -- flag something changed
 		end
@@ -1866,10 +1865,7 @@ local function updateGroupMembers(gc, members)
 	for uuid in prevMembers:gmatch("RINCON_%x+") do
 		if not targetMap[uuid] then
 			if controlAnotherZone(uuid, gc) then
-				local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
-				if AVTransport then
-					AVTransport.BecomeCoordinatorOfStandaloneGroup({InstanceID="0"})
-				end
+				leaveGroup(uuid)
 			end
 		end
 	end
@@ -1999,6 +1995,7 @@ local function setupTTSSettings(device)
 	local chimefile, chimedur = unpack( split( chd, "," ) )
 	if chimefile ~= "" and file_exists( installPath .. chimefile ) then
 		if TTSBasePath ~= installPath then
+			os.remove( TTSBasePath .. chimefile )
 			file_symlink( installPath .. chimefile, TTSBasePath .. chimefile )
 		end
 		TTSChime = { URI=TTSBaseURL..chimefile }
@@ -2561,21 +2558,23 @@ local function zoneRunOnce( dev )
 	local s = getVarNumeric( "ConfigVersion", 0, dev, SONOS_SYS_SID ) -- yes, SYS
 	if s == 0 then
 		-- New zone device
-		initVar( "SonosID", "", dev, SONOS_ZONE_SID )
+		initVar( "SonosID", "", dev, UPNP_DEVICE_PROPERTIES_SID )
 		initVar( "SonosOnline", "0", dev, SONOS_ZONE_SID )
 		initVar( "PollDelays", "15,60", dev, SONOS_ZONE_SID )
 	end
-	setVar( SONOS_SYS_SID, "ConfigVersion", 0 --[[ _CONFIGVERSION --]], dev )
+	setVar( SONOS_SYS_SID, "ConfigVersion", _CONFIGVERSION, dev )
 end
 
 local function systemRunOnce( pdev )
 	local s = getVarNumeric( "ConfigVersion", 0, pdev, SONOS_SYS_SID )
 	if s == 0 then
 		-- First run
+		initVar( "Message", "", pdev, SONOS_SYS_SID )
+		initVar( "Enabled", 1, pdev, SONOS_SYS_SID )
 		initVar( "DebugLogs", 0, pdev, SONOS_SYS_SID )
 	end
 
-	setVar( SONOS_SYS_SID, "ConfigVersion", 0 --[[ _CONFIGVERSION --]], pdev )
+	setVar( SONOS_SYS_SID, "ConfigVersion", _CONFIGVERSION, pdev )
 end
 
 local function startZone( zoneDevice )
@@ -2620,7 +2619,7 @@ local function deferredStartup(device)
 				W("Adopting standalone (old) Sonos device by new parent %1", device)
 				luup.attr_set( "impl_file", "", k )
 				luup.attr_set( "id_parent", device, k )
-				luup.attr_set( "altid", getVar( "SonosID", tostring(k), k, SONOS_ZONE_SID ), k )
+				luup.attr_set( "altid", getVar( "SonosID", tostring(k), k, UPNP_DEVICE_PROPERTIES_SID ), k )
 				luup.set_failure( 1, k )
 				reload = true
 			elseif v.device_num_parent == device then
@@ -2641,8 +2640,10 @@ local function deferredStartup(device)
 	local ipath = getInstallPath()
 	if file_exists( ipath .. "I_Sonos1.xml.lzo" ) or file_exists( ipath .. "I_Sonos1.xml.lzo" ) then
 		W("Removing old Sonos plugin implementations files (for standalone devices, no longer used)")
-		os.execute("rm -f -- " .. ipath .. "I_Sonos1.xml.lzo " .. ipath .. "I_Sonos1.xml")
-		os.execute("rm -f -- " .. ipath .. "L_Sonos1.lua.lzo " .. ipath .. "L_Sonos1.lua")
+		os.remove(ipath.."I_Sonos1.xml.lzo")
+		os.remove(ipath.."I_Sonos1.xml")
+		os.remove(ipath.."L_Sonos1.lua.lzo")
+		os.remove(ipath.."L_Sonos1.lua")
 	end
 	-- And reload if devices were upgraded.
 	if reload then
@@ -2680,7 +2681,7 @@ local function deferredStartup(device)
 				D("deferredStartup() appending new zone %1 ip %2", uuid, ip)
 				local cv = {
 					string.format( ",ip=%s", ip ),
-					string.format( "%s,SonosID=%s", SONOS_ZONE_SID, uuid )
+					string.format( "%s,SonosID=%s", UPNP_DEVICE_PROPERTIES_SID, uuid )
 				}
 				local name = zoneInfo.zones[uuid].ZoneName or uuid:gsub("RINCON_", "")
 				luup.chdev.append( device, ptr, uuid, name, "", "D_Sonos1.xml", "",
@@ -2909,8 +2910,8 @@ local function sayOrAlert(device, parameters, saveAndRestore)
 		local affected = clone( targets )
 		D("sayOrAlert() affected is %1", affected)
 
-		-- Now, find any targets that happen to be coordinators of groups. All members are affected
-		-- by removing/changing the coordinator when the temporary alert group is created.
+		-- Now, find any targets that happen to be coordinators of groups. All members are also
+		-- affected by removing/changing the coordinator when the temporary alert group is created.
 		for uuid in pairs( targets ) do
 			local gr = getZoneGroup( uuid ) or {}
 			D("sayOrAlert() zone group for target %1 is %2", uuid, gr)
@@ -2972,7 +2973,7 @@ local function endTTSPlayback(device)
 		D("endTTSPlayback() finished %1", settings.URI)
 		if settings.TempFile then
 			-- Remove temp file
-			os.execute(string.format("rm -f -- %s", Q(settings.TempFile)))
+			os.remove( settings.TempFile )
 		end
 		table.remove(sayQueue[device], 1)
 		D("endTTSPlayback() queue contains %1 more", #sayQueue[device])
@@ -3372,7 +3373,7 @@ function actionSonosStartDiscovery( lul_device, lul_settings ) -- luacheck: igno
 				D("actionSonosStartDiscovery() appending new zone %1 ip %2:%3", zone.udn, zone.ip, zone.port or 1400)
 				local cv = {}
 				table.insert( cv, string.format( ",ip=%s", zone.ip ) )
-				table.insert( cv, string.format( "%s,SonosID=%s", SONOS_ZONE_SID, zone.udn ) )
+				table.insert( cv, string.format( "%s,SonosID=%s", UPNP_DEVICE_PROPERTIES_SID, zone.udn ) )
 				table.insert( cv, string.format( "%s,Port=%s", SONOS_ZONE_SID, zone.port or 1400 ) )
 				local name = zone.udn:upper():gsub("RINCON_","")
 				luup.chdev.append( lul_device, ptr, zone.udn, name, "", "D_Sonos1.xml", "",
