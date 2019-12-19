@@ -107,8 +107,12 @@ var Sonos = (function(api, $) {
 		html += '<td id="album"></td>';
 		html += '</tr>';
 		html += '<tr>';
-		html += '<td id="titleLabel">Track title:</td>';
+		html += '<td id="titleLabel">Track Title:</td>';
 		html += '<td id="title"></td>';
+		html += '</tr>';
+		html += '<tr>';
+		html += '<td id="uriLabel">Track URI:</td>';
+		html += '<td id="uri" class="monospace"></td>';
 		html += '</tr>';
 		html += '<tr>';
 		html += '<td id="detailsLabel"></td>';
@@ -217,7 +221,7 @@ var Sonos = (function(api, $) {
 		html += '<option value="SR">Sirius radio</option>';
 		html += '<option value="GZ">Group zone</option>';
 		html += '</select>';
-		html += '<input id="uri" type="text" class="form-control form-control-sm"/>';
+		html += '<input id="playuri" type="text" class="form-control form-control-sm"/>';
 		html += '<button id="playUri" type="button" class="btn btn-sm sonosbtn">Play</button>';
 		html += '</td>';
 		html += '</tr>';
@@ -225,7 +229,7 @@ var Sonos = (function(api, $) {
 		html += '</DIV>';
 
 		//html += '<p id="debug">';
-		
+
 		api.setCpanelContent(html);
 
 		$("button#prevTrack").on( "click.sonos", function( ev ) { Sonos_prevTrack(device); } );
@@ -334,7 +338,7 @@ var Sonos = (function(api, $) {
 		html += '<td>x-rincon-queue:' + uuid + '#0 *</td>';
 		html += '<td>Q:3</td>';
 		html += '</tr>';
-		
+
 		var zoneUUID, zoneName, channelMapSet, isZoneBridge;
 
 		if ( ! isEmpty( members ) ) {
@@ -343,7 +347,7 @@ var Sonos = (function(api, $) {
 				zoneName = Sonos_extractXmlAttribute(members[i], 'ZoneName');
 				channelMapSet = Sonos_extractXmlAttribute(members[i], 'ChannelMapSet');
 				isZoneBridge = Sonos_extractXmlAttribute(members[i], 'IsZoneBridge');
-				if (zoneName != zone && channelMapSet === undefined && isZoneBridge != "1") {
+				if (zoneName != zone && channelMapSet === null && isZoneBridge != "1") {
 					html += '<tr>';
 					html += '<td>Group with master zone "' + zoneName + '"</td>';
 					html += '<td>x-rincon:' + zoneUUID + '</td>';
@@ -365,7 +369,7 @@ var Sonos = (function(api, $) {
 				zoneName = Sonos_extractXmlAttribute(members[i], 'ZoneName');
 				channelMapSet = Sonos_extractXmlAttribute(members[i], 'ChannelMapSet');
 				isZoneBridge = Sonos_extractXmlAttribute(members[i], 'IsZoneBridge');
-				if (channelMapSet == undefined && isZoneBridge != "1") {
+				if (channelMapSet === null && isZoneBridge != "1") {
 					html += '<tr>';
 					html += '<td>Audio input of zone "' + zoneName + '"</td>';
 					html += '<td>x-rincon-stream:' + zoneUUID + '</td>';
@@ -388,7 +392,7 @@ var Sonos = (function(api, $) {
 		html += '</tr>';
 
 		var line, pos, title, value;
-		
+
 		var favRadios = api.getDeviceState(device, CONTENT_DIRECTORY_SID, "FavoritesRadios", 1) || "";
 		if ( ! isEmpty( favRadios ) ) {
 			pos = favRadios.indexOf('\n', 0);
@@ -499,7 +503,7 @@ var Sonos = (function(api, $) {
 					var invisible = Sonos_extractXmlAttribute(member, 'Invisible');
 					var channelMapSet = Sonos_extractXmlAttribute(member, 'ChannelMapSet');
 					var isZoneBridge = Sonos_extractXmlAttribute(member, 'IsZoneBridge');
-					if (isZoneBridge != "1" && (channelMapSet == undefined || invisible == '1')) {
+					if (isZoneBridge != "1" && (channelMapSet == null || invisible == '1')) {
 						html += '<label>';
 						html += '<input id="' + uuid +'" class="zonemem" type="checkbox"';
 						if (groupMembers.search(uuid) >= 0) {
@@ -519,6 +523,10 @@ var Sonos = (function(api, $) {
 		jQuery('#groupSelection').html( html );
 		jQuery('input.zonemem').on( 'change.sonos', function() { Sonos_updateGroupSelection(); } );
 		Sonos_updateGroupSelection();
+	}
+
+	function Sonos_TTSZoneChange() {
+		$( 'input#GroupVolume' ).prop( 'disabled', $( 'input#NewGroup' ).is( ':checked' ) );
 	}
 
 	function doTTS(device)
@@ -574,7 +582,7 @@ var Sonos = (function(api, $) {
 		html += '<tr>';
 		html += '<td>Text:</td>';
 		html += '<td>';
-		html += '<textarea id="text" cols="54" rows="3"></textarea>';
+		html += '<textarea id="text" cols="54" rows="3" class="form-control"></textarea>';
 		html += '</td>';
 		html += '</tr>';
 
@@ -591,7 +599,7 @@ var Sonos = (function(api, $) {
 			html += ' value="' + languages[i][0] + '">' + languages[i][1] + '</option>';
 		}
 		html += '</select>';
-		html += '<input id="language" type="text" value="" class="form-control form-control-sm" style="margin-left: 5px; width: 50px"/>';
+		html += '<input id="language" type="text" value="" class="form-control form-control-sm">';
 		html += '</td>';
 		html += '</tr>';
 
@@ -613,24 +621,25 @@ var Sonos = (function(api, $) {
 
 		html += '<tr>';
 		html += '<td>Zones:</td>';
-		html += '<td>';
-		html += '<input id="NewGroup" type="radio" name="GroupTTS" checked value="NewGroup"/>Current zone';
-		html += '<input id="CurrentGroup" type="radio" name="GroupTTS" style="margin-left: 10px" value="CurrentGroup"/>Current group';
-		html += '<input id="GroupAll" type="radio" name="GroupTTS" style="margin-left: 10px" value="GroupAll"/>All zones';
+		html += '<td class="form-inline">';
+		html += '<label class="radio inline"><input id="NewGroup" type="radio" class="ttszone" name="GroupTTS" checked value="NewGroup"/>&nbsp;Current zone</label>';
+		html += ' <label class="radio inline"><input id="CurrentGroup" type="radio" class="ttszone" name="GroupTTS" value="CurrentGroup"/>&nbsp;Current group</label>';
+		html += ' <label class="radio inline"><input id="GroupAll" type="radio" class="ttszone" name="GroupTTS" value="GroupAll"/>&nbsp;All zones</label>';
 		html += '</td>';
 		html += '</tr>';
 
 		html += '<tr>';
 		html += '<td>Volume:</td>';
-		html += '<td>';
-		html += '<select id="volumeTTS" style="margin-right: 10px">';
-		html += '<option selected value=""></option>';
+		html += '<td class="form-inline">';
+		html += '<select id="volumeTTS" class="form-control form-control-sm">';
+		html += '<option selected value="">(zone current)</option>';
 		for (i=minVolume; i<=maxVolume; i++) {
 			html += '<option value="' + i + '">' + i + '</option>';
 		}
 		html += '</select>';
-		html += 'Apply volume to all zones';
-		html += '<input id="GroupVolume" type="checkbox" style="margin-left: 10px" value="GroupVolume"/>';
+		html += ' <label class="checkbox inline">';
+		html += '<input id="GroupVolume" type="checkbox" value="GroupVolume"/>';
+		html += '&nbsp;Apply volume to all zones</label>';
 		html += '</td>';
 		html += '</tr>';
 
@@ -653,8 +662,10 @@ var Sonos = (function(api, $) {
 			jQuery( 'input#language' ).val( jQuery( this ).val() );
 		});
 		jQuery( 'input#language' ).val( "" );
+		jQuery( 'input.ttszone' ).on( 'change.sonos', Sonos_TTSZoneChange );
 
 		Sonos_refreshTTS(device);
+		Sonos_TTSZoneChange();
 	}
 
 	function Sonos_detectBrowser()
@@ -682,12 +693,14 @@ var Sonos = (function(api, $) {
 			onButtonBgColor = '#025CB6';
 			tableTitleBgColor = '#025CB6';
 		}
-		
+
 		if ( $("style#sonos").length > 0 ) return;
-		
+
 		$( '<style id="sonos"> \
 button.sonosbtn { background-color: ' + buttonBgColor + '; color: white; } \
 button.sonosbtn.sonoson { background-color: ' + onButtonBgColor + '; } \
+input#language { width: 6em; } \
+.monospace { font-family: monospace; font-size: 0.9em; } \
 </style>' ).appendTo( $('head') );
 	}
 
@@ -717,7 +730,7 @@ button.sonosbtn.sonoson { background-color: ' + onButtonBgColor + '; } \
 
 	function Sonos_extractXmlAttribute(node, attribute)
 	{
-		return node.getAttribute(attribute);
+		return node.getAttribute(attribute) || null;
 	}
 
 	function Sonos_escapeHtmlSpecialChars(unsafe)
@@ -744,7 +757,7 @@ button.sonosbtn.sonoson { background-color: ' + onButtonBgColor + '; } \
 					var name = Sonos_extractXmlAttribute(members[i], 'ZoneName');
 					var channelMapSet = Sonos_extractXmlAttribute(members[i], 'ChannelMapSet');
 					var isZoneBridge = Sonos_extractXmlAttribute(members[i], 'IsZoneBridge');
-					if (typeof name !== 'undefined' && channelMapSet === undefined && isZoneBridge != "1") {
+					if ( name !== null && channelMapSet === null && isZoneBridge != "1" ) {
 						var title = name;
 						if (title.length > 60) {
 							title = title.substr(0, 60) + '...';
@@ -1067,6 +1080,15 @@ button.sonosbtn.sonoson { background-color: ' + onButtonBgColor + '; } \
 				jQuery('#clearQueue').prop( 'disabled', true );
 			}
 
+			var trackuri = api.getDeviceState(device, AVTRANSPORT_SID, "CurrentTrackURI", 1) || "";
+			if ( !isEmpty(trackuri) ) {
+				$( '#uriLabel' ).text('Track URI:');
+				$( '#uri' ).text( trackuri );
+			} else {
+				$( '#uriLabel' ).text('&nbsp;');
+				$( '#uri' ).val( "" );
+			}
+
 			prevCoordinator = coordinator;
 			prevOnlineState = onlineState;
 			prevCurrentAlbumArtUrl = currentAlbumArtUrl;
@@ -1196,7 +1218,7 @@ button.sonosbtn.sonoson { background-color: ' + onButtonBgColor + '; } \
 
 	function Sonos_playUri(device)
 	{
-		var uri = jQuery('#uri').val();
+		var uri = jQuery('#playuri').val();
 		var protocol = jQuery('#protocol').val();
 		if (protocol != "") {
 			uri = protocol+':'+uri;
@@ -1222,7 +1244,7 @@ button.sonosbtn.sonoson { background-color: ' + onButtonBgColor + '; } \
 			zones = 'ALL';
 		}
 		var sameVolume = 'false';
-		if (jQuery('#GroupVolume').is(':checked')) {
+		if ( ! jQuery('#GroupVolume').prop('disabled') && jQuery('#GroupVolume').is(':checked') ) {
 			sameVolume = 'true';
 		}
 		//jQuery('#debug').html('_' + text + '_ ' + language + ' ' + engine + ' ' + volume + ' ' + zones + ' ' + sameVolume);
