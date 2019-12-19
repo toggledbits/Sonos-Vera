@@ -19,7 +19,7 @@ Please see CHANGELOG.md for release notes.
 
 ## Installation -- Legacy Sonos Plugin Users
 
-![RTFM](https://www.toggledbits.com/assets/rtfm.png "Caution: Read Instructions First!")
+![Caution: Read Instructions First](https://www.toggledbits.com/assets/rtfm.png)
 
 Please read the installation instructions through completely to get an idea of what you're going to be doing before you start doing it.
 
@@ -42,17 +42,16 @@ Sonos v2.0 is now a parent-child plugin. When upgrading to 2.0 from 1.x, your ex
   * **NOTE:** if you are upgrading to 2.0 from a prior version, DO NOT SKIP THIS STEP.
 6. Go to *Apps > Develop apps > Test Luup code (Lua)* and enter/run: `luup.reload()` 
 7. After Luup finishes reloading, [hard-refresh your browser](https://www.getfilecloud.com/blog/2015/03/tech-tip-how-to-do-hard-refresh-in-browsers/). This is a vital step that cannot be skipped!
-8. You can then go into the "Settings" tab of the Sonos device and use discovery to find your first Sonos media player. 
-9. Repeat steps 5-8 for each additional zone player.
 
-**NOTE:** The correct icon for your new player may not show up in the UI immediately. A [hard-refresh of your browser](https://www.getfilecloud.com/blog/2015/03/tech-tip-how-to-do-hard-refresh-in-browsers/) may be required to get it to display. 
-If your new players don't show the right icon after a few minutes, reload Luup and do a hard refresh.
+Your existing (from version 1.x) Sonos zone devices will be made child devices of the new plugin master device. The device numbers will not change, so your existing scenes, Lua, Reactor, PLEG, etc. should continue to work. Child devices will also be created for any other zone players found.
+
+**NOTE:** The correct icon for your new player may not show up in the UI immediately. A [hard-refresh of your browser](https://www.getfilecloud.com/blog/2015/03/tech-tip-how-to-do-hard-refresh-in-browsers/) may be required to get it to display. If your new players don't show the right icon after a few minutes, reload Luup and do a hard refresh. If it hasn't settled down after about five minutes, do another Luup reload and another hard-refresh of your browser.
 
 ### Installation using AltAppStore
 
 Once published to the AltAppStore, you'll be able to install this plugin on Vera or openLuup from the AltAppStore in the usual way. Working on it...
 
-openLuup users, please note that additional configuration is required to use TTS. Please see "Special TTS Configuration for openLuup" below.
+**openLuup Users:** Please note that additional configuration is required to use TTS. Please see "Special TTS Configuration for openLuup" below.
 
 ## Installation - New Installs
 
@@ -75,23 +74,21 @@ This section is only for users who do not have the legacy (version 1.x) Sonos pl
   * **NOTE:** if you are upgrading to 2.0 from a prior version, DO NOT SKIP THIS STEP.
 6. Go to *Apps > Develop apps > Test Luup code (Lua)* and enter/run: `luup.reload()` 
 7. After Luup finishes reloading, [hard-refresh your browser](https://www.getfilecloud.com/blog/2015/03/tech-tip-how-to-do-hard-refresh-in-browsers/). This is a vital step that cannot be skipped!
-8. You can then go into the "Settings" tab of the Sonos device and use discovery to find your first Sonos media player. 
-9. Repeat steps 5-8 for each additional zone player.
+8. You can then go into the "Settings" tab of the Sonos device and use discovery to find your zone players.
 
-**NOTE:** The correct icon for your new player may not show up in the UI immediately. A [hard-refresh of your browser](https://www.getfilecloud.com/blog/2015/03/tech-tip-how-to-do-hard-refresh-in-browsers/) may be required to get it to display. 
-If your new players don't show the right icon after a few minutes, reload Luup and do a hard refresh.
+**NOTE:** The correct icon for your new player may not show up in the UI immediately. A [hard-refresh of your browser](https://www.getfilecloud.com/blog/2015/03/tech-tip-how-to-do-hard-refresh-in-browsers/) may be required to get it to display. If your new players don't show the right icon after a few minutes, reload Luup and do a hard refresh. If it hasn't settled down after about five minutes, do another Luup reload and another hard-refresh of your browser.
 
 ### Installation using AltAppStore (new installs)
 
 Once published to the AltAppStore, you'll be able to install this plugin on Vera or openLuup from the AltAppStore in the usual way. Working on it...
 
-openLuup users, please note that additional configuration is required to use TTS. Please see "Special TTS Configuration for openLuup" below.
+**openLuup Users:** Please note that additional configuration is required to use TTS. Please see "Special TTS Configuration for openLuup" below.
 
 ## State Variables
 
 ### urn:micasaverde-com:serviceId:SonosSystem1
 
-* DebugLogs - "1" when the debug logs are enabled or "0" when disabled
+* DebugLogs - 0 - logs disabled; non-zero, logging bits: 1 - plugin, 2 - UPnP, 4 - TTS (e.g. setting to 5 turns on debug logging for the plugin and TTS)
 * DefaultLanguageTTS - default language for TTS, for example "en" or "en-US"
 * DefaultEngineTTS - default engine for TTS, either "GOOGLE" or "MICROSOFT" or "OSX_TTS_SERVER" or "MARY"
 * DiscoveryPatchInstalled - "1" when the !UPnP discovery patch is installed or "0" when not installed
@@ -216,7 +213,7 @@ luup.call_action("urn:micasaverde-com:serviceId:Sonos1", "Say",
 
 This action will pause the current playback, say the text, and then the playback will be resumed.
 
-Language is either a string of 2 characters, like en, fr ... or a string of 5 characters like en-US, en-GB, fr-FR, fr-CA, ...
+Language is either a string of 2 characters, like en, fr ... or a string of 5 characters like en-US, en-GB, fr-FR, fr-CA, ... You will need to determine which works for the TTS engine you are using. Generally speaking, the most common TTS engine, ResponsiveVoice, requires the two-part language codes (e.g. en-US).
 
 To play a message in the bedroom setting the volume for the message at level 60:
 
@@ -361,6 +358,10 @@ The first two steps detach your existing Sonos devices from the plugin, so that 
 ## User Support
 
 Support for this project is offered through the Vera Community Forums [Sonos category](https://community.getvera.com/c/plugins-and-plugin-development/sonos-plugin). Please post your questions/problems/suggestions there.
+
+## Donations
+
+Donations in support of this and other projects are greatly appreciated: https://www.toggledbits.com/donate
 
 ## License
 
