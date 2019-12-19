@@ -244,7 +244,22 @@ Notes:
 * It is possible to use the parameter named GroupDevices in place of GroupZones. In this case, you must have a device in the Vera for all the Sonos zones you want to address. The value is a CSV list of device ids. For example, if your living-room and kitchen Sonos are linked respectively to devices 667 and 668 in your Vera, you will use GroupDevices="667,668". The GroupDevices has been kept for compatibility reasons with old versions but the use of GroupZones is now recommended.
 * Parameters not specified will default internally. (Language=en, Engine=GOOGLE, GroupDevices="", GroupZones="", Volume=nil, SameVolumeForAll=false)
 
-### Making a Sonos play an alert message
+### TTS Caching
+
+Version 1.5 introduced TTS caching--the first time a phrase is spoken, its audio is saved; when that phrase is spoken again, the saved audio file is used rather hitting the TTS Engine again to generate a new audio file. This makes TTS quicker and more reliable (e.g. when using ResponsiveVoice, a phrase that is spoken once no longer requires Internet access to be spoken again).
+
+This has some side-effects. Among them:
+1. Any changes in pronunciation as a result of upgrades to the TTS Engine will not be picked up, because the Engine is not being hit for the repeated phrase.
+1. The matching of phrases is cached by engine, language, and text. If any of these changes, however trivially (e.g. addition of punctuation to speech text), the speech audio is regenerated.
+1. Since only engine, language, and text are used as keys in the cache, other changes affecting TTS, such as rate and pitch, do not invalidate cache entries and cause regeneration of the audio. Thus a `Say` action with the phrase "Hello there" spoken first at rate 1.0 and then at rate 0.5 will both play the rate 1.0 audio.
+
+The TTS cache is flushed any time the TTS default settings are saved. If you need to flush the cache, go the Sonos plugin device's Settings tab and hit the "Save Changes" button. Flushing the cache discards all previously-generated audio.
+
+### Changing the TTS Chime
+
+Version 2.0 introduced a chime prior to TTS announcements, with a default sound. The chime can be disabled on individual `Say` actions by including the `Chime` parameter in the action arguments, set to zero (0). The chime can be changed by setting the `TTSChime` state variable on the Sonos plugin device to a two-part, comma-separated value: the name of the chime WAV file, and its duration in seconds (e.g. the default is "Sonos_chime.wav,3"). Setting `TTSChime` to simply "," disables the chime for all `Say` actions. The chime file is located in the same directory as the plugin install/runtime files (e.g. `/etc/cmh-ludl` for Vera). If you wish to change the chime sound, the correct procedure is to upload a new WAV file that is *not* named `Sonos_chime.wav` (this is a plugin file that should not be modified), and modify the `TTSChime` variable to specify that name and the file's play duration.
+
+### Making a Sonos play an alert sound
 This functionality is exposed declaratively through the Alert action under Advanced Scenes. The functionality is also exposed programmatically via Lua code:
 
 ```
