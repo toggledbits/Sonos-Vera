@@ -10,16 +10,55 @@ The project is currently led by Vera Community user [rigpapa](https://community.
 If you would like to volunteer to be a part of the community support of this project, please drop him
 a PM, as more community volunteers are needed for development and testing.
 
-**PLEASE SEE [CHANGELOG.md](https://github.com/toggledbits/Sonos-Vera/blob/master/CHANGELOG.md) FOR RELEASE NOTES**
-
-## Installation
-
-Currently, this project is distributed exclusively through its [Github repository](https://github.com/toggledbits/Sonos-Vera/) and the AltAppStore.
+This project is distributed exclusively through its [Github repository](https://github.com/toggledbits/Sonos-Vera/) and the AltAppStore.
 Release in the Vera plugin marketplace is planned for later.
 
 **IMPORTANT** Currently, it is *highly* recommended that the "UPnP Event Proxy" plugin be installed on Vera when running this plugin. The event proxy makes it possible for the Sonos plugin to be proactively notified of state changes on the media player(s). If not used, the Sonos plugin will, by default, poll the player frequently, resulting in additional load on your Vera and additional network traffic (when most of time nothing of value is happening/changing). See the "Other Configuration" section below for additional information on controlling polling rate.
 
-### Manual Installation on Vera
+Please see CHANGELOG.md for release notes.
+
+## Installation -- Legacy Sonos Plugin Users
+
+![RTFM](https://www.toggledbits.com/assets/rtfm.png "Caution: Read Instructions First!")
+
+Please read the installation instructions through completely to get an idea of what you're going to be doing before you start doing it.
+
+**This section is only for users that have the current (version 1.x) Sonos plugin installed. If you have never used the Sonos 1.x plugin, proceed to *Installation -- New Installs*.**
+
+Sonos v2.0 is now a parent-child plugin. When upgrading to 2.0 from 1.x, your existing Sonos devices will be converted to child devices of a new device.
+
+### Manual Installation on Vera (upgrade from 1.x)
+
+1. Go to [the Github repository for the project](https://github.com/toggledbits/Sonos-Vera).
+2. Click the green "Clone or download" button and choose "Download ZIP". Save the ZIP file somewhere.
+3. Unzip the ZIP file.
+4. Select the files (except the `.md` files and the `services` and `icons` directories and their contents--these are no longer required) as a group and drag them to the upload tool at *Apps > Develop apps > Luup files*. This will upload all the files as a single batch and then restart Luup.
+5. After the Luup restart, go to *Apps > Develop apps > Create device*, enter and submit:
+  * Description: `Sonos` (or whatever you choose)
+  * Device UPnP Filename: `D_SonosSystem1.xml` (exactly as shown)
+  * Device UPnP Filename: `I_SonosSystem1.xml` (exactly as shown)
+    > WARNING: You must enter the filenames exactly as shown above. Any error may cause your system to not restart and require intervention from Vera Support.
+  * Hit the "Create device" button.
+  * **NOTE:** if you are upgrading to 2.0 from a prior version, DO NOT SKIP THIS STEP.
+6. Go to *Apps > Develop apps > Test Luup code (Lua)* and enter/run: `luup.reload()` 
+7. After Luup finishes reloading, [hard-refresh your browser](https://www.getfilecloud.com/blog/2015/03/tech-tip-how-to-do-hard-refresh-in-browsers/). This is a vital step that cannot be skipped!
+8. You can then go into the "Settings" tab of the Sonos device and use discovery to find your first Sonos media player. 
+9. Repeat steps 5-8 for each additional zone player.
+
+**NOTE:** The correct icon for your new player may not show up in the UI immediately. A [hard-refresh of your browser](https://www.getfilecloud.com/blog/2015/03/tech-tip-how-to-do-hard-refresh-in-browsers/) may be required to get it to display. 
+If your new players don't show the right icon after a few minutes, reload Luup and do a hard refresh.
+
+### Installation using AltAppStore
+
+Once published to the AltAppStore, you'll be able to install this plugin on Vera or openLuup from the AltAppStore in the usual way. Working on it...
+
+openLuup users, please note that additional configuration is required to use TTS. Please see "Special TTS Configuration for openLuup" below.
+
+## Installation - New Installs
+
+This section is only for users who do not have the legacy (version 1.x) Sonos plugin installed, or have uninstalled the plugin (any version).
+
+### Manual Installation on Vera (new installs)
 
 **If you have the Sonos plugin version 1.4 or earlier installed from the Vera App/Plugin Marketplace (with or without additional patches), you must uninstall the plugin first. See "Uninstalling the Last Released Version" below.** If you're not sure, go there for instructions on how to check.
 
@@ -42,7 +81,7 @@ Release in the Vera plugin marketplace is planned for later.
 **NOTE:** The correct icon for your new player may not show up in the UI immediately. A [hard-refresh of your browser](https://www.getfilecloud.com/blog/2015/03/tech-tip-how-to-do-hard-refresh-in-browsers/) may be required to get it to display. 
 If your new players don't show the right icon after a few minutes, reload Luup and do a hard refresh.
 
-### Installation using AltAppStore
+### Installation using AltAppStore (new installs)
 
 Once published to the AltAppStore, you'll be able to install this plugin on Vera or openLuup from the AltAppStore in the usual way. Working on it...
 
