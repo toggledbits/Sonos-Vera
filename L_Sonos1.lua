@@ -2336,11 +2336,35 @@ function startup( lul_device )
 	end
 
 	-- Check for version 2.0 installed. If we're running here and we see 2.0 installed, it means this
-	-- device is about to be upgraded as a 2.0 child. Don't do this startup.
-	if file_exists( getInstallPath() .. "L_SonosSystem1.lua.lzo" ) or
-		file_exists( getInstallPath() .. "L_SonosSystem1.lua" ) then
+	-- device is about to be upgraded as a 2.0 child. Don't do this startup. The 2.0 system device will
+	-- adopt this device (as child) and remove its 1.x implementation.
+	if file_exists( getInstallPath() .. "D_SonosSystem1.xml.lzo" ) or
+		file_exists( getInstallPath() .. "D_SonosSystem1.xml" ) then
+		-- Find the 2.0 SonosSystem device and lowest numbered 1.x zone
+		local minzone = lul_device
+		local sysdev = false
+		for k,v in pairs( luup.devices ) do
+			if v.device_type == "urn:schemas-micasaverde-com:device:SonosSystem:1" then
+				sysdev = k -- found system device
+				break
+			elseif v.device_type == "urn:schemas-micasaverde-com:device:Sonos:1" and v.device_num_parent == 0 then
+				if k < minzone then minzone = k end
+			end
+		end
+		-- If 2.0 system device does not exist, and this is the lowest numbered 1.x device, create
+		-- the 2.0 system device and reload. For sanity, only one attempt is made at this.
+		log(string.format("Lowest numbered Sonos 1.x device is %s; SonosSystem device is %s",
+			tostring(minzone), tostring(sysdev)))
+		if not sysdev and lul_device == minzone and getVarNumeric( "UpgradeAttempted", 0, lul_device, SONOS_SID ) == 0 then
+			setVar( SONOS_SID, "UpgradeAttempted", os.time(), lul_device )
+			log("Upgrade prep 2.0, didn't find SonosSystem device, creating and reloading...")
+			luup.call_action( "urn:micasaverde-com:serviceId:HomeAutomationGateway1", "CreateDevice", 
+				{ UpnpDevFilename="D_SonosSystem1.xml", UpnpImplFilename="I_SonosSystem1.xml",
+				  Description="Sonos Plugin", Reload="1" }, 0 )
+			luup.call_delay( 'SonosReload', 30, "" ) -- insurance
+		end
 		log(string.format("Not starting Sonos device #%d in 1.x mode, detected plugin 2.0 installed", lul_device))
-		setData("CurrentStatus", "Pending 2.0 upgrade...", device, false)
+		setData("CurrentStatus", "Pending 2.0 upgrade...", lul_device, false)
 		return true
 	end
 
