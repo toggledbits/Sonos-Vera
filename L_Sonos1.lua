@@ -2335,6 +2335,15 @@ function startup( lul_device )
 		if tts and math.floor( debugLogs / 4 ) % 2 == 1 then tts.DEBUG_MODE = true end
 	end
 
+	-- Check for version 2.0 installed. If we're running here and we see 2.0 installed, it means this
+	-- device is about to be upgraded as a 2.0 child. Don't do this startup.
+	if file_exists( getInstallPath() .. "L_SonosSystem1.lua.lzo" ) or
+		file_exists( getInstallPath() .. "L_SonosSystem1.lua" ) then
+		log(string.format("Not starting Sonos device #%d in 1.x mode, detected plugin 2.0 installed", lul_device))
+		setData("CurrentStatus", "Pending 2.0 upgrade...", device, false)
+		return true
+	end
+
 	if not isOpenLuup and luup.short_version then
 		-- Real Vera 7.30+
 		os.execute("mkdir -p /www/sonos/")
