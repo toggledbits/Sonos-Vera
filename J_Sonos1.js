@@ -71,6 +71,17 @@ var Sonos = (function(api, $) {
 			( "string" === typeof( s ) && null !== s.match( /^\s*$/ ) );
 	}
 
+	function findZone( uuid ) {
+		var ll = api.getListOfDevices();
+		for (var ix=0; ix<ll.length; ix++) {
+			if ( ll[ix].device_type === "urn:schemas-micasaverde-com:device:Sonos:1" &&
+				ll[ix].altid === uuid ) {
+				return ll[ix];
+			}
+		}
+		return false;
+	}
+
 	function doPlayer(device)
 	{
 		if ( timeoutVar ) {
@@ -123,19 +134,19 @@ var Sonos = (function(api, $) {
 		html += '<table>';
 		html += '<tr>';
 		html += '<td>';
-		html += '<button id="prevTrack" type="button" class="btn btn-sm sonosbtn">Prev</button>';
+		html += '<button id="prevTrack" type="button" class="btn btn-sm sonosbtn sonosplay">Prev</button>';
 		html += '</td>';
 		html += '<td>';
-		html += '<button id="play" type="button" class="btn btn-sm sonosbtn">Play</button>';
+		html += '<button id="play" type="button" class="btn btn-sm sonosbtn sonosplay">Play</button>';
 		html += '</td>';
 		html += '<td>';
-		html += '<button id="pause" type="button" class="btn btn-sm sonosbtn">Pause</button>';
+		html += '<button id="pause" type="button" class="btn btn-sm sonosbtn sonosplay">Pause</button>';
 		html += '</td>';
 		html += '<td>';
-		html += '<button id="stop" type="button" class="btn btn-sm sonosbtn">Stop</button>';
+		html += '<button id="stop" type="button" class="btn btn-sm sonosbtn sonosplay">Stop</button>';
 		html += '</td>';
 		html += '<td>';
-		html += '<button id="nextTrack" type="button" class="btn btn-sm sonosbtn">Next</button>';
+		html += '<button id="nextTrack" type="button" class="btn btn-sm sonosbtn sonosplay">Next</button>';
 		html += '</td>';
 		html += '<td>Volume:</td>';
 		html += '<td id="volume"></td>';
@@ -167,36 +178,36 @@ var Sonos = (function(api, $) {
 		html += '<td>Audio Input:</td>';
 		html += '<td class="form-inline">';
 		html += '<select id="audioInputs" class="form-control form-control-sm"/>';
-		html += '<button id="playAudioInput" type="button" class="btn btn-sm sonosbtn">Play</button>';
+		html += '<button id="playAudioInput" type="button" class="btn btn-sm sonosbtn sonosplay">Play</button>';
 		html += '</td>';
 		html += '</tr>';
 		html += '<tr>';
 		html += '<td>Sonos playlist:</td>';
 		html += '<td class="form-inline">';
 		html += '<select id="savedQueues" class="form-control form-control-sm"/>';
-		html += '<button id="playSQ" type="button" class="btn btn-sm sonosbtn">Play</button>';
+		html += '<button id="playSQ" type="button" class="btn btn-sm sonosbtn sonosplay">Play</button>';
 		html += '</td>';
 		html += '</tr>';
 		html += '<tr>';
 		html += '<td>Queue:</td>';
 		html += '<td class="form-inline">';
 		html += '<select id="queue" class="form-control form-control-sm"/>';
-		html += '<button id="playQueue" type="button" class="btn btn-sm sonosbtn">Play</button>';
-		html += '<button id="clearQueue" type="button" class="btn btn-sm sonosbtn">Clear</button>';
+		html += '<button id="playQueue" type="button" class="btn btn-sm sonosbtn sonosplay">Play</button>';
+		html += '<button id="clearQueue" type="button" class="btn btn-sm sonosbtn sonosplay">Clear</button>';
 		html += '</td>';
 		html += '</tr>';
 		html += '<tr>';
 		html += '<td>Favorite radios:</td>';
 		html += '<td class="form-inline">';
 		html += '<select id="favRadios" class="form-control form-control-sm"/>';
-		html += '<button id="playFavRadio" type="button" class="btn btn-sm sonosbtn">Play</button>';
+		html += '<button id="playFavRadio" type="button" class="btn btn-sm sonosbtn sonosplay">Play</button>';
 		html += '</td>';
 		html += '</tr>';
 		html += '<tr>';
 		html += '<td>Sonos favorites:</td>';
 		html += '<td class="form-inline">';
 		html += '<select id="favorites" class="form-control form-control-sm"/>';
-		html += '<button id="playFavorite" type="button" class="btn btn-sm sonosbtn">Play</button>';
+		html += '<button id="playFavorite" type="button" class="btn btn-sm sonosbtn sonosplay">Play</button>';
 		html += '</td>';
 		html += '</tr>';
 		html += '<tr>';
@@ -222,7 +233,7 @@ var Sonos = (function(api, $) {
 		html += '<option value="GZ">Group zone</option>';
 		html += '</select>';
 		html += '<input id="playuri" type="text" class="form-control form-control-sm"/>';
-		html += '<button id="playUri" type="button" class="btn btn-sm sonosbtn">Play</button>';
+		html += '<button id="playUri" type="button" class="btn btn-sm sonosbtn sonosplay">Play</button>';
 		html += '</td>';
 		html += '</tr>';
 		html += '</table>';
@@ -752,7 +763,7 @@ input#language { width: 6em; } \
 		if ( ! isEmpty(groups) && prevGroups != groups) {
 			var xmlgroups = parseXml(groups);
 			if (typeof xmlgroups !== 'undefined') {
-				var html = "";
+				html = "";
 				var members = xmlgroups.getElementsByTagName("ZoneGroupMember");
 				for (var i=0; i<members.length; i++) {
 					var name = Sonos_extractXmlAttribute(members[i], 'ZoneName');
@@ -956,24 +967,23 @@ input#language { width: 6em; } \
 			jQuery('#detailsLabel').html(label);
 			jQuery('#details').html(details);
 
+			$('button.sonosbtn').prop('disabled', onlineState != '1');
+
 			if (onlineState != '1' || coordinator != uuid || transportUri == '') {
 				if (onlineState != '1') {
 					jQuery('#trackLabel').html('Offline');
-				}
-				else if (coordinator != uuid) {
-					jQuery('#trackLabel').html('Group driven by another zone');
-				}
-				else {
+				} else if (coordinator != uuid) {
+					var cz = findZone( coordinator || "" );
+					jQuery('#trackLabel').text("Group driven by " +
+						( (cz||{}).name ? cz.name : "another zone") );
+				} else {
 					jQuery('#trackLabel').html('No music');
 				}
 				jQuery('#track').html('');
 				jQuery('#service').html('');
 				jQuery('#radio').html('');
-				$('button.sonosbtn')
-					.prop('disabled', onlineState != '1' || transportUri == '')
-					.removeClass("sonoson");
-			}
-			else {
+				$('button.sonosplay').prop('disabled', true).removeClass("sonoson");
+			} else {
 				if (nbrTracks == '' || nbrTracks == '0') {
 					jQuery('#trackLabel').html('');
 					jQuery('#track').html('');
@@ -1044,50 +1054,18 @@ input#language { width: 6em; } \
 				}
 				jQuery('#service').html(currentService);
 				jQuery('#radio').html(currentRadio);
-			}
 
-			$('button#mute').toggleClass( 'sonoson', mute == '1' );
+				$('button#mute').toggleClass( 'sonoson', mute == '1' );
+				$('#volume').text( volume );
 
-			if (onlineState == '1') {
-				jQuery('#mute').prop( 'disabled', false );
-				jQuery('#volumeDown').prop( 'disabled', false );
-				jQuery('#volumeUp').prop( 'disabled', false );
-				jQuery('#volumeSet').prop( 'disabled', false );
-				jQuery('#playUri').prop( 'disabled', false );
-				jQuery('#playAudioInput').prop( 'disabled', false );
-				jQuery('#playSQ').prop( 'disabled', false );
-				jQuery('#playFavRadio').prop( 'disabled', false );
-				jQuery('#playFavorite').prop( 'disabled', false );
-				if (coordinator != uuid) {
-					jQuery('#playQueue').prop( 'disabled', true );
-					jQuery('#clearQueue').prop( 'disabled', true );
+				var trackuri = api.getDeviceState(device, AVTRANSPORT_SID, "CurrentTrackURI", 1) || "";
+				if ( !isEmpty(trackuri) ) {
+					$( '#uriLabel' ).text('Track URI:');
+					$( '#uri' ).text( trackuri );
+				} else {
+					$( '#uriLabel' ).text('&nbsp;');
+					$( '#uri' ).val( "" );
 				}
-				else {
-					jQuery('#playQueue').prop( 'disabled', false );
-					jQuery('#clearQueue').prop( 'disabled', false );
-				}
-			}
-			else {
-				jQuery('#mute').prop( 'disabled', true );
-				jQuery('#volumeDown').prop( 'disabled', true );
-				jQuery('#volumeUp').prop( 'disabled', true );
-				jQuery('#volumeSet').prop( 'disabled', true );
-				jQuery('#playUri').prop( 'disabled', true );
-				jQuery('#playAudioInput').prop( 'disabled', true );
-				jQuery('#playSQ').prop( 'disabled', true );
-				jQuery('#playFavRadio').prop( 'disabled', true );
-				jQuery('#playFavorite').prop( 'disabled', true );
-				jQuery('#playQueue').prop( 'disabled', true );
-				jQuery('#clearQueue').prop( 'disabled', true );
-			}
-
-			var trackuri = api.getDeviceState(device, AVTRANSPORT_SID, "CurrentTrackURI", 1) || "";
-			if ( !isEmpty(trackuri) ) {
-				$( '#uriLabel' ).text('Track URI:');
-				$( '#uri' ).text( trackuri );
-			} else {
-				$( '#uriLabel' ).text('&nbsp;');
-				$( '#uri' ).val( "" );
 			}
 
 			prevCoordinator = coordinator;
