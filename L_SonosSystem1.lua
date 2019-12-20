@@ -3161,6 +3161,7 @@ function actionSonosSay( lul_device, lul_settings )
 end
 
 function actionSonosSetupTTS( lul_device, lul_settings )
+	D("actionSonosSetupTTS(%1,%2)", lul_device, lul_settings )
 	assert(luup.devices[lul_device].device_type == SONOS_SYS_DEVICE_TYPE)
 	luup.variable_set(SONOS_SYS_SID, "DefaultLanguageTTS"				, lul_settings.DefaultLanguage or "", lul_device)
 	luup.variable_set(SONOS_SYS_SID, "DefaultEngineTTS"					, lul_settings.DefaultEngine or "", lul_device)
