@@ -1703,15 +1703,17 @@ local function setupTTSSettings(device)
 
 	TTSChime = nil
 	local installPath = getInstallPath()
-	if file_exists( installPath .. "Sonos_chime.wav" ) then
+	if file_exists( installPath .. "Sonos_chime.mp3" ) then
 		if TTSBasePath ~= installPath then
-			os.execute( "ln -sf " .. installPath .. "Sonos_chime.wav " .. TTSBasePath )
+			os.execute( "ln -sf " .. installPath .. "Sonos_chime.mp3 " .. TTSBasePath )
 		end
-		TTSChime = { URI=TTSBaseURL.."Sonos_chime.wav" }
-		TTSChime.URIMetadata = TTS_METADATA:format( "TTS Chime", "http-get:*:audio/wav:*", TTSChime.URI )
+		TTSChime = { URI=TTSBaseURL.."Sonos_chime.mp3" }
+		TTSChime.URIMetadata = TTS_METADATA:format( "TTS Chime", "http-get:*:audio/mpeg:*", TTSChime.URI )
 		TTSChime.Duration = getVarNumeric( "TTSChimeDuration", 3, device, SONOS_SID )
 		TTSChime.TempFile = nil -- flag no delete in endPlayback
 	end
+	os.remove( installPath .. "Sonos_chime.wav" )
+	os.remove( TTSBasePath .. "Sonos_chime.wav" )
 end
 
 function updateWithoutProxy(device)
