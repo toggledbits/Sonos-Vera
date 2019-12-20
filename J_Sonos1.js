@@ -122,10 +122,6 @@ var Sonos = (function(api, $) {
 		html += '<td id="title"></td>';
 		html += '</tr>';
 		html += '<tr>';
-		html += '<td id="uriLabel">Track URI:</td>';
-		html += '<td id="uri" class="monospace"></td>';
-		html += '</tr>';
-		html += '<tr>';
 		html += '<td id="detailsLabel"></td>';
 		html += '<td id="details"></td>';
 		html += '</tr>';
@@ -712,7 +708,6 @@ var Sonos = (function(api, $) {
 button.sonosbtn { background-color: ' + buttonBgColor + '; color: white; } \
 button.sonosbtn.sonoson { background-color: ' + onButtonBgColor + '; } \
 input#language { width: 6em; } \
-.monospace { font-family: monospace; font-size: 0.9em; } \
 </style>' ).appendTo( $('head') );
 	}
 
@@ -1057,15 +1052,6 @@ input#language { width: 6em; } \
 
 				$('button#mute').toggleClass( 'sonoson', mute == '1' );
 				$('#volume').text( volume );
-
-				var trackuri = api.getDeviceState(device, AVTRANSPORT_SID, "CurrentTrackURI", 1) || "";
-				if ( !isEmpty(trackuri) ) {
-					$( '#uriLabel' ).text('Track URI:');
-					$( '#uri' ).text( trackuri );
-				} else {
-					$( '#uriLabel' ).text('&nbsp;');
-					$( '#uri' ).val( "" );
-				}
 			}
 
 			prevCoordinator = coordinator;
