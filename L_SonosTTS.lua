@@ -6,21 +6,25 @@
 
 module("L_SonosTTS", package.seeall)
 
-VERSION = 19287
+VERSION = 19346
 DEBUG_MODE = false
+DEFAULT_LANGUAGE = "en-US"
+DEFAULT_ENGINE = "RV"
 
-local url = require("socket.url")
+local urllib = require("socket.url")
 local socket = require("socket")
 local http = require("socket.http")
 local https = require "ssl.https"
 local ltn12 = require("ltn12")
 
+local base = _G
+
 local log = print
 local warning = log
 local error = log	--luacheck: ignore 231
 
-local defaultLanguage
-local defaultEngine
+local defaultLanguage = DEFAULT_LANGUAGE
+local defaultEngine = DEFAULT_ENGINE
 local MicrosoftClientId
 local MicrosoftClientSecret
 local accessToken
@@ -62,7 +66,11 @@ function TTSEngine:new(o)
 	o = o or {}   -- create object if user does not provide one
 	setmetatable(o, self)
 	self.__index = self
+	self.optionMeta = {}
 	return o
+end
+function TTSEngine:getOptionMeta()
+	return self.optionMeta
 end
 
 -- say: retrieve audio file for text
@@ -78,9 +86,9 @@ function HTTPGetTTSEngine:new(o)
 end
 function HTTPGetTTSEngine:say(text, language, destFile, engineOptions)
 	debug("say_http_get: engine " .. self.title .. " destFile " .. destFile .. " language " .. language .. " text " .. text)
-	local param = { lang=language, destFile=destFile, text=text }
+	local param = { lang=language, file=destFile, text=text }
 
-	local txlist = cut_text( text:gsub("%s+", " "), self.maxTextLength or 0 )
+	local txlist = cut_text( text:gsub("%s+", " "), engineOptions.maxchunk or 0 )
 	if #txlist == 0 or (#txlist == 1 and txlist[1]:match("^%s*$")) then return nil, "Empty text" end -- empty text
 	local fw, size = 0
 	if #txlist > 1 then
@@ -93,14 +101,15 @@ function HTTPGetTTSEngine:say(text, language, destFile, engineOptions)
 		if #txlist > 1 then
 			-- For cut text, set up this chunk
 			param.text = chunk
-			param.destFile = destFile .. ".part"
+			param.file = destFile .. ".part"
 		end
+		os.remove(param.file)
 		local cmd = self.shellCmd:gsub("%%%{([^%}]+)%}", function( p )
 				local n,d = string.match(p, "^([^|]+)|?(.*)$")
 				local m,f = string.match(n or "", "^([^:]+):(.*)$")
 				if m then n = m else f = "u" end
-				local s = param[n] or engineOptions[n] or self[n] or d or ""
-				return f == "u" and url.escape(tostring(s)) or tostring(s)
+				local s = param[n] or engineOptions[n] or self.optionMeta[n].default or d or ""
+				return f == "u" and urllib.escape(tostring(s)) or tostring(s)
 			end)
 		debug("say_http_get: requesting " .. tostring(cmd))
 		local returnCode = os.execute(cmd)
@@ -117,11 +126,12 @@ function HTTPGetTTSEngine:say(text, language, destFile, engineOptions)
 				fh:close()
 			end
 		else
-			warning(tostring(engine.title).." fetch command failed ("..tostring(returnCode).."); "..tostring(cmd))
-			os.execute("rm -f -- " .. Q(destFile) .. " " .. Q(destFile .. ".part"))
+			warning(tostring(self.title).." fetch command failed ("..tostring(returnCode).."); "..tostring(cmd))
+			os.remove(destFile)
+			os.remove(destFile .. ".part")
 			return nil, "Failed to retrieve audio file from remote API"
 		end
-		os.execute("rm -f -- " .. Q(destFile .. ".part"))
+		os.remove(destFile .. ".part")
 	end
 	if #txlist == 1 then
 		-- Single chunk, open output file for size
@@ -146,15 +156,21 @@ ResponsiveVoiceTTSEngine = HTTPGetTTSEngine:new{
 	fileType="mp3",
 	bitrate=32,
 	protocol="http-get:*:audio/mpeg:*",
-	serverURL="https://code.responsivevoice.org",
-	shellCmd=[[ rm -- '%{destFile:s}' ; curl -s -k -o '%{destFile:s}' \
+	shellCmd=[[curl -s -k -o '%{file:s}' \
 --connect-timeout %{timeout:s|15} \
 --header "Accept-Charset: utf-8;q=0.7,*;q=0.3" \
 --header "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" \
---header "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_8_2) AppleWebKit/537.11 (KHTML, like Gecko) Chrome/23.0.1271.64 Safari/537.11" \
-'%{serverURL:s}/getvoice.php?t=%{text}&tl=%{lang|en_US}&sv=&vn=&pitch=%{pitch|0.5}&rate=%{rate|0.5}']],
-	timeout=15,
-	maxTextLength=100}
+--header "User-Agent: %{useragent:s}" \
+'%{url:s}/getvoice.php?t=%{text}&tl=%{lang|en_US}&sv=&vn=&pitch=%{pitch|0.5}&rate=%{rate|0.5}']],
+	optionMeta={
+		url={ index=1, title="Server URL", default="https://code.responsivevoice.org" },
+		timeout={ title="Timeout (secs)", default=15 },
+		maxchunk={ title="Max Text Chunk", default=100 },
+		rate={ index=2, title="Rate (0-1)", default=0.5 },
+		pitch={ index=3, title="Pitch (0-2)", default=0.5 },
+		useragent={ title="User-Agent Header", default=[[Mozilla/5.0 (Macintosh; Intel Mac OS X 10_8_2) AppleWebKit/537.11 (KHTML, like Gecko) Chrome/23.0.1271.64 Safari/537.11]] }
+	}
+}
 function ResponsiveVoiceTTSEngine:say( text, language, destFile, engineOptions )
 	if not string.match( language, "^%w+%-%w+$" ) then
 		warning("(tts) ResponsiveVoice typically requires two-part IETF language tags (e.g. 'en-US', 'de-DE', etc.). You provided '" .. tostring(language) .. "', which may not work.")
@@ -169,30 +185,35 @@ MaryTTSEngine = HTTPGetTTSEngine:new{
 	fileType="wav",
 	bitrate=768, -- ??? was 256, but my Mary seems to produce higher rate; configurable?
 	protocol="http-get:*:audio/wav:*",
-	serverURL="http://127.0.0.1:59125",
-	shellCmd=[[ rm -- '%{destFile:s}' ; curl -s -k -o '%{destFile:s}' \
---connect-timeout %{timeout|15} \
+	shellCmd=[[curl -s -k -o '%{file:s}' \
+--connect-timeout %{timeout:s|15} \
 --header "Accept-Charset: utf-8;q=0.7,*;q=0.3" \
 --header "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" \
---header "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_8_2) AppleWebKit/537.11 (KHTML, like Gecko) Chrome/23.0.1271.64 Safari/537.11" \
-"%{serverURL:s}/process?INPUT_TYPE=TEXT&AUDIO=WAVE_FILE&OUTPUT_TYPE=AUDIO&LOCALE=%{lang|en_US}&INPUT_TEXT=%{text}"]],
-	timeout=15,
-	maxTextLength=0}
+"%{url:s}/process?INPUT_TYPE=TEXT&AUDIO=WAVE_FILE&OUTPUT_TYPE=AUDIO&LOCALE=%{lang|en_US}&INPUT_TEXT=%{text}"]],
+	optionMeta={
+		url={ index=1, title="Server URL", default="http://127.0.0.1:59125" },
+		timeout={ title="Timeout (secs)", default=15 },
+		maxchunk={ title="Max Text Chunk", default=100 }
+	}
+}
 
 GoogleTTSEngine = HTTPGetTTSEngine:new{
 	title="Google TTS",
 	fileType="mp3",
 	bitrate=32,
 	protocol="http-get:*:audio/mpeg:*",
-	serverURL="https://translate.google.com",
-	shellCmd=[[rm -- '%{destFile:s}' ; wget --output-document '%{destFile:s}' \
---quiet \
+	shellCmd=[[wget --quiet --timeout=%{timeout:s|15} --output-document '%{file:s}' \
 --header "Accept-Charset: utf-8;q=0.7,*;q=0.3" \
 --header "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" \
---user-agent "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_8_2) AppleWebKit/537.11 (KHTML, like Gecko) Chrome/23.0.1271.64 Safari/537.11" \
-"%{serverURL:s}/translate_tts?tl=%{lang|en}&q=%{text}&client=Vera"]],
-	timeout=15,
-	maxTextLength=100}
+--user-agent "%{useragent:s}" \
+"%{url:s}/translate_tts?tl=%{lang|en}&q=%{text}&client=Vera"]],
+	optionMeta={
+		url={ index=1, title="Server URL", default="http://127.0.0.1:59125" },
+		timeout={ title="Timeout (secs)", default=15 },
+		maxchunk={ title="Max Text Chunk", default=100 },
+		useragent={ title="User-Agent Header", default=[[Mozilla/5.0 (Macintosh; Intel Mac OS X 10_8_2) AppleWebKit/537.11 (KHTML, like Gecko) Chrome/23.0.1271.64 Safari/537.11]] }
+	}
+}
 
 OSXTTSEngine = HTTPGetTTSEngine:new{
 	title="OSX TTS Server",
@@ -200,14 +221,118 @@ OSXTTSEngine = HTTPGetTTSEngine:new{
 	bitrate=64,
 	protocol="http-get:*:audio/mpeg:*",
 	serverURL="http://127.0.0.1",
-	shellCmd=[[rm -- '%{destFile:s}' ; wget --output-document '%{destFile:s}' \
---quiet \
+	shellCmd=[[wget --quiet --timeout=%{timeout:s|15} --output-document '%{destFile:s}' \
 --header "Accept-Charset: utf-8;q=0.7,*;q=0.3" \
 --header "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" \
---user-agent "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_8_2) AppleWebKit/537.11 (KHTML, like Gecko) Chrome/23.0.1271.64 Safari/537.11" \
-"%{serverURL:s}/tts?text=%{text}"]],
-	timeout=15,
-	maxTextLength=0}
+--user-agent "%{useragent:s}" \
+"%{url:s}/tts?text=%{text}"]],
+	optionMeta={
+		url={ index=1, title="Server URL", default="http://127.0.0.1" },
+		timeout={ title="Timeout (secs)", default=15 },
+		maxchunk={ title="Max Text Chunk", default=100 },
+		useragent={ title="User-Agent Header", default=[[Mozilla/5.0 (Macintosh; Intel Mac OS X 10_8_2) AppleWebKit/537.11 (KHTML, like Gecko) Chrome/23.0.1271.64 Safari/537.11]] }
+	}
+}
+
+-- Microsoft Azure TTS Engine
+-- https://docs.microsoft.com/en-us/azure/cognitive-services/speech-service/rest-text-to-speech
+AzureTTSEngine = TTSEngine:new()
+function AzureTTSEngine:new(o)
+	o = o or TTSEngine:new(o)
+	setmetatable(o, self)
+	self.__index = self
+	self.title = "Azure Speech Service"
+	self.lastToken = 0
+	self.maxTokenLife = 570
+	self.token = ""
+	self.format = "audio-16khz-64kbitrate-mono-mp3"
+	self.filetype = "mp3"
+	self.bitrate = 64
+	self.protocol = "http-get:*:audio/mpeg:*"
+	self.optionMeta = {
+		subkey={ index=1, title="Subscription Key", required=true, infourl="https://docs.microsoft.com/en-us/azure/cognitive-services/cognitive-services-apis-create-account?tabs=multiservice%2Cwindows" },
+		region={ index=2, title="Region", default="eastus", values={"australiaeast","canadacentral","centralus","eastasia","eastus","eastus2","francecentral","centralindia","japaneast","koreacentral","northcentralus","northeurope","southcentralus","southeastasia","uksouth","westeurope","westus","westus2"}, unrestricted=true },
+		voice={ index=3, title="Voice", default="en-US-JessaRUS", values={"en-US-GuyNeural","en-US-JessaNeural","de-DE-KatjaNeural","en-US-JessaRUS","de-DE-HeddaRUS","en-GB-HazelRUS","es-ES-HelenaRUS","fr-FR-HortenseRUS","ro-RO-Andrei","pt-BR-HeloisaRUS","nb-NO-HuldaRUS","sv-SE-HedvigRUS","zh-CN-HuihuiRUS"}, unrestricted=true, infourl="https://docs.microsoft.com/en-us/azure/cognitive-services/speech-service/language-support#text-to-speech" },
+		timeout={ title="Timeout (secs)", default="15" }
+	}
+	return o
+end
+function AzureTTSEngine:say(text, language, destFile, engineOptions)
+	assert( engineOptions.subkey, "Subscription key is required" )
+	
+	local tries = 0
+	while tries < 2 do
+		tries = tries + 1
+		if os.time() - self.lastToken >= self.maxTokenLife then
+			debug("AzureTTSEngine:say() token is expired, fetching new")
+			local url = string.format("https://%s.api.cognitive.microsoft.com/sts/v1.0/issueToken",
+				engineOptions.region or self.optionMeta.region.default)
+			local cmd = string.format([[curl -s -o - -X POST %q -H "Content-length: 0" \
+-H "Content-type: application/x-www-form-urlencoded" -H "Ocp-Apim-Subscription-Key: %s"]],
+				url, engineOptions.subkey or "undefined")
+			local fp = io.popen( cmd )
+			local s = fp:read("*a") or ""
+			fp:close()
+			if s:match("error") then
+				warning("AzureTTSEngine:say() failed to fetch token: "..s)
+				local json = require "dkjson"
+				local data,pos,err = json.decode( s )
+				if not data then 
+					error("Invalid response JSON")
+				elseif data.error and data.error.code ~= 200 then
+					error(string.format("Can't get token, error %s response, %s", tostring(data.error.code),
+						tostring(data.error.message)))
+				end
+				error("Unparseable token response")
+			end
+			self.token = s
+			self.lastToken = os.time()
+		end
+
+		local host = string.format("%s.tts.speech.microsoft.com", engineOptions.region or self.optionMeta.region.default )
+		local payload = string.format([[<speak version="1.0" xml:lang="%s"><voice name="%s">%s</voice></speak>]],
+			language or "en-us", engineOptions.voice or self.optionMeta.voice.default,
+			text:gsub("%s+"," "):gsub("^%s+",""):gsub("%s+$",""):gsub("%&","&amp;"):gsub("%>","&gt;"):gsub("%<","&lt;"))
+		debug(string.format("AzureTTSEngine:say() host %q payload %s", host, payload))
+		os.remove( destFile )
+		local fp,ferr = io.open(destFile, "wb")
+		if not fp then error("Unable to open "..tostring(destFile)..": "..tostring(ferr)) end
+		http.TIMEOUT = engineOptions.timeout or self.optionMeta.timeout.default or 15
+		local status, statusMsg = https.request{
+			url = "https://" .. host .. "/cognitiveservices/v1",
+				sink = ltn12.sink.file(fp, ferr),
+				method = "POST",
+				headers = {
+					["X-Microsoft-OutputFormat"] = self.format,
+					["Host"] = host,
+					["Content-Type"] = "application/ssml+xml",
+					["Content-Length"] = #payload,
+					["Authorization"] = "Bearer " .. tostring(self.token)
+				},
+				source = ltn12.source.string(payload)
+			}
+		if statusMsg == 200 then
+			if io.type(fp) == "file" then fp:close() end
+			fp = io.open( destFile, "rb" )
+			local size = fp:seek("end")
+			fp:close()
+			if size > 0 then
+				-- Convert bitrate in Kbps to Bps, and from that compute clip duration (aggressive rounding up)
+				return math.ceil( size / ( self.bitrate * 125 ) ) + 1, nil, size
+			end
+			return nil, "received zero-length file"
+		elseif statusMsg == 401 then
+			-- Authorization error; assume token has expired. Arm to re-request.
+			debug("AzureTTSEngine:say() auth fail, arming for retry")
+			self.lastToken = 0
+		else
+			warning("AzureTTSEngine:say() conversion request failed, "..tostring(statusMsg))
+			return nil, "request failed "..tostring(statusMsg)
+		end
+	end
+	warning("AzureTTSEngine:say() authorization failed with Azure service")
+	return nil, "authorization failed"
+end
 
 -- Legacy engines
 
@@ -217,8 +342,8 @@ local function getMicrosoftAccessToken(force)
 		accessToken = nil
 		local resultTable = {}
 		local postBody = string.format("grant_type=client_credentials&client_id=%s&client_secret=%s&scope=http://api.microsofttranslator.com",
-									   url.escape(MicrosoftClientId),
-									   url.escape(MicrosoftClientSecret))
+									   urllib.escape(MicrosoftClientId),
+									   urllib.escape(MicrosoftClientSecret))
 		local status, statusMsg = https.request{
 			url = "https://datamarket.accesscontrol.windows.net/v2/OAuth2-13",
 			sink = ltn12.sink.table(resultTable),
@@ -292,7 +417,7 @@ local function MicrosoftTTSwithToken(text, destFile, language, bitrate, token)
 --user-agent "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_8_2) AppleWebKit/537.11 (KHTML, like Gecko) Chrome/23.0.1271.64 Safari/537.11" \
 "http://api.microsofttranslator.com/V2/Http.svc/Speak?appId=&text=%s&language=%s&format=%s&options=%s"]]
 
-	local returnCode = os.execute(SAY_EXECUTE:format(destFile, destFile, token, url.escape(text), language, url.escape("audio/mp3"), url.escape(MicrosoftOption)))
+	local returnCode = os.execute(SAY_EXECUTE:format(destFile, destFile, token, urllib.escape(text), language, urllib.escape("audio/mp3"), urllib.escape(MicrosoftOption)))
 	local fh = io.open(destFile, "a+")
 	local size = fh:seek("end")
 	fh:close()
@@ -340,26 +465,6 @@ local function MicrosoftTTS(text, destFile, language, bitrate)
 	return duration
 end
 
-function setup(language, engine, googleUrl, osxUrl, maryUrl, rvURL, clientId, clientSecret, option)
-	defaultLanguage = language or "en"
-	defaultEngine = engine or "GOOGLE"
-	engines.GOOGLE.serverURL = googleUrl or "http://translate.google.com"
-	engines.MARY.serverURL = maryUrl or "http://127.0.0.1:3510"
-	engines.RV.serverURL = rvURL or "https://code.responsivevoice.org"
-	engines.OSX_TTS_SERVER.serverURL = osxUrl or "http://127.0.0.1"
-
-	-- Configure last remaining legacy engine. PHR 2019-10-03 Not sure if this engine still works
-	-- or can be made to work.
-	MicrosoftClientId = clientId
-	MicrosoftClientSecret = clientSecret
-	MicrosoftOption = option
-	if (MicrosoftOption ~= nil and MicrosoftOption:find("MaxQuality")) then
-		engines.MICROSOFT.bitrate = 128
-	else
-		engines.MICROSOFT.bitrate = 32
-	end
-end
-
 -- Register an engine. The ident is a unique key for the engine passed in settings.engine to alert().
 -- The engineInstance should be a fully-initialized, ready-to-use instance of a subclass of TTSEngine.
 function registerEngine( ident, engineInstance )
@@ -367,9 +472,23 @@ function registerEngine( ident, engineInstance )
 	engines[ident] = engineInstance
 end
 
+function getEngines()
+	return engines
+end
+
 function getEngine( ident )
 	ident = ident or defaultEngine
 	return (not (engines[ident] or {}).legacy) and engines[ident] or nil
+end
+
+function setDefaultEngine( ident )
+	ident = ident or DEFAULT_ENGINE
+	if not engines[ident] then base.error("Invalid/unregistered engine "..ident) end
+	defaultEngine = ident
+end
+
+function setDefaultLanguge( lang )
+	defaultLanguage = lang or DEFAULT_LANGUAGE
 end
 
 function initialize(logger, warningLogger, errorLogger)
@@ -378,28 +497,24 @@ function initialize(logger, warningLogger, errorLogger)
 	error = errorLogger
 
 	-- ??? FIXME Eventually, only register engines at first use.
-	registerEngine( "GOOGLE", GoogleTTSEngine )
-	registerEngine( "MARY", MaryTTSEngine )
-	registerEngine( "RV", ResponsiveVoiceTTSEngine )
-	registerEngine( "OSX_TTS_SERVER", OSXTTSEngine )
-
-	-- Legacy Engines
-	engines.MICROSOFT = { title = "Microsoft TTS", protocol = "http-get:*:audio/mpeg:*", fct = MicrosoftTTS, bitrate = 32, legacy=true }
-	accessToken = nil
-	accessTokenExpires = nil
+	registerEngine( "GOOGLE", GoogleTTSEngine:new() )
+	registerEngine( "MARY", MaryTTSEngine:new() )
+	registerEngine( "RV", ResponsiveVoiceTTSEngine:new() )
+	registerEngine( "OSX_TTS_SERVER", OSXTTSEngine:new() )
+	registerEngine( "AZURE", AzureTTSEngine:new() )
 
 	setup()
 end
 
 -- Convert text to speech audio in named file.
-function ConvertTTS(text, destFile, language, engineId, engineOptions)
+function generate(engine, text, destFile, language, engineOptions)
 	-- Convert text to speech using specified engine
 	language = language or defaultLanguage
-	engine = engines[engineId or defaultEngine]
+	engine = engine or engines[defaultEngine]
 	engineOptions = engineOptions or {}
-	debug("ConvertTTS engine "..tostring(engineId).." language "..tostring(language).." text "..tostring(text))
-	if not engine then
-		return nil, string.format("Engine not registered (%s)", tostring(engineId or defaultEngine))
+	debug("generate engine "..tostring(engine.title).." language "..tostring(language).." text "..tostring(text))
+	if not (engine and engine.say) then
+		return nil, "Invalid engine"
 	elseif engine.legacy then
 		return engine.fct(text, destFile, language, engine.bitrate)
 	else
@@ -410,4 +525,19 @@ function ConvertTTS(text, destFile, language, engineId, engineOptions)
 		end
 		return duration
 	end
+end
+
+--[[ ************************ LEGACY/DEPRECATED FUNCTIONS ********************** ]]
+
+function ConvertTTS(text, destFile, language, engineId, engineOptions)
+	return generate(engines[engineId or defaultEngine], text, destFile, language, engineOptions)
+end
+
+function setup(language, engine, googleUrl, osxUrl, maryUrl, rvURL, clientId, clientSecret, option)
+	defaultLanguage = language or DEFAULT_LANGUAGE
+	defaultEngine = engine or DEFAULT_ENGINE
+	engines.GOOGLE.optionMeta.url.default = googleUrl or "http://translate.google.com"
+	engines.MARY.optionMeta.url.default = maryUrl or "http://127.0.0.1:3510"
+	engines.RV.optionMeta.url.default = rvURL or "https://code.responsivevoice.org"
+	engines.OSX_TTS_SERVER.optionMeta.url.default = osxUrl or "http://127.0.0.1"
 end

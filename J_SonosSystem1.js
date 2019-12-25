@@ -15,7 +15,7 @@ var SonosSystem = (function(api, $) {
 	/* unique identifier for this plugin... */
 	var uuid = '79bf9374-f989-11e9-884c-dbb32f3fa64a'; /* SonosSystem 2019-12-11 19345 */
 
-	var pluginVersion = '2.0develop-19353';
+	var pluginVersion = '2.0develop-19359';
 
 	var _UIVERSION = 19301;     /* must coincide with Lua core */
 
@@ -42,13 +42,7 @@ var SonosSystem = (function(api, $) {
 						[ "es-es", "Spanish (Spanish)" ]
 	];
 
-	var TTSEngines = [
-					[ "GOOGLE", "Google" ],
-					[ "OSX_TTS_SERVER", 'OSX TTS server' ],
-					[ "MICROSOFT", "Microsoft" ],
-					[ "MARY", "Mary" ],
-					[ "RV", "ResponsiveVoice" ]
-	];
+	var TTSEngines = {};
 
 	var isOpenLuup = false;
 
@@ -109,6 +103,11 @@ var SonosSystem = (function(api, $) {
 	};
 
 	function TBD() { alert("TBD"); }
+
+	function isEmpty( s ) {
+		return undefined === s || null === s || "" === s ||
+			( "string" === typeof( s ) && null !== s.match( /^\s*$/ ) );
+	}
 
 /** ***************************************************************************
  *
@@ -191,12 +190,17 @@ var SonosSystem = (function(api, $) {
 		);
 	}
 
-	function makeSettingsRow( label, $container ) {
-		var $row = $('<div class="row"/>').appendTo( $container );
+	function makeSettingsRow( label, $container, $pred ) {
+		var $row = $('<div class="row"/>');
+		if ( $pred ) {
+			$row.insertAfter( $pred );
+		} else {
+			$row.appendTo( $container );
+		}
 		var $col = $( '<div class="col-xs-6 col-sm-6 col-md-4 text-right"><span class="rowlabel"/></div>' )
 			.appendTo( $row );
 		if ( "" !== ( label || "" ) ) {
-			$('span.rowlabel', $col).text( label );
+			$('span.rowlabel', $col).text( label || "" );
 		}
 		$col = $( '<div class="col-xs-6 col-sm-6 col-md-8"/>' )
 			.appendTo( $row );
@@ -238,6 +242,62 @@ var SonosSystem = (function(api, $) {
 				}
 			}
 		);
+	}
+
+	function changeTTSEngine() {
+		var $container = $( 'div#sonos-settings' );
+		var $el = $( 'select#tts-engine', $container );
+		var eid = $el.val() || "GOOGLE";
+		/* Clear all existing options */
+		$( '.engineopt', $container ).remove();
+		if ( TTSEngines[eid] ) {
+			var $last = $el.closest( 'div.row' );
+			var eng = TTSEngines[eid];
+			var elist = [];
+			for ( var opt in ( eng.options || {} ) ) {
+				if ( eng.options.hasOwnProperty( opt ) ) {
+					elist.push( eng.options[opt] );
+				}
+			}
+			elist.sort(function( a, b ) {
+				var ai = a.index || 32767;
+				var bi = b.index || 32767;
+				if ( ai === bi ) {
+					if ( a.title === b.title ) return 0;
+					return ( a.title || "" ) < ( b.title || "" ) ? -1 : 1;
+				}
+				return ai < bi ? -1 : 1;
+			});
+			for ( var k=0; k<elist.length; ++k ) {
+				var meta = elist[k];
+				var $col = makeSettingsRow( ( meta.title || opt ) + ":", $container, $last );
+				$col.addClass( "form-inline" );
+				var $row = $col.closest( 'div.row' );
+				$row.attr( 'id', 'eopt-' + opt ).addClass( "engineopt" );
+				if ( undefined !== meta.values ) {
+					var $mm = $( '<select class="form-control form-control-sm"/>' )
+						.attr( 'id', 'val-' + opt )
+						.appendTo( $col );
+					for ( var ix=0; ix<meta.values.length; ix++ ) {
+						$( '<option/>' ).val( meta.values[ix] ).text( meta.values[ix] )
+							.appendTo( $mm );
+					}
+					if ( undefined !== meta.default ) {
+						$mm.val( meta.default );
+					}
+				} else {
+					$( '<input type="text" class="form-control form-control-sm"/>' )
+						.attr( 'id', 'val-' + opt )
+						.val( undefined === meta.default ? "" : meta.default )
+						.appendTo( $col );
+				}
+				if ( undefined !== meta.infourl ) {
+					$( '<a/>' ).attr( 'href', meta.infourl ).attr( 'target', '_blank' )
+						.text( '[info]' ).appendTo( $col );
+				}
+				$last = $row;
+			}
+		}
 	}
 
 	function doSettings()
@@ -287,91 +347,43 @@ var SonosSystem = (function(api, $) {
 		$col = $( '<div class="col-xs-12 col-sm-12">Text-to-Speech (TTS)</div>' )
 			.appendTo( $row );
 
-		$col = makeSettingsRow( "Default Language:", $container );
-		var $el = $( '<select id="tts-lang" class="form-control" />' );
-		$el.appendTo( $col );
-		$( '<option/>' ).val( "" ).text("(system default: en)").appendTo( $el );
-		for ( k=0; k<TTSLanguages.length; ++k ) {
-			$('<option/>').val( TTSLanguages[k][0] )
-				.text( TTSLanguages[k][1] )
-				.appendTo( $el );
-		}
-		val = api.getDeviceState(device, Sonos.SONOS_SYS_SID, "DefaultLanguageTTS") || "";
-		if ( 0 === $('option[value=' + JSON.stringify(val) + ']', $el ).length ) {
-			$('<option/>').val( val ).text( String(val) + " ?" )
-				.prependTo( $el );
-		}
-		$el.val( val );
-
 		$col = makeSettingsRow( "Default Engine:", $container );
-		$el = $( '<select id="tts-engine" class="form-control" />' );
+		$col.attr( 'id', 'ttsenginerow' ).addClass( "form-inline" );
+		var $el = $( '<select id="tts-engine" class="form-control" />' );
 		$el.appendTo( $col );
-		$( '<option/>' ).val( "" ).text("(system default: GOOGLE)").appendTo( $el );
-		for ( k=0; k<TTSEngines.length; ++k ) {
-			$('<option/>').val( TTSEngines[k][0] )
-				.text( TTSEngines[k][1] )
-				.appendTo( $el );
-		}
-		val = api.getDeviceState(device, Sonos.SONOS_SYS_SID, "DefaultEngineTTS") || "";
-		if ( 0 === $('option[value=' + JSON.stringify(val) + ']', $el ).length ) {
-			$('<option/>').val( val ).text( String(val) + " ?" )
-				.prependTo( $el );
-		}
-		$el.val( val );
-
-		$col = makeSettingsRow( "Google TTS Server URL:", $container );
-		$el = $( '<input id="tts-google-url" class="form-control">' );
-		$el.appendTo( $col );
-		val = api.getDeviceState(device, Sonos.SONOS_SYS_SID, "GoogleTTSServerURL");
-		$el.val( val || "" );
-
-		$col = makeSettingsRow( "OSX TTS Server URL:", $container );
-		$el = $( '<input id="tts-osx-url" class="form-control">' );
-		$el.appendTo( $col );
-		val = api.getDeviceState(device, Sonos.SONOS_SYS_SID, "OSXTTSServerURL");
-		$el.val( val || "" );
-
-		$col = makeSettingsRow( "MaryTTS Server URL:", $container );
-		$el = $( '<input id="tts-mary-url" class="form-control">' );
-		$el.appendTo( $col );
-		val = api.getDeviceState(device, Sonos.SONOS_SYS_SID, "MaryTTSServerURL");
-		$el.val( val || "" );
-
-		$col = makeSettingsRow( "ResponsiveVoice Server URL:", $container );
-		$el = $( '<input id="tts-rv-url" class="form-control">' );
-		$el.appendTo( $col );
-		val = api.getDeviceState(device, Sonos.SONOS_SYS_SID, "ResponsiveVoiceTTSServerURL");
-		$el.val( val || "" );
-
-		$col = makeSettingsRow( "Microsoft TTS Client ID:", $container );
-		$el = $( '<input id="tts-msftid" class="form-control">' );
-		$el.appendTo( $col );
-		val = api.getDeviceState(device, Sonos.SONOS_SYS_SID, "MicrosoftClientId");
-		$el.val( val || "" );
-
-		$col = makeSettingsRow( "Microsoft TTS Client Secret:", $container );
-		$el = $( '<input id="tts-msftsecret" class="form-control">' );
-		$el.appendTo( $col );
-		val = api.getDeviceState(device, Sonos.SONOS_SYS_SID, "MicrosoftClientSecret");
-		$el.val( val || "" );
-
-		$col = makeSettingsRow( "Microsoft TTS Option:", $container );
-		$el = $( '<input id="tts-msftopt" class="form-control">' );
-		$el.appendTo( $col );
-		val = api.getDeviceState(device, Sonos.SONOS_SYS_SID, "MicrosoftOption");
-		$el.val( val || "" );
-
-		$col = makeSettingsRow( "Voice Rate (0-2):", $container );
-		$el = $( '<input id="tts-rate" class="form-control">' );
-		$el.appendTo( $col );
-		val = api.getDeviceState(device, Sonos.SONOS_SYS_SID, "TTSRate");
-		$el.val( val || "" );
-
-		$col = makeSettingsRow( "Voice Pitch (0-1):", $container );
-		$el = $( '<input id="tts-pitch" class="form-control">' );
-		$el.appendTo( $col );
-		val = api.getDeviceState(device, Sonos.SONOS_SYS_SID, "TTSPitch");
-		$el.val( val || "" );
+		$.ajax({
+			url: api.getDataRequestURL(),
+			data: {
+				id: "lr_SonosSystem",
+				action: "ttsengines"
+			},
+			dataType: "json",
+			timeout: 15000
+		}).done( function( data ) {
+			var $opt;
+			var $el = $( 'select#tts-engine' );
+			TTSEngines = data.engines;
+			for ( var eid in ( TTSEngines || {} ) ) {
+				if ( TTSEngines.hasOwnProperty( eid ) ) {
+					var eng = TTSEngines[eid];
+					$opt = $( '<option/>' ).val( eid ).text( eng.name || eid );
+					$el.append( $opt );
+				}
+			}
+			var val = api.getDeviceState(device, Sonos.SONOS_SYS_SID, "DefaultEngineTTS") || "";
+			if ( isEmpty(val) ) {
+				val = "GOOGLE";
+			}
+			$opt = $( 'option[value="' + val + '"]', $el );
+			if ( 0 === $opt.length ) {
+				$( '<option/>' ).val( val ).text( val + " (not available)" )
+					.appendTo( $el );
+			}
+			$el.val( val ).on( 'change.sonos', changeTTSEngine );
+			changeTTSEngine();
+		}).fail( function() {
+			$el.replaceWith( "<span>Failed to load TTS engines; Luup may be reloading. To retry, wait a moment, then go back to the Control tab, then come back here.</span>");
+		});
 
 		$row = $( '<div class="row"/>' );
 		$col = $( '<div class="col-xs-12 col-sm-12">Other Settings</div>' )

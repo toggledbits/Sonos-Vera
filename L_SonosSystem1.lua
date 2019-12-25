@@ -4655,3 +4655,72 @@ function actionPoll( lul_device, lul_settings ) -- luacheck: ignore 212
 	updateNow(lul_device)
 	return 4,0
 end
+
+--[[
+
+	Request handler (http://vera-ip/port_3480/data_request?id=lr_Sonos&...
+
+--]]
+
+-- A "safer" JSON encode for Lua structures that may contain recursive refereance.
+local stringify
+local function alt_json_encode( st, seen )
+	seen = seen or {}
+	str = "{"
+	local comma = false
+	for k,v in pairs(st) do
+		str = str .. ( comma and "," or "" )
+		comma = true
+		str = str .. '"' .. k .. '":'
+		if type(v) == "table" then
+			if seen[v] then str = str .. '"(recursion)"'
+			else
+				seen[v] = k
+				str = str .. alt_json_encode( v, seen )
+			end
+		elseif type(v) ~= "function" and type(v) ~= "userdata" then
+			str = str .. stringify( v, seen )
+		end
+	end
+	str = str .. "}"
+	return str
+end
+
+-- Stringify a primitive type
+stringify = function( v, seen )
+	if v == nil then
+		return "(nil)"
+	elseif type(v) == "number" or type(v) == "boolean" then
+		return tostring(v)
+	elseif type(v) == "table" then
+		return alt_json_encode( v, seen )
+	end
+	return string.format( "%q", tostring(v) )
+end
+
+function handleRequest( lul_request, lul_parameters, lul_outputformat )
+	D("request(%1,%2,%3) luup.device=%4", lul_request, lul_parameters, lul_outputformat, luup.device)
+	local action = lul_parameters['action'] or lul_parameters['command'] or ""
+	local deviceNum = tonumber( lul_parameters['device'] )
+	if action == "debug" then
+		DEBUG_MODE = tonumber(lul_parameters.debug) or 0
+		D("debug set %1 by request", DEBUG_MODE)
+		return "Debug is now " .. DEBUG_MODE, "text/plain"
+
+	elseif action == "ttsengines" then
+		local json = require "dkjson"
+		local resp = { status=true, engines={} }
+		local edata = tts.getEngines()
+		for k,e in pairs( edata ) do
+			resp.engines[k] = {
+				id=k,
+				name=e.title or k,
+				options=e:getOptionMeta()
+			}
+		end
+		return json.encode( resp ), "application/json"
+
+	else
+		return "ERROR\nInvalid request action", "text/plain"
+	end
+end

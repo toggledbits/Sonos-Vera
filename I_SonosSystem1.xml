@@ -13,6 +13,8 @@
 			end
 			-- Promote callbacks to global
 			sonosTick = L_SonosSystem1.sonosTick
+			sonosRequestHandler = L_SonosSystem1.handleRequest
+			luup.register_handler("sonosRequestHandler", "SonosSystem")
 			processProxySubscriptions = L_SonosSystem1.processProxySubscriptions
 			renewSubscriptions = L_SonosSystem1.renewSubscriptions
 			cancelProxySubscription = L_SonosSystem1.cancelProxySubscription

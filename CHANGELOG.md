@@ -6,8 +6,9 @@
 * Discovery is now run automatically at startup if there are no Sonos devices configured. All Sonos zones found will be created automatically. Combined with the new parent-child structure, this makes initial setup of the system almost completely automated.
 * On Luup startup, the zone group configuration is used to inventory the system, and any newly-added zones are created. This further minimizes any requirement on the user to configure new devices.
 * When the UPnP proxy is used (always recommended), playing TTS will be more responsive because the status updates from the proxy can be applied to the TTS/alert queue processing. This means that you may also omit the `Duration` parameter on `Alert` actions (as long as the alert sound is less than 30 seconds in length).
-* Implement TTS caching to reduce traffic to and dependence on remote services. The performance of remote services can vary greatly; for example, ResponsiveVoice has been seen taking up to 30 seconds to respond with an audio result. Since most users likely speak a small number of fixed phrases repeatedly, caching removes repeated remote queries for the same data and allows immediate replay of the previously-played phrase.
 * Startup waits for the UPnP Proxy to come up, when installed.
+* TTS now supports Azure (which is very nice quality, BTW); the old Microsoft TTS has been removed. The TTS module has been refactored to be a good bit more modular.
+* Handling of TTS engine settings has been modified to conform to the new TTS module interface. This means, among other things, that you are only asked for settings for the TTS engine you are using, and the UI dependencies between the plugin core and the TTS module have been greatly reduced. This makes the addition of future TTS engines easier (no core changes required).
 
 ## Version 1.5 (stable/release candidate)
 
