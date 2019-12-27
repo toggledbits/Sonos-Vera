@@ -263,7 +263,7 @@ local function split( str, sep )
 	if str == nil or #str == 0 then return arr, 0 end
 	local rest = string.gsub( str or "", "([^" .. sep .. "]*)" .. sep, function( m ) table.insert( arr, m ) return "" end )
 	table.insert( arr, rest )
-	return arr, #arr
+	return arr
 end
 
 -- Clone table (shallow copy)
@@ -1085,17 +1085,28 @@ end
 -- task for the device.
 local function checkTransportState( uuid )
 	D("checkTransportState(%1) state %2", uuid, (dataTable[uuid] or {}).TransportState)
-	if dataTable[uuid].TransportState == "STOPPED" then
-		local device = Zones[uuid]
-		local task = scheduler.getTask("endSayAlert"..(device or 0))
-		D("checkTransportState() device %1 task %2 queue %3", device, task, sayQueue[device])
-		if device and task and sayQueue[device] then
-			D("checkTransportState() stopped playing %1, waiting for %2",
-				dataTable[uuid].CurrentTrackURI, sayQueue[device][1].URI)
-			if dataTable[uuid].CurrentTrackURI == sayQueue[device][1].URI then
-				D("refreshNow() rushing %1 for STOPPED transport status", tostring(task))
-				task:delay( 0, { replace=true } )
+	local device = Zones[uuid]
+	if not ( device and sayQueue[device] and #sayQueue[device] > 0 ) then return end
+	local task = scheduler.getTask("endSayAlert"..(device or 0))
+	if not task then return end
+	D("checkTransportState() device %1 task %2 queue %3", device, tostring(task), sayQueue[device])
+	if dataTable[uuid].TransportState == "PLAYING" then
+		if dataTable[uuid].CurrentTrackURI == sayQueue[device][1].URI and not sayQueue[device][1].__playing then
+			D("checkTransportState() say queue playing %1", dataTable[uuid].CurrentTrackURI)
+			if dataTable[uuid].CurrentTrackDuration then
+				local hh,mm,ss = unpack( split( dataTable[uuid].CurrentTrackDuration, ":" ) )
+				ss = (tonumber(hh) or 0)*3600 + (tonumber(mm) or 0)*60 + ss + 1
+				task:delay( ss, { replace=true } )
+				D("checkTransportState() adjusted duration %1", ss)
 			end
+			sayQueue[device][1].__playing = true
+		end
+	elseif dataTable[uuid].TransportState == "STOPPED" then
+		D("checkTransportState() stopped %1, waiting for %2",
+			dataTable[uuid].CurrentTrackURI, sayQueue[device][1].URI)
+		if dataTable[uuid].CurrentTrackURI == sayQueue[device][1].URI and sayQueue[device][1].__playing then
+			D("checkTransportState() rushing %1 for STOPPED transport status", tostring(task))
+			-- task:delay( 0, { replace=true } )
 		end
 	end
 end
@@ -1906,6 +1917,7 @@ local function getMP3Duration( mp3file, bitrate )
 end
 
 local function setupTTSSettings(device)
+	D("setupTTSSettings(%1)", device)
 	TTSConfig = nil
 	if not tts then return end
 	local json = require "dkjson"
@@ -1951,18 +1963,23 @@ local function setupTTSSettings(device)
 
 	TTSChime = nil
 	local installPath = getInstallPath()
-	local chd = getVar( "TTSChime", "Sonos_chime.wav,3", device, SONOS_SYS_SID, true )
-	local chimefile, chimedur = unpack( split( chd, "," ) )
+	local chd = getVar( "TTSChime", "", device, SONOS_SYS_SID, true )
+	if chd == "" then chd = "Sonos_chime.mp3,3" end
+	local chimefile, chimedur, chimevol = unpack( split( chd, "," ) )
+	D("setupTTSSettings() chime file %1 duration %2 from %3", chimefile, chimedur, chd)
 	if chimefile ~= "" and file_exists( installPath .. chimefile ) then
 		if TTSBasePath ~= installPath then
+			D("setupTTSSettings() linking %1 to %2", installPath..chimefile, TTSBasePath..chimefile)
 			os.remove( TTSBasePath .. chimefile )
 			file_symlink( installPath .. chimefile, TTSBasePath .. chimefile )
 		end
 		TTSChime = { URI=TTSBaseURL..chimefile }
-		TTSChime.URIMetadata = TTS_METADATA:format( "TTS Chime", "http-get:*:audio/wav:*", TTSChime.URI )
+		TTSChime.URIMetadata = TTS_METADATA:format( "TTS Chime", "http-get:*:audio/mpeg:*", TTSChime.URI )
 		TTSChime.Duration = tonumber( chimedur ) or 5
+		TTSChime.Volume = tonumber( chimevol )
 		TTSChime.TempFile = nil -- flag no delete in endPlayback
 	end
+	D("setupTTSSettings() TTSChime=%1", TTSChime)
 end
 
 local function getAvailableServices(uuid)
@@ -2538,7 +2555,7 @@ local function systemRunOnce( pdev )
 end
 
 local function startZone( zoneDevice )
-	L("Starting %1 (#%2)", luup.devices[zoneDevice].description, zoneDevice)
+	L("Starting zone %1 (#%2)", luup.devices[zoneDevice].description, zoneDevice)
 
 	zoneRunOnce( zoneDevice )
 
@@ -3126,11 +3143,12 @@ function actionSonosSay( lul_device, lul_settings )
 	local alert_settings = makeTTSAlert( lul_device, lul_settings )
 	if alert_settings then
 		if TTSChime and lul_settings.Chime ~= "0" and #(sayQueue[lul_device] or {}) == 0 then
-			TTSChime.GroupDevices = alert_settings.GroupDevices
-			TTSChime.GroupZones = alert_settings.GroupZones
-			TTSChime.Volume = alert_settings.Volume
-			TTSChime.SameVolumeForAll = alert_settings.SameVolumeForAll
-			queueAlert( lul_device, TTSChime )
+			local ch = clone( TTSChime )
+			ch.GroupDevices = alert_settings.GroupDevices
+			ch.GroupZones = alert_settings.GroupZones
+			ch.Volume = (ch.Volume or 0) > 0 and ch.Volume or alert_settings.Volume
+			ch.SameVolumeForAll = alert_settings.SameVolumeForAll
+			queueAlert( lul_device, ch )
 
 			-- Override alert settings to use same zone group as chime
 			alert_settings.GroupDevices = nil
