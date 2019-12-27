@@ -6,13 +6,10 @@
 
 module("L_SonosTTS", package.seeall)
 
-VERSION = 19346
+VERSION = 19360
 DEBUG_MODE = false
-DEFAULT_LANGUAGE = "en-US"
-DEFAULT_ENGINE = "RV"
 
 local urllib = require("socket.url")
-local socket = require("socket")
 local http = require("socket.http")
 local https = require "ssl.https"
 local ltn12 = require("ltn12")
@@ -23,18 +20,11 @@ local log = print
 local warning = log
 local error = log	--luacheck: ignore 231
 
-local defaultLanguage = DEFAULT_LANGUAGE
-local defaultEngine = DEFAULT_ENGINE
-local MicrosoftClientId
-local MicrosoftClientSecret
-local accessToken
-local accessTokenExpires
+local defaultEngine = "RV"
 
 local engines = {}
 
 local function debug(m, ...) if DEBUG_MODE then log(string.format("(tts debug) %s", tostring(m)), ...) end end
-
-local function Q(str) return "'" .. string.gsub(tostring(str), "(')", "\\%1") .. "'" end
 
 -- cut_text: split long text to smaller than cutSize. Some engines have limits on the length
 --            of the text to be converted. This function facilities a multi-request approach
@@ -66,6 +56,7 @@ function TTSEngine:new(o)
 	o = o or {}   -- create object if user does not provide one
 	setmetatable(o, self)
 	self.__index = self
+	self.lang = "en-US" -- default language for engine
 	self.optionMeta = {}
 	return o
 end
@@ -74,7 +65,7 @@ function TTSEngine:getOptionMeta()
 end
 
 -- say: retrieve audio file for text
-function TTSEngine:say(text, language, destFile, engineOptions) end -- luacheck: ignore 212
+function TTSEngine:say(text, destFile, engineOptions) end -- luacheck: ignore 212
 
 -- HTTPGetTTSEngine - base class for HTTP GET-based TTS (extends TTSEngine).
 HTTPGetTTSEngine = TTSEngine:new()
@@ -84,9 +75,9 @@ function HTTPGetTTSEngine:new(o)
 	self.__index = self
 	return o
 end
-function HTTPGetTTSEngine:say(text, language, destFile, engineOptions)
-	debug("say_http_get: engine " .. self.title .. " destFile " .. destFile .. " language " .. language .. " text " .. text)
-	local param = { lang=language, file=destFile, text=text }
+function HTTPGetTTSEngine:say(text, destFile, engineOptions)
+	debug("say_http_get: engine " .. self.title .. " destFile " .. destFile .. " text " .. text)
+	local param = { file=destFile, text=text }
 
 	local txlist = cut_text( text:gsub("%s+", " "), engineOptions.maxchunk or 0 )
 	if #txlist == 0 or (#txlist == 1 and txlist[1]:match("^%s*$")) then return nil, "Empty text" end -- empty text
@@ -162,8 +153,32 @@ ResponsiveVoiceTTSEngine = HTTPGetTTSEngine:new{
 --header "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" \
 --header "User-Agent: %{useragent:s}" \
 '%{url:s}/getvoice.php?t=%{text}&tl=%{lang|en_US}&sv=&vn=&pitch=%{pitch|0.5}&rate=%{rate|0.5}']],
+	lang="en_US", -- default language for engine
 	optionMeta={
 		url={ index=1, title="Server URL", default="https://code.responsivevoice.org" },
+		lang={ index=2, title="Language", default="en_US", unrestricted=true, values={
+						['en_AU']="English (Australian)",
+						['en_CA']="English (Canadian)",
+						['en_GB']="English (British)",
+						['en_US']="English (American)",
+						['el_GR']="Greek",
+						['nl_NL']="Dutch",
+						['fi_FI']="Finnish",
+						['fr_CA']="French (Canadian)",
+						['fr_FR']="French (French)",
+						['de_DE']="German",
+						['hu_HU']="Hungarian",
+						['it_IT']="Italian",
+						['nb_NO']="Norwegian",
+						['pt_BR']="Portugese (Brazilian)",
+						['pt_PT']="Portugese (Portugese)",
+						['ru_RU']='Russian',
+						['es_mx']="Spanish (Mexican)",
+						['es_es']="Spanish (Spanish)",
+						['sv_SE']="Swedish",
+						['tr_TR']="Turkish"
+			}
+		},
 		timeout={ title="Timeout (secs)", default=15 },
 		maxchunk={ title="Max Text Chunk", default=100 },
 		rate={ index=2, title="Rate (0-1)", default=0.5 },
@@ -171,13 +186,6 @@ ResponsiveVoiceTTSEngine = HTTPGetTTSEngine:new{
 		useragent={ title="User-Agent Header", default=[[Mozilla/5.0 (Macintosh; Intel Mac OS X 10_8_2) AppleWebKit/537.11 (KHTML, like Gecko) Chrome/23.0.1271.64 Safari/537.11]] }
 	}
 }
-function ResponsiveVoiceTTSEngine:say( text, language, destFile, engineOptions )
-	if not string.match( language, "^%w+%-%w+$" ) then
-		warning("(tts) ResponsiveVoice typically requires two-part IETF language tags (e.g. 'en-US', 'de-DE', etc.). You provided '" .. tostring(language) .. "', which may not work.")
-	end
-	local lang = language:gsub("-","_")
-	return HTTPGetTTSEngine.say( self, text, lang, destFile, engineOptions )
-end
 
 -- MaryTTS subclass
 MaryTTSEngine = HTTPGetTTSEngine:new{
@@ -189,9 +197,30 @@ MaryTTSEngine = HTTPGetTTSEngine:new{
 --connect-timeout %{timeout:s|15} \
 --header "Accept-Charset: utf-8;q=0.7,*;q=0.3" \
 --header "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" \
-"%{url:s}/process?INPUT_TYPE=TEXT&AUDIO=WAVE_FILE&OUTPUT_TYPE=AUDIO&LOCALE=%{lang|en_US}&INPUT_TEXT=%{text}"]],
+'%{url:s}?INPUT_TYPE=TEXT&AUDIO=WAVE_FILE&OUTPUT_TYPE=AUDIO&LOCALE=%{lang|en_US}&INPUT_TEXT=%{text}']],
 	optionMeta={
-		url={ index=1, title="Server URL", default="http://127.0.0.1:59125" },
+		url={ index=1, title="Server URL", default="http://127.0.0.1:59125/process" },
+		lang={ index=2, title="Language", default="en-US", unrestricted=true, values={
+						['en']="English",
+						['en-GB']="English (British)",
+						['en-US']="English (American)",
+						['en-CA']="English (Canadian)",
+						['en-AU']="English (Australian)",
+						['nl']="Dutch",
+						['fr']="French",
+						['fr-CA']="French (Canadian)",
+						['fr-FR']="French (French)",
+						['de']="German",
+						['it']="Italian",
+						['pt']="Portugese",
+						['pt-BR']="Portugese (Brazilian)",
+						['pt-PT']="Portugese (Portugese)",
+						['ru']='Russian',
+						['es']="Spanish",
+						['es-mx']="Spanish (Mexican)",
+						['es-es']="Spanish (Spanish)"
+			}
+		},
 		timeout={ title="Timeout (secs)", default=15 },
 		maxchunk={ title="Max Text Chunk", default=100 }
 	}
@@ -206,9 +235,30 @@ GoogleTTSEngine = HTTPGetTTSEngine:new{
 --header "Accept-Charset: utf-8;q=0.7,*;q=0.3" \
 --header "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" \
 --user-agent "%{useragent:s}" \
-"%{url:s}/translate_tts?tl=%{lang|en}&q=%{text}&client=Vera"]],
+"%{url:s}?tl=%{lang|en}&q=%{text}&client=Vera"]],
 	optionMeta={
-		url={ index=1, title="Server URL", default="http://127.0.0.1:59125" },
+		url={ index=1, title="Server URL", default="https://translate.google.com/translate_tts" },
+		lang={ index=2, title="Language", default="en-US", unrestricted=true, values={
+						['en']="English",
+						['en-GB']="English (British)",
+						['en-US']="English (American)",
+						['en-CA']="English (Canadian)",
+						['en-AU']="English (Australian)",
+						['nl']="Dutch",
+						['fr']="French",
+						['fr-CA']="French (Canadian)",
+						['fr-FR']="French (French)",
+						['de']="German",
+						['it']="Italian",
+						['pt']="Portugese",
+						['pt-BR']="Portugese (Brazilian)",
+						['pt-PT']="Portugese (Portugese)",
+						['ru']='Russian',
+						['es']="Spanish",
+						['es-mx']="Spanish (Mexican)",
+						['es-es']="Spanish (Spanish)"
+			}
+		},
 		timeout={ title="Timeout (secs)", default=15 },
 		maxchunk={ title="Max Text Chunk", default=100 },
 		useragent={ title="User-Agent Header", default=[[Mozilla/5.0 (Macintosh; Intel Mac OS X 10_8_2) AppleWebKit/537.11 (KHTML, like Gecko) Chrome/23.0.1271.64 Safari/537.11]] }
@@ -228,6 +278,27 @@ OSXTTSEngine = HTTPGetTTSEngine:new{
 "%{url:s}/tts?text=%{text}"]],
 	optionMeta={
 		url={ index=1, title="Server URL", default="http://127.0.0.1" },
+		lang={ index=2, title="Language", default="en-US", unrestricted=true, values={
+						['en']="English",
+						['en-GB']="English (British)",
+						['en-US']="English (American)",
+						['en-CA']="English (Canadian)",
+						['en-AU']="English (Australian)",
+						['nl']="Dutch",
+						['fr']="French",
+						['fr-CA']="French (Canadian)",
+						['fr-FR']="French (French)",
+						['de']="German",
+						['it']="Italian",
+						['pt']="Portugese",
+						['pt-BR']="Portugese (Brazilian)",
+						['pt-PT']="Portugese (Portugese)",
+						['ru']='Russian',
+						['es']="Spanish",
+						['es-mx']="Spanish (Mexican)",
+						['es-es']="Spanish (Spanish)"
+			}
+		},
 		timeout={ title="Timeout (secs)", default=15 },
 		maxchunk={ title="Max Text Chunk", default=100 },
 		useragent={ title="User-Agent Header", default=[[Mozilla/5.0 (Macintosh; Intel Mac OS X 10_8_2) AppleWebKit/537.11 (KHTML, like Gecko) Chrome/23.0.1271.64 Safari/537.11]] }
@@ -252,14 +323,101 @@ function AzureTTSEngine:new(o)
 	self.optionMeta = {
 		subkey={ index=1, title="Subscription Key", required=true, infourl="https://docs.microsoft.com/en-us/azure/cognitive-services/cognitive-services-apis-create-account?tabs=multiservice%2Cwindows" },
 		region={ index=2, title="Region", default="eastus", values={"australiaeast","canadacentral","centralus","eastasia","eastus","eastus2","francecentral","centralindia","japaneast","koreacentral","northcentralus","northeurope","southcentralus","southeastasia","uksouth","westeurope","westus","westus2"}, unrestricted=true },
-		voice={ index=3, title="Voice", default="en-US-JessaRUS", values={"en-US-GuyNeural","en-US-JessaNeural","de-DE-KatjaNeural","en-US-JessaRUS","de-DE-HeddaRUS","en-GB-HazelRUS","es-ES-HelenaRUS","fr-FR-HortenseRUS","ro-RO-Andrei","pt-BR-HeloisaRUS","nb-NO-HuldaRUS","sv-SE-HedvigRUS","zh-CN-HuihuiRUS"}, unrestricted=true, infourl="https://docs.microsoft.com/en-us/azure/cognitive-services/speech-service/language-support#text-to-speech" },
+		voice={ index=3, title="Voice", default="en-US-JessaRUS", values={
+				["ar-EG-Hoda"]="Arabic (Egypt), female",
+				["ar-SA-Naayf"]="Arabic (Saudi Arabia), male",
+				["bg-BG-Ivan"]="Bulgarian",
+				["ca-ES-HerenaRUS"]="Catalan (Spain), female",
+				["cs-CZ-Jakub"]="Czech, male",
+				["da-DK-HelleRUS"]="Danish, female",
+				["de-AT-Michael"]="German (Austria), male",
+				["de-CH-Karsten"]="German (Switzerland), male",
+				["de-DE-Hedda"]="German (Germany), female",
+				["de-DE-HeddaRUS"]="German (Germany), female, alternate",
+				["de-DE-Stefan-Apollo"]="German (Germany), male",
+				["de-DE-KatjaNeural"]="German (Germany), female, neural",
+				["el-GR-Stefanos"]="Greek, male",
+				["en-AU-Catherine"]="English (Australia), female",
+				["en-AU-CatherineRUS"]="English (Australia), female, alternate",
+				["en-CA-Linda"]="English (Canada), female (Linda)",
+				["en-CA-HeatherRUS"]="English (Canada), female (Heather)",
+				["en-GB-Susan-Apollo"]="English (UK), female (Susan)",
+				["en-GB-HazelRUS"]="English (UK), female (Hazel)",
+				["en-GB-George-Apollo"]="English (UK), male (George)",
+				["en-IE-Sean"]="English (Ireland), male",
+				["en-IN-Heera-Apollo"]="English (India), female (Heera)",
+				["en-IN-PriyaRUS"]="English (India), female (Priya)",
+				["en-IN-Ravi-Apollo"]="English (India), male (Ravi)",
+				["en-US-JessaRUS"]="English (US), female (Jessa, standard)",
+				["en-US-ZiraRUS"]="English (US), female (Zira)",
+				["en-US-BenjaminRUS"]="English (US), male (Benjamin)",
+				["es-ES-HelenaRUS"]="Spanish (Spain), female (Helena)",
+				["en-US-GuyNeural"]="English (US), male (Guy, neural)",
+				["en-US-JessaNeural"]="English (US), female (Jessa, neural)",
+				["es-ES-Laura-Apollo"]="Spanish (Spain), female (Laura)",
+				["es-ES-Pablo-Apollo"]="Spanish (Spain), male (Pablo)",
+				["es-MX-HildaRUS"]="Spanish (Mexico), female (Hilda)",
+				["es-MX-Raul-Apollo"]="Spanish (Mexico), male (Raul)",
+				["fi-FI-HeidiRUS"]="Finnish, female",
+				["fr-CA-HarmonieRUS"]="French (Canada), female (Harmonie)",
+				["fr-CA-Caroline"]="French (Canada), female (Caroline)",
+				["fr-CH-Guillaume"]="French (Switzerland), male",
+				["fr-FR-HortenseRUS"]="French (France), female (Hortense)",
+				["fr-FR-Julie-Apollo"]="French (France), female (Julie)",
+				["fr-FR-Paul-Apollo"]="French (France), male (Paul)",
+				["he-IL-Asaf"]="Hebrew (Israel), male",
+				["hi-IN-Kalpana"]="Hindi (India), female",
+				["hi-IN-Kalpana-Apollo"]="Hindi (India), female alternate",
+				["hi-IN-Hemant"]="Hindi (India), male",
+				["hr-HR-Matej"]="Croatian, male",
+				["hu-HU-Szabolcs"]="Hungarian, male",
+				["id-ID-Andika"]="Indonesian, male",
+				["it-IT-Cosimo-Apollo"]="Italian (Italy), male",
+				["it-IT-LuciaRUS"]="Italian (Italy), female",
+				["it-IT-ElsaNeural"]="Italian (Italy), female, neural",
+				["ja-JP-Ayumi-Apollo"]="Japanese, female (Ayumi)",
+				["ja-JP-Ichiro-Apollo"]="Japanese, male (Ichiro)",
+				["ja-JP-HarukaRUS"]="Japanese, female (Haruka)",
+				["ko-KR-HeamiRUS"]="Korean, female",
+				["ms-MY-Rizwan"]="Malay, male",
+				["nb-NO-HuldaRUS"]="Norwegian, female",
+				["pl-PL-PaulinaRUS"]="Polish, female",
+				["pt-BR-HeloisaRUS"]="Portugese (Brazil), female",
+				["pt-BR-Daniel-Apollo"]="Portugese (Brazil), male",
+				["pt-PT-HeliaRUS"]="Portugese (Portugal), female",
+				["ro-RO-Andrei"]="Romanian, male",
+				["ru-RU-Irina-Apollo"]="Russian, female (Irina)",
+				["ru-RU-Pavel-Apollo"]="Russian, male (Pavel)",
+				["ru-RU-EkaterinaRUS"]="Russian, female (Ekaterina)",
+				["sk-SK-Filip"]="Slovak, male",
+				["sl-SI-Lado"]="Slovenian, male",
+				["sv-SE-HedvigRUS"]="Swedish, female",
+				["ta-IN-Valluvar"]="Tamil (India), male",
+				["te-IN-Chitra"]="Telugu (India), female",
+				["th-TH-Pattara"]="Thai, male",
+				["tr-TR-SedaRUS"]="Turkish, female",
+				["vi-VN-An"]="Vietnamese, male",
+				["zh-CN-HuihuiRUS"]="Chinese (Mainland), female (Huihui)",
+				["zh-CN-Yaoyao-Apollo"]="Chinese (Mainland), female (Yaoyao)",
+				["zh-CN-Kangkang-Apollo"]="Chinese (Mainland), male (Kangkang)",
+				["zh-CN-XiaoxiaoNeural"]="Chinese (Mainland), female, neural",
+				["zh-HK-Tracy-Apollo"]="Chinese (Hong Kong), female (Tracy)",
+				["zh-HK-TracyRUS"]="Chinese (Hong Kong), female (Tracy, alternate)",
+				["zh-HK-Danny-Apollo"]="Chinese (Hong Kong), male (Danny)",
+				["zh-TW-Yating-Apollo"]="Chinese (Taiwan), female (Yating)",
+				["zh-TW-HanhanRUS"]="Chinese (Taiwan), female (Hanhan)",
+				["zh-TW-Zhiwei-Apollo"]="Chinese (Taiwan), male (Zhiwei)"
+			},
+			unrestricted=true,
+			infourl="https://docs.microsoft.com/en-us/azure/cognitive-services/speech-service/language-support#text-to-speech"
+		},
 		timeout={ title="Timeout (secs)", default="15" }
 	}
 	return o
 end
-function AzureTTSEngine:say(text, language, destFile, engineOptions)
+function AzureTTSEngine:say(text, destFile, engineOptions)
 	assert( engineOptions.subkey, "Subscription key is required" )
-	
+
 	local tries = 0
 	while tries < 2 do
 		tries = tries + 1
@@ -276,8 +434,9 @@ function AzureTTSEngine:say(text, language, destFile, engineOptions)
 			if s:match("error") then
 				warning("AzureTTSEngine:say() failed to fetch token: "..s)
 				local json = require "dkjson"
-				local data,pos,err = json.decode( s )
-				if not data then 
+				local data = json.decode( s )
+				if not data then
+					debug("AzureTTSEngine:say() invalid response JSON: "..tostring(s))
 					error("Invalid response JSON")
 				elseif data.error and data.error.code ~= 200 then
 					error(string.format("Can't get token, error %s response, %s", tostring(data.error.code),
@@ -290,8 +449,10 @@ function AzureTTSEngine:say(text, language, destFile, engineOptions)
 		end
 
 		local host = string.format("%s.tts.speech.microsoft.com", engineOptions.region or self.optionMeta.region.default )
+		local voice = engineOptions.voice or self.optionMeta.voice.default
+		local lang = voice:gsub( "^(%w+%-%w+)%-.*", "%1" )
 		local payload = string.format([[<speak version="1.0" xml:lang="%s"><voice name="%s">%s</voice></speak>]],
-			language or "en-us", engineOptions.voice or self.optionMeta.voice.default,
+			lang, voice,
 			text:gsub("%s+"," "):gsub("^%s+",""):gsub("%s+$",""):gsub("%&","&amp;"):gsub("%>","&gt;"):gsub("%<","&lt;"))
 		debug(string.format("AzureTTSEngine:say() host %q payload %s", host, payload))
 		os.remove( destFile )
@@ -314,7 +475,7 @@ function AzureTTSEngine:say(text, language, destFile, engineOptions)
 		if statusMsg == 200 then
 			if io.type(fp) == "file" then fp:close() end
 			fp = io.open( destFile, "rb" )
-			local size = fp:seek("end")
+			local size = fp:seek("end") or 0
 			fp:close()
 			if size > 0 then
 				-- Convert bitrate in Kbps to Bps, and from that compute clip duration (aggressive rounding up)
@@ -332,137 +493,6 @@ function AzureTTSEngine:say(text, language, destFile, engineOptions)
 	end
 	warning("AzureTTSEngine:say() authorization failed with Azure service")
 	return nil, "authorization failed"
-end
-
--- Legacy engines
-
-local function getMicrosoftAccessToken(force)
-	local currentTime = os.time()
-	if (force or (accessTokenExpires == nil) or (currentTime > accessTokenExpires)) then
-		accessToken = nil
-		local resultTable = {}
-		local postBody = string.format("grant_type=client_credentials&client_id=%s&client_secret=%s&scope=http://api.microsofttranslator.com",
-									   urllib.escape(MicrosoftClientId),
-									   urllib.escape(MicrosoftClientSecret))
-		local status, statusMsg = https.request{
-			url = "https://datamarket.accesscontrol.windows.net/v2/OAuth2-13",
-			sink = ltn12.sink.table(resultTable),
-			method = "POST",
-			headers = {["Content-Length"] = postBody:len(),
-					   ["Content-Type"] = "application/x-www-form-urlencoded"},
-		   source = ltn12.source.string(postBody),
-		}
-		if (status ~= nil and statusMsg == 200) then
-			local data = ""
-			for _, v in ipairs(resultTable) do
-				data = data .. v
-			end
-			local token, expires = data:match('"access_token":"([^"]-)".-"expires_in":"([^"]-)"')
-			if (token ~= nil and expires ~= nil) then
-				accessToken = token
-				-- Session token expires after 10 minutes
-				-- Take a security of 30 seconds
-				accessTokenExpires = currentTime + tonumber(expires) - 30
-			end
-		end
-	end
-	return accessToken
-end
-
-
-local function getMicrosoftLanguages()
-
-	local languages = nil
-
-	local token = getMicrosoftAccessToken(false)
-	if (token ~= nil) then
-
-		local authorization = "Bearer " .. token
-
-		local sock = function()
-			local s = socket.tcp()
-			s:settimeout(5)
-			return s
-		end
-
-		local resultTable = {}
-		local status, statusMsg = http.request{
-			url = "http://api.microsofttranslator.com/V2/Http.svc/GetLanguagesForSpeak",
-			method = "GET",
-			headers = {["Accept"] = "application/xml",
-					   ["Authorization"] = authorization},
-			create = sock,
-			sink = ltn12.sink.table(resultTable)
-		}
-		if (status ~= nil and statusMsg == 200) then
-			languages = ""
-			for _, v in ipairs(resultTable) do
-				languages = languages .. v
-			end
-		end
-	end
-
-	return languages
-end
-
-
-local function MicrosoftTTSwithToken(text, destFile, language, bitrate, token)
-	local duration = nil
-
-	local SAY_EXECUTE = "rm -- '%s' ; wget --output-document '%s' " .. [[ \
---quiet \
---header "Accept-Charset: utf-8;q=0.7,*;q=0.3" \
---header "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" \
---header "Authorization: Bearer %s" \
---user-agent "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_8_2) AppleWebKit/537.11 (KHTML, like Gecko) Chrome/23.0.1271.64 Safari/537.11" \
-"http://api.microsofttranslator.com/V2/Http.svc/Speak?appId=&text=%s&language=%s&format=%s&options=%s"]]
-
-	local returnCode = os.execute(SAY_EXECUTE:format(destFile, destFile, token, urllib.escape(text), language, urllib.escape("audio/mp3"), urllib.escape(MicrosoftOption)))
-	local fh = io.open(destFile, "a+")
-	local size = fh:seek("end")
-	fh:close()
-
-	if ((returnCode == 0) and (size > 0)) then
-		-- MP3 file has a bitrate of 128 kbps (MaxQuality option) or 32 kbps (MinSize option)
-		-- Add 1 second to be sure to not cut the end of the text
-		duration = math.ceil(size/(bitrate/8*1000)) + 1
-	else
-		local languages = getMicrosoftLanguages()
-		local lang = language:gsub("-", "%%-"):lower()
-		if (languages ~= nil
-				and languages:match("<string>(" .. lang .. ")</string>") == nil) then
-			warning("Microsoft TTS: failed due to unavailable speaking language " .. language)
-		else
-			warning("Microsoft TTS: failed!")
-		end
-	end
-
-	return duration
-end
-
-
-local function MicrosoftTTS(text, destFile, language, bitrate)
-	debug("Microsoft TTS: language " .. language .. " text " .. text)
-	local duration
-
-	local token = getMicrosoftAccessToken(false)
-	if (token ~= nil) then
-		duration = MicrosoftTTSwithToken(text, destFile, language, bitrate, token)
-		if (duration or 0) == 0 then
-			-- Try again with a new session token
-			warning("Microsoft TTS: trying again with a new session token")
-			token = getMicrosoftAccessToken(true)
-			if (token ~= nil) then
-				duration = MicrosoftTTSwithToken(text, destFile, language, bitrate, token)
-			else
-				warning("Microsoft TTS: can't get new session token")
-			end
-		end
-	else
-		warning("Microsoft TTS: can't get session token")
-	end
-
-	return duration
 end
 
 -- Register an engine. The ident is a unique key for the engine passed in settings.engine to alert().
@@ -487,8 +517,12 @@ function setDefaultEngine( ident )
 	defaultEngine = ident
 end
 
-function setDefaultLanguge( lang )
-	defaultLanguage = lang or DEFAULT_LANGUAGE
+function getDefaultEngineId()
+	return defaultEngine
+end
+
+function getDefaultLanguage( engineid )
+	return engines[engineid or defaultEngine].lang
 end
 
 function initialize(logger, warningLogger, errorLogger)
@@ -507,18 +541,15 @@ function initialize(logger, warningLogger, errorLogger)
 end
 
 -- Convert text to speech audio in named file.
-function generate(engine, text, destFile, language, engineOptions)
+function generate(engine, text, destFile, engineOptions)
 	-- Convert text to speech using specified engine
-	language = language or defaultLanguage
 	engine = engine or engines[defaultEngine]
 	engineOptions = engineOptions or {}
-	debug("generate engine "..tostring(engine.title).." language "..tostring(language).." text "..tostring(text))
 	if not (engine and engine.say) then
 		return nil, "Invalid engine"
-	elseif engine.legacy then
-		return engine.fct(text, destFile, language, engine.bitrate)
 	else
-		local duration,err = engine:say( text, language, destFile, engineOptions )
+		debug("generate() engine "..tostring(engine.title).." text "..tostring(text).." file "..tostring(destFile))
+		local duration,err = engine:say( text, destFile, engineOptions )
 		if not duration then
 			warning("(tts) engine " .. (engine.title or "title?") .. " error: " .. tostring(err))
 			return nil, err
@@ -530,13 +561,15 @@ end
 --[[ ************************ LEGACY/DEPRECATED FUNCTIONS ********************** ]]
 
 function ConvertTTS(text, destFile, language, engineId, engineOptions)
-	return generate(engines[engineId or defaultEngine], text, destFile, language, engineOptions)
+	engineId = engineId or defaultEngine
+	local engine = engines[engineId]
+	engineOptions.lang = language or engineOptions.language or (engine.optionMeta.lang or {}).default or engine.lang
+	return generate(engines[engineId or defaultEngine], text, destFile, engineOptions)
 end
 
 function setup(language, engine, googleUrl, osxUrl, maryUrl, rvURL, clientId, clientSecret, option)
-	defaultLanguage = language or DEFAULT_LANGUAGE
-	defaultEngine = engine or DEFAULT_ENGINE
-	engines.GOOGLE.optionMeta.url.default = googleUrl or "http://translate.google.com"
+	defaultEngine = engine or "RV"
+	engines.GOOGLE.optionMeta.url.default = googleUrl or "https://translate.google.com"
 	engines.MARY.optionMeta.url.default = maryUrl or "http://127.0.0.1:3510"
 	engines.RV.optionMeta.url.default = rvURL or "https://code.responsivevoice.org"
 	engines.OSX_TTS_SERVER.optionMeta.url.default = osxUrl or "http://127.0.0.1"

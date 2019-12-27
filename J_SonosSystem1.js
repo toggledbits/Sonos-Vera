@@ -209,23 +209,39 @@ var SonosSystem = (function(api, $) {
 
 	function handleSettingsSaveClick( ev ) {
 		var device = api.getCpanelDeviceId();
-		api.performActionOnDevice(device, Sonos.SONOS_SYS_SID, 'SetupTTS',
+
+		var tts;
+		var s = api.getDeviceState(device, Sonos.SONOS_SYS_SID, "TTSConfig") || "";
+		try {
+			tts = JSON.parse( s );
+		} catch (e) {
+			tts = { engines: {} };
+		}
+		tts.defaultengine = $( 'select#tts-engine' ).val() || "RV";
+		var opts = {};
+		$( '.enginesetting' ).each( function( ix, obj ) {
+			var $f = $(obj);
+			var val = $f.val() || "";
+			if ( ! ( isEmpty( val ) ) ){
+				var id = $f.attr( 'id' ).replace( /^val-/, "" );
+				var meta = (TTSEngines[tts.defaultengine].options || {})[id];
+				/* Write if not empty, not same as default */
+				opts[id] = val;
+			}
+		});
+		tts.engines = tts.engines || {};
+		tts.engines[tts.defaultengine] = opts;
+		tts.version = 1;
+		tts.serial = ( tts.serial || 0 ) + 1;
+		tts.timestamp = Math.floor( Date.now() / 1000 );
+		var ts = JSON.stringify( tts );
+		console.log(ts);
+		api.setDeviceStatePersistent(device, Sonos.SONOS_SYS_SID, "TTSConfig", ts,
 			{
-				actionArguments: {
-					'DefaultLanguage':$( "select#tts-lang" ).val() || "",
-					'DefaultEngine':$( "select#tts-engine" ).val() || "",
-					'GoogleTTSServerURL':$( "input#tts-google-url" ).val() || "",
-					'OSXTTSServerURL':$( "input#tts-osx-url" ).val() || "",
-					'MaryTTSServerURL':$( "input#tts-mary-url" ).val() || "",
-					'ResponsiveVoiceTTSServerURL': $( "input#tts-rv-url" ).val() || "",
-					'MicrosoftClientId':$( "input#tts-msftid" ).val() || "",
-					'MicrosoftClientSecret':$( "input#tts-msftsecret" ).val() || "",
-					'MicrosoftOption':$( "input#tts-msftopt" ).val() || "",
-					'Pitch':$( "input#tts-pitch" ).val() || "",
-					'Rate':$( "input#tts-rate" ).val() || ""
-				},
-				onSuccess: function() {
+				'onSuccess' : function() {
 					/* If that went well, these are assumed to go well. */
+					api.setDeviceState(device, Sonos.SONOS_SYS_SID, "TTSConfig", ts);
+
 					var val = 0;
 					val |= $( 'input#debug-plugin' ).is( ':checked' ) ? 1 : 0;
 					val |= $( 'input#debug-upnp' ).is( ':checked' ) ? 2 : 0;
@@ -237,25 +253,35 @@ var SonosSystem = (function(api, $) {
 					api.performActionOnDevice( device, Sonos.SONOS_SYS_SID, "SetReadQueueContent",
 						{ actionArguments: { enable: val ? "1" : "0" } } );
 				},
-				onFailure: function() {
-					alert("There was a problem saving the settings. Luup may be reloading. Try again in a moment.");
+				'onFailure' : function() {
+					alert('There was a problem saving the configuration. Vera/Luup may have been restarting. Please wait a few seconds and try again.');
 				}
 			}
-		);
+		); /* setDeviceStateVariable */
 	}
 
 	function changeTTSEngine() {
 		var $container = $( 'div#sonos-settings' );
 		var $el = $( 'select#tts-engine', $container );
-		var eid = $el.val() || "GOOGLE";
-		/* Clear all existing options */
+		var eid = $el.val() || "RV";
+		var tts;
+		var s = api.getDeviceState(api.getCpanelDeviceId(), Sonos.SONOS_SYS_SID, "TTSConfig") || "";
+		try {
+			tts = JSON.parse( s );
+		} catch (e) {
+			tts = {};
+		}
+		tts.engines = tts.engines || {};
+		/* Clear all existing option fields */
 		$( '.engineopt', $container ).remove();
 		if ( TTSEngines[eid] ) {
+			var currOpts = tts.engines[eid] || {};
 			var $last = $el.closest( 'div.row' );
 			var eng = TTSEngines[eid];
 			var elist = [];
 			for ( var opt in ( eng.options || {} ) ) {
 				if ( eng.options.hasOwnProperty( opt ) ) {
+					eng.options[opt].id = opt;
 					elist.push( eng.options[opt] );
 				}
 			}
@@ -270,30 +296,97 @@ var SonosSystem = (function(api, $) {
 			});
 			for ( var k=0; k<elist.length; ++k ) {
 				var meta = elist[k];
-				var $col = makeSettingsRow( ( meta.title || opt ) + ":", $container, $last );
+				var $col = makeSettingsRow( ( meta.title || meta.id ) + ":", $container, $last );
 				$col.addClass( "form-inline" );
 				var $row = $col.closest( 'div.row' );
-				$row.attr( 'id', 'eopt-' + opt ).addClass( "engineopt" );
+				$row.attr( 'id', 'eopt-' + meta.id ).addClass( "engineopt" );
+				var currVal = undefined === currOpts[meta.id] ? "" : currOpts[meta.id];
 				if ( undefined !== meta.values ) {
 					var $mm = $( '<select class="form-control form-control-sm"/>' )
-						.attr( 'id', 'val-' + opt )
+						.attr( 'id', 'sel-' + meta.id )
 						.appendTo( $col );
-					for ( var ix=0; ix<meta.values.length; ix++ ) {
-						$( '<option/>' ).val( meta.values[ix] ).text( meta.values[ix] )
+					if ( meta.unrestricted ) {
+						$( '<option/>' ).val( "*" ).text( "(user-supplied/custom value)" )
 							.appendTo( $mm );
 					}
-					if ( undefined !== meta.default ) {
-						$mm.val( meta.default );
+					if ( Array.isArray( meta.values ) ) {
+						meta.values.sort();
+						if ( undefined !== meta.default ) {
+							$( '<option/>' ).val( "" ).text( "(engine default: " + meta.default + ")" )
+								.prependTo( $mm );
+						}
+						for ( var ix=0; ix<meta.values.length; ix++ ) {
+							$( '<option/>' ).val( meta.values[ix] )
+								.text( meta.values[ix] )
+								.appendTo( $mm );
+						}
+					} else {
+						var vl = [];
+						for ( var key in meta.values ) {
+							if ( meta.values.hasOwnProperty( key ) ) {
+								vl.push( { id: key, val: meta.values[key] } );
+							}
+						}
+						vl.sort( function( a, b ) {
+							var v1 = a.val || a.id;
+							var v2 = b.val || b.id;
+							if ( v1 == v2 ) return 0;
+							return v1 < v2 ? -1 : 1;
+						});
+						if ( undefined !== meta.default ) {
+							$( '<option/>' ).val( "" ).text( "(engine default: " +
+								( meta.values[meta.default] ? meta.values[meta.default] : meta.default ) +
+								")" ).prependTo( $mm );
+						}
+						for ( var ix=0; ix<vl.length; ix++ ) {
+							$( '<option/>' ).val( vl[ix].id ).text( vl[ix].val )
+								.appendTo( $mm );
+						}
 					}
+					var $option = $( 'option[value="' + currVal + '"]', $mm );
+					if ( 0 === $option.length ) {
+						if ( meta.unrestricted ) {
+							$mm.val( "*" ); /* select custom */
+						} else {
+							$( 'option:first', $mm ).prop( 'selected', true );
+							currVal = $mm.val();
+						}
+					} else {
+						$mm.val( currVal );
+					}
+					$( '<input/>' ).attr( 'type', meta.unrestricted ? "text" : "hidden" )
+						.attr( 'id', 'val-' + meta.id )
+						.addClass("form-control form-control-sm enginesetting")
+						.val( currVal )
+						.hide()
+						.appendTo( $col );
+					$mm.on( 'change.sonos', function( ev ) {
+						var $el = $( ev.target );
+						var val = $el.val();
+						var id = $el.attr( 'id' ).replace( /^sel-/, "val-" );
+						var $f = $( 'input#' + id );
+						if ( "*" === val ) {
+							$f.show().val( "" );
+						} else {
+							$f.hide().val( val );
+						}
+					});
 				} else {
-					$( '<input type="text" class="form-control form-control-sm"/>' )
-						.attr( 'id', 'val-' + opt )
-						.val( undefined === meta.default ? "" : meta.default )
+					$( '<input type="text" class="form-control form-control-sm enginesetting"/>' )
+						.attr( 'id', 'val-' + meta.id )
+						.val( currVal )
 						.appendTo( $col );
 				}
 				if ( undefined !== meta.infourl ) {
 					$( '<a/>' ).attr( 'href', meta.infourl ).attr( 'target', '_blank' )
 						.text( '[info]' ).appendTo( $col );
+				}
+				if ( undefined !== meta.default ) {
+					$( '<div class="inp-default" />' ).text( "Default: " + meta.default )
+						.appendTo( $col );
+				}
+				if ( meta.required ) {
+					$( 'span.rowlabel', $row ).addClass( 'inp-required' );
 				}
 				$last = $row;
 			}
@@ -318,6 +411,15 @@ var SonosSystem = (function(api, $) {
 
 		var html =  '<div id="sonos-settings" class="sonostab" />';
 		api.setCpanelContent(html);
+
+		if ( 0 === $( 'style#sonos-settings-styles' ).length ) {
+			$( '<style id="sonos-settings-styles"> \
+div#sonos-settings div.row { margin-top: 12px; } \
+div.inp-default { color: #666; font-size: 0.80em; } \
+.inp-required { font-weight: bold } \
+</style>' ).appendTo( $('head') );
+		}
+
 		var $container = $( 'div#sonos-settings' );
 
 		var $row = $('<div class="row"/>');

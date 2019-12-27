@@ -8,7 +8,7 @@
 module( "L_SonosSystem1", package.seeall )
 
 PLUGIN_NAME = "Sonos"
-PLUGIN_VERSION = "2.0-19352"
+PLUGIN_VERSION = "2.0-19360"
 PLUGIN_ID = 4226
 
 local _CONFIGVERSION = 19298
@@ -16,7 +16,7 @@ local _CONFIGVERSION = 19298
 local DEBUG_MODE = false	-- Don't hardcode true--use state variable config
 
 local MIN_UPNP_VERSION = 19191	-- Minimum version of L_SonosUPnP that works
-local MIN_TTS_VERSION = 19287	-- Minimum version of L_SonosTTS that works
+local MIN_TTS_VERSION = 19360	-- Minimum version of L_SonosTTS that works
 
 local MSG_CLASS = "Sonos"
 local isOpenLuup = false
@@ -177,6 +177,7 @@ local sayQueue = {}
 local cacheTTS = true
 local TTSBasePath
 local TTSBaseURL
+local TTSConfig
 local TTS_METADATA = [[<DIDL-Lite xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/">
 	<item id="VERA_TTS" parentID="-1" restricted="1">
 		<dc:title>%s</dc:title>
@@ -1905,46 +1906,30 @@ local function getMP3Duration( mp3file, bitrate )
 end
 
 local function setupTTSSettings(device)
+	TTSConfig = nil
 	if not tts then return end
-	assert(luup.devices[device].device_type == SONOS_SYS_DEVICE_TYPE)
-	local ttsrev = getVarNumeric("_ttsrev", 0, device, SONOS_SYS_SID)
-	local lang = getVar("DefaultLanguageTTS", "", device, SONOS_SYS_SID, true)
-	if lang == "" then
-		lang = "en"
-	elseif lang == "en" then
-		setVar(SONOS_SYS_SID, "DefaultLanguageTTS", "", device) -- restore default
+	local json = require "dkjson"
+	local s = getVar("TTSConfig", "", device, SONOS_SYS_SID)
+	if s ~= "" then
+		TTSConfig = json.decode( s )
 	end
-	local engine = getVar("DefaultEngineTTS", "", device, SONOS_SYS_SID, true)
-	if engine == "" then
-		engine = "GOOGLE"
-	elseif engine == "GOOGLE" then
-		setVar(SONOS_SYS_SID, "DefaultEngineTTS", "", device) -- restore default
+	if not TTSConfig then
+		-- No TTS config; possible upgrade from 1.x
+		local engine = getVar("DefaultEngineTTS", tts.getDefaultEngineId(), device, SONOS_SYS_SID)
+		TTSConfig = { defaultengine=engine, engines={} }
+	elseif not ( TTSConfig.defaultengine and tts.getEngine( TTSConfig.defaultengine ) ) then
+		TTSConfig.defaultengine = tts.getDefaultEngineId()
 	end
-	local googleURL = getVar("GoogleTTSServerURL", "", device, SONOS_SYS_SID, true)
-	if googleURL == "" then
-		googleURL = "https://translate.google.com"
-	elseif googleURL == "https://translate.google.com" then
-		setVar(SONOS_SYS_SID, "GoogleTTSServerURL", "", device) -- restore default
+	if TTSConfig.version == nil then
+		TTSConfig.version = 1
+		TTSConfig.serial = 1
+		TTSConfig.timestamp = os.time()
+		setVar(SONOS_SYS_SID, "TTSConfig", json.encode( TTSConfig ), device)
 	end
-	local serverURL = getVar("OSXTTSServerURL", "", device, SONOS_SYS_SID, true)
-	local maryURL = getVar("MaryTTSServerURL", "", device, SONOS_SYS_SID, true)
-	local rvURL = getVar("ResponsiveVoiceTTSServerURL", "", device, SONOS_SYS_SID, true)
-	if "" == rvURL then
-		rvURL = "https://code.responsivevoice.org"
-	elseif rvURL:match("^http:") or rvURL == "https://code.responsivevoice.org" then
-		rvURL = "https://code.responsivevoice.org"
-		setVar(SONOS_SYS_SID, "ResponsiveVoiceTTSServerURL", "", device)
-	end
-	local clientId = getVar("MicrosoftClientId", "", device, SONOS_SYS_SID, true)
-	local clientSecret = getVar("MicrosoftClientSecret", "", device, SONOS_SYS_SID, true)
-	local option = getVar("MicrosoftOption", "", device, SONOS_SYS_SID, true)
+
 	-- NOTA BENE! TTSBaseURL must resolve to TTSBasePath in runtime! That is, whatever directory
 	--            TTSBasePath points to must be the directory accessed via TTSBaseURL.
 	TTSBaseURL = getVar("TTSBaseURL", "", device, SONOS_SYS_SID, true)
-	if ttsrev < 19269 or not TTSBaseURL:match("%/$") then
-		setVar(SONOS_SYS_SID, "TTSBaseURL", "", device)
-		TTSBaseURL = ""
-	end
 	if "" == TTSBaseURL then
 		if isOpenLuup then
 			TTSBaseURL = string.format("http://%s:3480/", VERA_LOCAL_IP)
@@ -1956,37 +1941,12 @@ local function setupTTSSettings(device)
 		end
 	end
 	TTSBasePath = getVar("TTSBasePath", "", device, SONOS_SYS_SID, true)
-	if ttsrev < 19269 or not TTSBasePath:match("%/$") then
-		setVar(SONOS_SYS_SID, "TTSBasePath", "", device)
-		TTSBasePath = ""
-	end
 	if "" == TTSBasePath then
 		TTSBasePath = getInstallPath()
 		if not isOpenLuup and luup.short_version then
 			-- Real Vera 7.30+
 			TTSBasePath = "/www/sonos/"
 		end
-	end
-	setVar(SONOS_SYS_SID, "_ttsrev", 19269, device)
-
-	tts.setup(lang, engine, googleURL, serverURL, maryURL, rvURL, clientId, clientSecret, option)
-
-	local RV = tts.getEngine("RV")
-	if RV then
-		local rate = getVar("TTSRate", "", device, SONOS_SYS_SID, true)
-		if "" == rate then
-			rate = "0.5"
-		elseif "0.5" == rate then
-			setVar(SONOS_SYS_SID, "TTSRate", "", device) -- restore default
-		end
-		local pitch = getVar("TTSPitch", "", device, SONOS_SYS_SID, true)
-		if "" == pitch then
-			pitch = "0.5"
-		elseif "0.5" == pitch then
-			setVar(SONOS_SYS_SID, "TTSPitch", "", device) -- restore default
-		end
-		RV.pitch = pitch
-		RV.rate = rate
 	end
 
 	TTSChime = nil
@@ -2072,7 +2032,7 @@ local function fixLegacyIcons()
 		if file_exists( basePath .. p ) then
 			-- Apparently as of 7.30, this is new designated location.
 			if not file_exists( "/www/cmh/skins/default/icons/"..p ) then
-				file_symlink( basePath..p, "/www/cmh/skins/default/icons/" )
+				file_symlink( basePath..p, "/www/cmh/skins/default/icons/"..p )
 			end
 		end
 	end
@@ -3057,11 +3017,35 @@ local function loadTTSCache( engine, language, hashcode )
 end
 
 local function makeTTSAlert( device, settings )
-	local text = settings.Text or "42"
-	local engobj = tts.getEngine( settings.Engine )
+	local s = getVar( "TTSConfig", "", pluginDevice, SONOS_SYS_SID )
+	local json = require "dkjson"
+	TTSConfig = json.decode( s ) or { defaultengine=tts.getDefaultEngineId(), engines={} }
+	local eid = (settings.Engine or "") ~= "" and settings.Engine or TTSConfig.defaultengine or 
+		tts.getDefaultEngineId()
+
+	local engobj = tts.getEngine( eid )
+	if not engobj then
+		W("No TTS engine implementation for %1", eid)
+		return nil
+	end
+
+	local text = settings.Text or "1 2 3"
+	local opt = TTSConfig.engines[eid] or {}
+	if (settings.Language or "") ~= "" then
+		opt.lang = settings.Language
+	end
+
+	local voice
+	if engobj.optionMeta.voice then
+		voice = opt.voice or engobj.optionMeta.voice.default or tts.DEFAULT_LANGUAGE
+	elseif engobj.optionMeta.lang then
+		voice = opt.lang or engobj.optionMeta.lang.default or tts.DEFAULT_LANGUAGE
+	else
+		voice = tts.DEFAULT_LANGUAGE
+	end
 	cacheTTS = not file_exists( TTSBasePath .. "no-tts-cache" )
-	if cacheTTS then
-		local fmeta = loadTTSCache( settings.Engine, settings.Language, hash(text) )
+	if cacheTTS and settings.UseCache ~= "0" then
+		local fmeta = loadTTSCache( eid, voice, hash(text) )
 		if fmeta.strings[text] then
 			settings.Duration = fmeta.strings[text].duration
 			settings.URI = TTSBaseURL .. fmeta.strings[text].url
@@ -3072,51 +3056,46 @@ local function makeTTSAlert( device, settings )
 			return settings
 		end
 	end
-	if engobj then
-		-- Convert text to speech using specified engine
-		local file = string.format( "Say.%s.%s", tostring(device), engobj.fileType or "mp3" )
-		local destFile = TTSBasePath .. file
-		settings.Duration = tts.ConvertTTS(text, destFile, settings.Language, settings.Engine, {})
-		if (settings.Duration or 0) == 0 then
-			W("(tts) Engine %1 produced no audio", engobj.title)
-			return
+
+	-- Convert text to speech using specified engine
+	local file = string.format( "Say.%s.%s", tostring(device), engobj.fileType or "mp3" )
+	local destFile = TTSBasePath .. file
+	settings.Duration = tts.generate(engobj, text, destFile, opt)
+	if (settings.Duration or 0) == 0 then
+		W("(tts) Engine %1 produced no audio", engobj.title)
+		return
+	end
+	settings.URI = TTSBaseURL .. file
+	settings.TempFile = destFile
+	settings.URIMetadata = TTS_METADATA:format(engobj.title, engobj.protocol,
+		settings.URI)
+	L("(TTS) Engine %1 created %2", engobj.title, settings.URI)
+	if cacheTTS and settings.UseCache ~= "0" then
+		-- Save in cache
+		local fmeta, curl = loadTTSCache( eid, voice, hash(text) )
+		local cpath = TTSBasePath .. curl
+		local ft = file:match("[^/]+$"):match("%.[^%.]+$") or ""
+		os.execute("mkdir -p " .. Q(cpath))
+		while true do
+			local zf = io.open( cpath .. fmeta.nextfile .. ft, "r" )
+			if not zf then break end
+			zf:close()
+			fmeta.nextfile = fmeta.nextfile + 1
 		end
-		settings.URI = TTSBaseURL .. file
-		settings.TempFile = destFile
-		settings.URIMetadata = TTS_METADATA:format(engobj.title, engobj.protocol,
-			settings.URI)
-		L("(TTS) Engine %1 created %2", engobj.title, settings.URI)
-		if cacheTTS then
-			-- Save in cache
-			local fmeta, curl = loadTTSCache( settings.Engine, settings.Language, hash(text) )
-			local cpath = TTSBasePath .. curl
-			local ft = file:match("[^/]+$"):match("%.[^%.]+$") or ""
-			os.execute("mkdir -p " .. Q(cpath))
-			while true do
-				local zf = io.open( cpath .. fmeta.nextfile .. ft, "r" )
-				if not zf then break end
-				zf:close()
+		if os.execute( "cp -f -- " .. Q( destFile ) .. " " .. Q( cpath .. fmeta.nextfile .. ft ) ) ~= 0 then
+			W("(TTS) Cache failed to copy %1 to %2", destFile, cpath..fmeta.nextfile..ft)
+		else
+			fmeta.strings[text] = { duration=settings.Duration, url=curl .. fmeta.nextfile .. ft, created=os.time() }
+			fm = io.open( cpath .. "ttsmeta.json", "w" )
+			if fm then
 				fmeta.nextfile = fmeta.nextfile + 1
-			end
-			if os.execute( "cp -f -- " .. Q( destFile ) .. " " .. Q( cpath .. fmeta.nextfile .. ft ) ) ~= 0 then
-				W("(TTS) Cache failed to copy %1 to %2", destFile, cpath..fmeta.nextfile..ft)
+				fm:write( json.encode(fmeta) )
+				fm:close()
+				D("makeTTSAlert() cached %1 as %2", destFile, fmeta.strings[text].url)
 			else
-				fmeta.strings[text] = { duration=settings.Duration, url=curl .. fmeta.nextfile .. ft, created=os.time() }
-				fm = io.open( cpath .. "ttsmeta.json", "w" )
-				if fm then
-					local json = require "dkjson"
-					fmeta.nextfile = fmeta.nextfile + 1
-					fm:write(json.encode(fmeta))
-					fm:close()
-					D("makeTTSAlert() cached %1 as %2", destFile, fmeta.strings[text].url)
-				else
-					W("(TTS) Can't write cache meta in %1", cpath)
-				end
+				W("(TTS) Can't write cache meta in %1", cpath)
 			end
 		end
-	else
-		W("No TTS engine implementation for %1", settings.Engine)
-		return nil
 	end
 	return settings
 end
@@ -3138,7 +3117,7 @@ function actionSonosSay( lul_device, lul_settings )
 		W"The L_SonosTTS module installed may not be compatible with this version of the plugin core."
 	end
 	if ( luup.attr_get( 'UnsafeLua', 0 ) or "0" ) ~= "1" and not isOpenLuup then
-		W"The TTS module requires that 'Enable Unsafe Lua' (under 'Users & Account Info > Security') be enabled in your controller settings."
+		W"Some engines used with the TTS module require that 'Enable Unsafe Lua' (under 'Users & Account Info > Security') be enabled in your controller settings."
 		return
 	end
 	-- ??? Request handler doesn't unescape?
@@ -3147,9 +3126,10 @@ function actionSonosSay( lul_device, lul_settings )
 	local alert_settings = makeTTSAlert( lul_device, lul_settings )
 	if alert_settings then
 		if TTSChime and lul_settings.Chime ~= "0" and #(sayQueue[lul_device] or {}) == 0 then
-			TTSChime.GroupDevices = lul_settings.GroupDevices
-			TTSChime.GroupZones = lul_settings.GroupZones
-			TTSChime.Volume = lul_settings.Volume
+			TTSChime.GroupDevices = alert_settings.GroupDevices
+			TTSChime.GroupZones = alert_settings.GroupZones
+			TTSChime.Volume = alert_settings.Volume
+			TTSChime.SameVolumeForAll = alert_settings.SameVolumeForAll
 			queueAlert( lul_device, TTSChime )
 
 			-- Override alert settings to use same zone group as chime
@@ -3162,38 +3142,12 @@ end
 
 function actionSonosSetupTTS( lul_device, lul_settings )
 	D("actionSonosSetupTTS(%1,%2)", lul_device, lul_settings )
-	assert(luup.devices[lul_device].device_type == SONOS_SYS_DEVICE_TYPE)
-	luup.variable_set(SONOS_SYS_SID, "DefaultLanguageTTS"				, lul_settings.DefaultLanguage or "", lul_device)
-	luup.variable_set(SONOS_SYS_SID, "DefaultEngineTTS"					, lul_settings.DefaultEngine or "", lul_device)
-	luup.variable_set(SONOS_SYS_SID, "OSXTTSServerURL"					, url.unescape(lul_settings.OSXTTSServerURL				or ""), lul_device)
-	luup.variable_set(SONOS_SYS_SID, "GoogleTTSServerURL"				, url.unescape(lul_settings.GoogleTTSServerURL			or ""), lul_device)
-	luup.variable_set(SONOS_SYS_SID, "MaryTTSServerURL"					, url.unescape(lul_settings.MaryTTSServerURL			or ""), lul_device)
-	luup.variable_set(SONOS_SYS_SID, "MicrosoftClientId"				, url.unescape(lul_settings.MicrosoftClientId			or ""), lul_device)
-	luup.variable_set(SONOS_SYS_SID, "MicrosoftClientSecret"			, url.unescape(lul_settings.MicrosoftClientSecret		or ""), lul_device)
-	luup.variable_set(SONOS_SYS_SID, "MicrosoftOption"					, url.unescape(lul_settings.MicrosoftOption				or ""), lul_device)
-	luup.variable_set(SONOS_SYS_SID, "ResponsiveVoiceTTSServerURL"		, url.unescape(lul_settings.ResponsiveVoiceTTSServerURL	or ""), lul_device)
-	luup.variable_set(SONOS_SYS_SID, "TTSRate"							, url.unescape(lul_settings.Rate						or ""), lul_device)
-	luup.variable_set(SONOS_SYS_SID, "TTSPitch"							, url.unescape(lul_settings.Pitch						or ""), lul_device)
-	setupTTSSettings(lul_device)
 	os.execute( "rm -rf -- " .. Q(TTSBasePath .. "ttscache") )
 end
 
 function actionSonosResetTTS( lul_device )
 	assert(luup.devices[lul_device].device_type == SONOS_SYS_DEVICE_TYPE)
-	luup.variable_set(SONOS_SYS_SID, "DefaultLanguageTTS"			, "", lul_device)
-	luup.variable_set(SONOS_SYS_SID, "DefaultEngineTTS"				, "", lul_device)
-	luup.variable_set(SONOS_SYS_SID, "OSXTTSServerURL"				, "", lul_device)
-	luup.variable_set(SONOS_SYS_SID, "GoogleTTSServerURL"			, "", lul_device)
-	luup.variable_set(SONOS_SYS_SID, "MaryTTSServerURL"				, "", lul_device)
-	luup.variable_set(SONOS_SYS_SID, "MicrosoftClientId"			, "", lul_device)
-	luup.variable_set(SONOS_SYS_SID, "MicrosoftClientSecret"		, "", lul_device)
-	luup.variable_set(SONOS_SYS_SID, "MicrosoftOption"				, "", lul_device)
-	luup.variable_set(SONOS_SYS_SID, "ResponsiveVoiceTTSServerURL"	, "", lul_device)
-	luup.variable_set(SONOS_SYS_SID, "TTSRate"						, "", lul_device)
-	luup.variable_set(SONOS_SYS_SID, "TTSPitch"						, "", lul_device)
-	luup.variable_set(SONOS_SYS_SID, "TTSBasePath"					, "", lul_device)
-	luup.variable_set(SONOS_SYS_SID, "TTSBaseURL"					, "", lul_device)
-	setupTTSSettings(lul_device)
+	os.execute( "rm -rf -- " .. Q(TTSBasePath .. "ttscache") )
 end
 
 function actionSonosSetURIToPlay( lul_device, lul_settings )
