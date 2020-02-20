@@ -11,6 +11,7 @@ DEBUG_MODE = false
 
 local urllib = require("socket.url")
 local http = require("socket.http")
+local ssl = require "ssl"
 local https = require "ssl.https"
 local ltn12 = require("ltn12")
 
@@ -459,7 +460,7 @@ function AzureTTSEngine:say(text, destFile, engineOptions)
 		local fp,ferr = io.open(destFile, "wb")
 		if not fp then error("Unable to open "..tostring(destFile)..": "..tostring(ferr)) end
 		http.TIMEOUT = engineOptions.timeout or self.optionMeta.timeout.default or 15
-		local status, statusMsg = https.request{
+		local req = {
 			url = "https://" .. host .. "/cognitiveservices/v1",
 				sink = ltn12.sink.file(fp, ferr),
 				method = "POST",
@@ -470,8 +471,11 @@ function AzureTTSEngine:say(text, destFile, engineOptions)
 					["Content-Length"] = #payload,
 					["Authorization"] = "Bearer " .. tostring(self.token)
 				},
-				source = ltn12.source.string(payload)
+				source = ltn12.source.string(payload),
+				protocol = ( ssl._VERSION or "0.5" ):find( "^0%.5" ) and "tlsv1_2" or "any"
 			}
+		debug(string.format("AzureTTSEngine:say() LuaSec %s, using protocol %q for request", tostring(ssl._VERSION), req.protocol))
+		local status, statusMsg = https.request( req )
 		if statusMsg == 200 then
 			if io.type(fp) == "file" then fp:close() end
 			fp = io.open( destFile, "rb" )
