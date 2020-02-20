@@ -33,10 +33,6 @@
 			</allowedValueList>
 		</stateVariable>
 		<stateVariable sendEvents="no">
-			<name>A_ARG_TYPE_SameVolume</name>
-			<dataType>boolean</dataType>
-		</stateVariable>
-		<stateVariable sendEvents="no">
 			<name>A_ARG_TYPE_Duration</name>
 			<dataType>ui4</dataType>
 		</stateVariable>
@@ -88,11 +84,11 @@
 			<name>A_ARG_TYPE_Engine</name>
 			<dataType>string</dataType>
 			<allowedValueList>
-				<allowedValue>GOOGLE</allowedValue>
-				<allowedValue>OSX_TTS_SERVER</allowedValue>
-				<allowedValue>MICROSOFT</allowedValue>
+				<allowedValue>AZURE</allowedValue>
 				<allowedValue>MARY</allowedValue>
 				<allowedValue>RV</allowedValue>
+				<allowedValue>GOOGLE</allowedValue>
+				<allowedValue>OSX_TTS_SERVER</allowedValue>
 			</allowedValueList>
 		</stateVariable>
 		<stateVariable sendEvents="yes">
@@ -170,7 +166,7 @@
 				<argument>
 					<name>SameVolumeForAll</name>
 					<direction>in</direction>
-					<relatedStateVariable>A_ARG_TYPE_SameVolume</relatedStateVariable>
+					<relatedStateVariable>A_ARG_TYPE_boolean</relatedStateVariable>
 				</argument>
 				<argument>
 					<name>Duration</name>
@@ -215,7 +211,7 @@
 				<argument>
 					<name>SameVolumeForAll</name>
 					<direction>in</direction>
-					<relatedStateVariable>A_ARG_TYPE_SameVolume</relatedStateVariable>
+					<relatedStateVariable>A_ARG_TYPE_boolean</relatedStateVariable>
 				</argument>
 				<argument>
 					<name>GroupDevices</name>
