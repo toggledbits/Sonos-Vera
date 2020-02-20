@@ -1,14 +1,16 @@
 # Change Log
 
+**NOTAM (NOtice To All Music-lovers):** ResponsiveVoice has been evolving their business model for some time, and as a result, the API that this plugin uses to integrate with RV and create speech audio is now deprecated and not supported. RV could remove access to this API at any time, without notice, and has changed the URL at least once in the past couple of years. Just be aware that if you use RV for TTS, it may stop working at any time. The effect of this may be somewhat alleviated by the new TTS caching--if the service stops working, the cached audio file is still be used for previously-seen phrases, only conversion of new phrases would stop working. The suggested alternative to RV is the Microsoft Azure Speech Service, which produces clear speech audio from a large variety of voices, and offers a usable/meaningful free tier level that is likely sufficient for most users.
+
 ## Version 2.0 (development)
 
 * The plugin has been converted to parent-child, which is more memory efficient. It also has the benefit of discovering and configuring all zones once the first zone has been created. Existing standalone zone devices from prior versions of the plugin are converted in-place to children, so their Vera/Luup device IDs *do not change*, thus preserving scenes, Lua, Reactor conditions and activities, etc.
+* TTS now supports Azure (which is very nice quality, BTW); the old Microsoft TTS has been removed. The TTS module has been refactored to be a good bit more modular.
+* Handling of TTS engine settings has been modified to conform to the new TTS module interface. This means, among other things, that you are only asked for settings for the TTS engine you are using, and the UI dependencies between the plugin core and the TTS module have been greatly reduced. This makes the addition of future TTS engines easier (no core changes required).
 * Discovery is now run automatically at startup if there are no Sonos devices configured. All Sonos zones found will be created automatically. Combined with the new parent-child structure, this makes initial setup of the system almost completely automated.
 * On Luup startup, the zone group configuration is used to inventory the system, and any newly-added zones are created. This further minimizes any requirement on the user to configure new devices.
 * When the UPnP proxy is used (always recommended), playing TTS will be more responsive because the status updates from the proxy can be applied to the TTS/alert queue processing. This means that you may also omit the `Duration` parameter on `Alert` actions (as long as the alert sound is less than 30 seconds in length).
 * Startup waits for the UPnP Proxy to come up, when installed.
-* TTS now supports Azure (which is very nice quality, BTW); the old Microsoft TTS has been removed. The TTS module has been refactored to be a good bit more modular.
-* Handling of TTS engine settings has been modified to conform to the new TTS module interface. This means, among other things, that you are only asked for settings for the TTS engine you are using, and the UI dependencies between the plugin core and the TTS module have been greatly reduced. This makes the addition of future TTS engines easier (no core changes required).
 
 ## Version 1.5 (stable/release candidate)
 
