@@ -533,8 +533,7 @@ var Sonos = (function(api, $) {
 		Sonos_updateGroupSelection();
 	}
 
-	function Sonos_TTSZoneChange() {
-		$( 'input#GroupVolume' ).prop( 'disabled', $( 'input#NewGroup' ).is( ':checked' ) );
+	function changeTTSEngine( ev ) {
 	}
 
 	function doTTS(device)
@@ -547,133 +546,67 @@ var Sonos = (function(api, $) {
 		Sonos_detectBrowser();
 		Sonos_defineUIStyle();
 
-		var html = '';
+		api.setCpanelContent('<div id="sonos-tts"/>');
 
-		var minVolume = 0;
-		var maxVolume = 100;
+$("div#sonos-tts").append('<div><strong>This very broken form is a work in progress/under development. This tab does not currently work. To test TTS, I recommend (a) using a Reactor "device action" as a playground (choose your Sonos device and the "Say" action), or (b) using Lua in the "Test Luup Code" tool.</strong></div>');
 
-		var engines = [	[ "GOOGLE", "Google" ],
-						[ "OSX_TTS_SERVER", 'OSX TTS server' ],
-						[ "MICROSOFT", "Microsoft" ],
-						[ "MARY", "Mary" ],
-						[ "RV", "ResponsiveVoice" ] ];
-		var defaultEngine = getParentState("DefaultEngineTTS", device) || "";
-		if ( isEmpty( defaultEngine ) ) {
-			defaultEngine = 'GOOGLE';
-		}
+		var $form = $('<form class="form form-horizontal"/>');
+		var $grp = $( '<div class="control-group"/>' );
+		$('<label class="control-label">Text:</label>').appendTo( $grp );
+		$('<div class="controls"><textarea id="tts-text" wrap="off" class="form-control form-control-sm" /></div>')
+			.appendTo( $grp );
+		$grp.appendTo( $form );
+		
+		$grp = $( '<div class="control-group"/>' );
+		$('<label class="control-label">Engine:</label>').appendTo( $grp );
+		$('<div class="controls"><select id="tts-engine" class="form-control form-control-sm" /></div>')
+			.appendTo( $grp );
+		$grp.appendTo( $form );
 
-		var languages = [	[ "en", "English" ],
-							[ "en-GB", "English (British)" ],
-							[ "en-US", "English (American)" ],
-							[ "en-CA", "English (Canadian)" ],
-							[ "en-AU", "English (Australian)" ],
-							[ "nl", "Dutch" ],
-							[ "fr", "French" ],
-							[ "fr-CA", "French (Canadian)" ],
-							[ "fr-FR", "French (French)" ],
-							[ "de", "German" ],
-							[ "it", "Italian" ],
-							[ "pt", "Portugese" ],
-							[ "pt-BR", "Portugese (Brazilian)" ],
-							[ "pt-PT", "Portugese (Portugese)" ],
-							[ "ru", 'Russian' ],
-							[ "es", "Spanish" ],
-							[ "es-mx", "Spanish (Mexican)" ],
-							[ "es-es", "Spanish (Spanish)" ] ];
-		var defaultLanguage = getParentState("DefaultLanguageTTS", device) || "";
-		if ( isEmpty( defaultLanguage ) ) {
-			defaultLanguage = 'en';
-		}
+		$('<fieldset id="engopts"/>').appendTo( $form );
+		
+		$grp = $( '<div class="control-group"/>' );
+		$('<div class="controls"><button id="say" class="btn btn-sm btn-primary">Say</button></div>')
+			.appendTo( $grp );
+		$grp.appendTo( $form );
 
-		html += '<table>';
+		$( 'div#sonos-tts' ).append( $form );
 
-		html += '<tr>';
-		html += '<td>Text:</td>';
-		html += '<td>';
-		html += '<textarea id="text" cols="54" rows="3" class="form-control"></textarea>';
-		html += '</td>';
-		html += '</tr>';
-
-		html += '<tr>';
-		html += '<td>Language:</td>';
-		html += '<td class="form-inline">';
-		html += '<select id="language1" class="form-control form-control-sm">';
-		html += '<option value="">(default: ' + defaultLanguage + ')</option>';
-		for (var i=0; i<languages.length; i++) {
-			html += '<option';
-			if (languages[i][0] == defaultLanguage) {
-				html += ' selected';
+		$.ajax({
+			url: api.getDataRequestURL(),
+			data: {
+				id: "lr_SonosSystem",
+				action: "ttsengines"
+			},
+			dataType: "json",
+			timeout: 15000
+		}).done( function( data ) {
+			var $opt;
+			var $el = $( 'select#tts-engine' );
+			TTSEngines = data.engines;
+			for ( var eid in ( TTSEngines || {} ) ) {
+				if ( TTSEngines.hasOwnProperty( eid ) ) {
+					var eng = TTSEngines[eid];
+					$opt = $( '<option/>' ).val( eid ).text( eng.name || eid );
+					$el.append( $opt );
+				}
 			}
-			html += ' value="' + languages[i][0] + '">' + languages[i][1] + '</option>';
-		}
-		html += '</select>';
-		html += '<input id="language" type="text" value="" class="form-control form-control-sm">';
-		html += '</td>';
-		html += '</tr>';
-
-		html += '<tr>';
-		html += '<td>Engine:</td>';
-		html += '<td class="form-inline">';
-		html += '<select id="engine" class="form-control form-control-sm">';
-		html += '<option value="">(default: ' + defaultEngine + ')</option>';
-		for (i=0; i<engines.length; i++) {
-			html += '<option';
-			if (engines[i][0] == defaultEngine) {
-				html += ' selected';
+			var val = getParentState( "DefaultEngineTTS", false ) || "";
+			if ( isEmpty(val) ) {
+				val = "GOOGLE";
 			}
-			html += ' value="' + engines[i][0] + '">' + engines[i][1] + '</option>';
-		}
-		html += '</select>';
-		html += '</td>';
-		html += '</tr>';
-
-		html += '<tr>';
-		html += '<td>Zones:</td>';
-		html += '<td class="form-inline">';
-		html += '<label class="radio inline"><input id="NewGroup" type="radio" class="ttszone" name="GroupTTS" checked value="NewGroup"/>&nbsp;Current zone</label>';
-		html += ' <label class="radio inline"><input id="CurrentGroup" type="radio" class="ttszone" name="GroupTTS" value="CurrentGroup"/>&nbsp;Current group</label>';
-		html += ' <label class="radio inline"><input id="GroupAll" type="radio" class="ttszone" name="GroupTTS" value="GroupAll"/>&nbsp;All zones</label>';
-		html += '</td>';
-		html += '</tr>';
-
-		html += '<tr>';
-		html += '<td>Volume:</td>';
-		html += '<td class="form-inline">';
-		html += '<select id="volumeTTS" class="form-control form-control-sm">';
-		html += '<option selected value="">(zone current)</option>';
-		for (i=minVolume; i<=maxVolume; i++) {
-			html += '<option value="' + i + '">' + i + '</option>';
-		}
-		html += '</select>';
-		html += ' <label class="checkbox inline">';
-		html += '<input id="GroupVolume" type="checkbox" value="GroupVolume"/>';
-		html += '&nbsp;Apply volume to all zones</label>';
-		html += '</td>';
-		html += '</tr>';
-
-		html += '<tr>';
-		html += '<td>';
-		html += '<button id="say" type="button" class="btn btn-sm sonosbtn">Say</button>';
-		html += '</td>';
-		html += '<td></td>';
-		html += '</tr>';
-
-		html += '</table>';
-
-		//html += '<p id="debug">';
-
-		api.setCpanelContent(html);
-
-		jQuery( 'button#say' ).on( 'click.sonos', function() { Sonos_say( device ); } );
-		jQuery( 'select#engine' ).val( "" );
-		jQuery( 'select#language1' ).val( "" ).on( 'change.sonos', function() {
-			jQuery( 'input#language' ).val( jQuery( this ).val() );
+			$opt = $( 'option[value="' + val + '"]', $el );
+			if ( 0 === $opt.length ) {
+				$( '<option/>' ).val( val ).text( val + " (not available)" )
+					.appendTo( $el );
+			}
+			$el.val( val ).on( 'change.sonos', changeTTSEngine );
+			changeTTSEngine();
+		}).fail( function() {
+			$el.replaceWith( "<span>Failed to load TTS engines; Luup may be reloading. To retry, wait a moment, then go back to the Control tab, then come back here.</span>");
 		});
-		jQuery( 'input#language' ).val( "" );
-		jQuery( 'input.ttszone' ).on( 'change.sonos', Sonos_TTSZoneChange );
 
-		Sonos_refreshTTS(device);
-		Sonos_TTSZoneChange();
+
 	}
 
 	function Sonos_detectBrowser()
