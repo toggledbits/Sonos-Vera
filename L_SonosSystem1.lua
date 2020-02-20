@@ -3072,6 +3072,8 @@ local function makeTTSAlert( device, settings )
 			L("(TTS) Speaking phrase from cache: %1", settings.URI)
 			return settings
 		end
+	else
+		D("(tts) caching disabled")
 	end
 
 	-- Convert text to speech using specified engine
@@ -3113,6 +3115,8 @@ local function makeTTSAlert( device, settings )
 				W("(TTS) Can't write cache meta in %1", cpath)
 			end
 		end
+	else
+		D("(tts) caching disabled, not saving generated audio")
 	end
 	return settings
 end
