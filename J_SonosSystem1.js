@@ -222,17 +222,16 @@ var SonosSystem = (function(api, $) {
 		$( '.enginesetting' ).each( function( ix, obj ) {
 			var $f = $(obj);
 			var val = $f.val() || "";
-			console.log( $f.attr( 'id' ) );
 			if ( ! isEmpty( val ) ) {
 				var id = $f.attr( 'id' ).replace( /^val-/, "" );
 				var meta = (TTSEngines[tts.defaultengine].options || {})[id];
 				/* Write if not empty, not same as default */
 				opts[id] = val;
-				console.log("saving " + id + " = " + val);
 			}
 		});
-		console.log( opts );
-		tts.engines = tts.engines || {};
+		if ( undefined === tts.engines || ( Array.isArray( tts.engines ) && tts.engines.length == 0 ) ) {
+			tts.engines = {};
+		}
 		tts.engines[tts.defaultengine] = opts;
 		tts.version = 1;
 		tts.serial = ( tts.serial || 0 ) + 1;
