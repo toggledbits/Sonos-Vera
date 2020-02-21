@@ -207,7 +207,7 @@ var SonosSystem = (function(api, $) {
 		return $col;
 	}
 
-	function handleSettingsSaveClick( ev ) {
+	function doSettingsSave() {
 		var device = api.getCpanelDeviceId();
 
 		var tts;
@@ -240,7 +240,10 @@ var SonosSystem = (function(api, $) {
 			{
 				'onSuccess' : function() {
 					/* If that went well, these are assumed to go well. */
-					api.setDeviceState(device, Sonos.SONOS_SYS_SID, "TTSConfig", ts);
+					if ( MultiBox /* isALTUI */ ) {
+						/* For whatever reason this makes ALTUI nuts */
+						api.setDeviceState(device, Sonos.SONOS_SYS_SID, "TTSConfig", ts);
+					}
 
 					var val = 0;
 					val |= $( 'input#debug-plugin' ).is( ':checked' ) ? 1 : 0;
@@ -258,6 +261,15 @@ var SonosSystem = (function(api, $) {
 				}
 			}
 		); /* setDeviceStateVariable */
+	}
+
+	function handleSaveSettingsClick( ev ) {
+		try {
+			doSettingsSave();
+		} catch (e) {
+			console.log(e);
+			assert(e);
+		}
 	}
 
 	function changeTTSEngine() {
@@ -393,6 +405,15 @@ var SonosSystem = (function(api, $) {
 		}
 	}
 
+	function handleTTSEngineChange( ev ) {
+		try {
+			changeTTSEngine();
+		} catch( e ) {
+			console.log( e );
+			alert( e );
+		}
+	}
+
 	function doSettings()
 	{
 		var k, val;
@@ -487,8 +508,8 @@ div.inp-default { color: #666; font-size: 0.80em; } \
 				$( '<option/>' ).val( val ).text( val + " (not available)" )
 					.appendTo( $el );
 			}
-			$el.val( val ).on( 'change.sonos', changeTTSEngine );
-			changeTTSEngine();
+			$el.val( val ).on( 'change.sonos', handleTTSEngineChange );
+			handleTTSEngineChange();
 		}).fail( function() {
 			$el.replaceWith( "<span>Failed to load TTS engines; Luup may be reloading. To retry, wait a moment, then go back to the Control tab, then come back here.</span>");
 		});
