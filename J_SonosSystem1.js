@@ -472,10 +472,16 @@ div.inp-default { color: #666; font-size: 0.80em; } \
 					$el.append( $opt );
 				}
 			}
-			var val = api.getDeviceState(device, Sonos.SONOS_SYS_SID, "DefaultEngineTTS") || "";
-			if ( isEmpty(val) ) {
-				val = "GOOGLE";
+
+			var val = api.getDeviceState(device, Sonos.SONOS_SYS_SID, "TTSConfig") || "";
+			var tts;
+			try {
+				tts = JSON.parse( val );
+			} catch (e) {
+				tts = { engines: {} };
 			}
+			val = isEmpty( tts.defaultengine ) ? "GOOGLE" : tts.defaultengine;
+
 			$opt = $( 'option[value="' + val + '"]', $el );
 			if ( 0 === $opt.length ) {
 				$( '<option/>' ).val( val ).text( val + " (not available)" )
