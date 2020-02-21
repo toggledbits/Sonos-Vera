@@ -240,7 +240,7 @@ var SonosSystem = (function(api, $) {
 			{
 				'onSuccess' : function() {
 					/* If that went well, these are assumed to go well. */
-					if ( MultiBox /* isALTUI */ ) {
+					if ( "undefined" === typeof(MultiBox) ) {  /* isALTUI */
 						/* For whatever reason this makes ALTUI nuts */
 						api.setDeviceState(device, Sonos.SONOS_SYS_SID, "TTSConfig", ts);
 					}
@@ -256,7 +256,7 @@ var SonosSystem = (function(api, $) {
 					api.performActionOnDevice( device, Sonos.SONOS_SYS_SID, "SetReadQueueContent",
 						{ actionArguments: { enable: val ? "1" : "0" } } );
 				},
-				'onFailure' : function() {
+				'onFailure' : function( a,b,c ) {
 					alert('There was a problem saving the configuration. Vera/Luup may have been restarting. Please wait a few seconds and try again.');
 				}
 			}
@@ -559,7 +559,7 @@ div.inp-default { color: #666; font-size: 0.80em; } \
 		$col = makeSettingsRow( "", $container ); /* Spacer */
 		$col = makeSettingsRow( "", $container );
 		$el = $('<button id="save-settings" class="btn btn-sm btn-primary">Save Changes</button>');
-		$el.on( 'click.sonos', handleSettingsSaveClick ).appendTo( $col );
+		$el.on( 'click.sonos', handleSaveSettingsClick ).appendTo( $col );
 	}
 
 /** ***************************************************************************
