@@ -15,7 +15,7 @@ var SonosSystem = (function(api, $) {
 	/* unique identifier for this plugin... */
 	var uuid = '79bf9374-f989-11e9-884c-dbb32f3fa64a'; /* SonosSystem 2019-12-11 19345 */
 
-	var pluginVersion = '2.0develop-20052.1305';
+	var pluginVersion = '2.0develop-20052.1312';
 
 	var _UIVERSION = 19301;     /* must coincide with Lua core */
 
@@ -252,9 +252,11 @@ var SonosSystem = (function(api, $) {
 					api.performActionOnDevice( device, Sonos.SONOS_SYS_SID, "SetDebugLogs",
 						{ actionArguments: { enable: String(val) } } );
 
-					val = $( 'input#read-queue' ).is( 'checked ' );
-					api.performActionOnDevice( device, Sonos.SONOS_SYS_SID, "SetReadQueueContent",
-						{ actionArguments: { enable: val ? "1" : "0" } } );
+					if ( false ) {
+						val = $( 'input#read-queue' ).is( 'checked ' );
+						api.performActionOnDevice( device, Sonos.SONOS_SYS_SID, "SetReadQueueContent",
+							{ actionArguments: { enable: val ? "1" : "0" } } );
+					}
 				},
 				'onFailure' : function( a,b,c ) {
 					alert('There was a problem saving the configuration. Vera/Luup may have been restarting. Please wait a few seconds and try again.');
@@ -550,16 +552,21 @@ div.inp-default { color: #666; font-size: 0.80em; } \
 			.appendTo( $col );
 		updateDebugStatus( device );
 
-		$col = makeSettingsRow( "Read Queue:", $container );
-		$( '<label for="read-queue"><input type="checkbox" id="read-queue" value="1">&nbsp;</label>' )
-			.appendTo( $col );
-		var readQueue = api.getDeviceState(device, Sonos.SONOS_SYS_SID, "FetchQueue") || "0";
-		$( 'input#read-queue' ).prop( 'checked', "0" !== readQueue );
+		if ( false ) {
+			$col = makeSettingsRow( "Read Queue:", $container );
+			$( '<label for="read-queue"><input type="checkbox" id="read-queue" value="1">&nbsp;</label>' )
+				.appendTo( $col );
+			var readQueue = api.getDeviceState(device, Sonos.SONOS_SYS_SID, "FetchQueue") || "0";
+			$( 'input#read-queue' ).prop( 'checked', "0" !== readQueue );
+		}
 
 		$col = makeSettingsRow( "", $container ); /* Spacer */
 		$col = makeSettingsRow( "", $container );
 		$el = $('<button id="save-settings" class="btn btn-sm btn-primary">Save Changes</button>');
 		$el.on( 'click.sonos', handleSaveSettingsClick ).appendTo( $col );
+
+		$( '<div class="sonos-footer">Sonos Plugin version ' + pluginVersion + '</div>' )
+			.appendTo( $container );
 	}
 
 /** ***************************************************************************
