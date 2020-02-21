@@ -15,7 +15,7 @@ var SonosSystem = (function(api, $) {
 	/* unique identifier for this plugin... */
 	var uuid = '79bf9374-f989-11e9-884c-dbb32f3fa64a'; /* SonosSystem 2019-12-11 19345 */
 
-	var pluginVersion = '2.0develop-20052.1312';
+	var pluginVersion = '2.0develop-20052.1358';
 
 	var _UIVERSION = 19301;     /* must coincide with Lua core */
 
@@ -217,11 +217,12 @@ var SonosSystem = (function(api, $) {
 		} catch (e) {
 			tts = { engines: {} };
 		}
-		tts.defaultengine = $( 'select#tts-engine' ).val() || "RV";
+		tts.defaultengine = $( 'select#tts-engine' ).val() || "GOOGLE";
 		var opts = {};
 		$( '.enginesetting' ).each( function( ix, obj ) {
 			var $f = $(obj);
 			var val = $f.val() || "";
+			console.log( $f );
 			if ( ! ( isEmpty( val ) ) ){
 				var id = $f.attr( 'id' ).replace( /^val-/, "" );
 				var meta = (TTSEngines[tts.defaultengine].options || {})[id];
@@ -277,7 +278,7 @@ var SonosSystem = (function(api, $) {
 	function changeTTSEngine() {
 		var $container = $( 'div#sonos-settings' );
 		var $el = $( 'select#tts-engine', $container );
-		var eid = $el.val() || "RV";
+		var eid = $el.val() || "GOOGLE";
 		var tts;
 		var s = api.getDeviceState(api.getCpanelDeviceId(), Sonos.SONOS_SYS_SID, "TTSConfig") || "";
 		try {
@@ -357,32 +358,39 @@ var SonosSystem = (function(api, $) {
 								.appendTo( $mm );
 						}
 					}
+					/* Add the "real" value field */
+					$( '<input/>' ).attr( 'type', 'hidden' )
+						.attr( 'id', 'val-' + meta.id )
+						.addClass("form-control form-control-sm enginesetting")
+						.attr( 'placeholder', 'Enter custom/non-standard value' )
+						.val( currVal )
+						.appendTo( $col );
+					/* Now preselect the menu value */
 					var $option = $( 'option[value="' + currVal + '"]', $mm );
 					if ( 0 === $option.length ) {
+						/* The current value is not a menu choice. If the option allows, make entry field visible */
 						if ( meta.unrestricted ) {
-							$mm.val( "*" ); /* select custom */
+							$( 'input#val-' + meta.id ).attr( 'type', 'text' );
+							$mm.val( "*" ); /* select custom entry option */
 						} else {
+							/* No. Force first menu item */
 							$( 'option:first', $mm ).prop( 'selected', true );
 							currVal = $mm.val();
+							$( 'input#val-' + meta.id ).val( currVal );
 						}
 					} else {
 						$mm.val( currVal );
 					}
-					$( '<input/>' ).attr( 'type', meta.unrestricted ? "text" : "hidden" )
-						.attr( 'id', 'val-' + meta.id )
-						.addClass("form-control form-control-sm enginesetting")
-						.val( currVal )
-						.hide()
-						.appendTo( $col );
+					/* On menu change, manage hidden field value (and possibly visibility) */
 					$mm.on( 'change.sonos', function( ev ) {
-						var $el = $( ev.target );
+						var $el = $( ev.currentTarget );
 						var val = $el.val();
 						var id = $el.attr( 'id' ).replace( /^sel-/, "val-" );
 						var $f = $( 'input#' + id );
 						if ( "*" === val ) {
-							$f.show().val( "" );
+							$f.attr( 'type', 'text' ).val( "" );
 						} else {
-							$f.hide().val( val );
+							$f.attr( 'type', 'hidden' ).val( val );
 						}
 					});
 				} else {
