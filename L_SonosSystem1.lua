@@ -8,7 +8,7 @@
 module( "L_SonosSystem1", package.seeall )
 
 PLUGIN_NAME = "Sonos"
-PLUGIN_VERSION = "2.0-20053.1045"
+PLUGIN_VERSION = "2.0-20053.1240"
 PLUGIN_ID = 4226
 
 local _CONFIGVERSION = 19298
@@ -2858,29 +2858,10 @@ local function sayOrAlert(device, parameters, saveAndRestore)
 	local devices = defaultValue(parameters, "GroupDevices", "")
 	local zones = defaultValue(parameters, "GroupZones", "")
 	local uri = defaultValue(parameters, "URI", nil)
-	local duration = defaultValue(parameters, "Duration", "0")
+	local duration = tonumber( defaultValue( parameters, "Duration", "10" ) ) or 10
+	if duration <= 0 then duration = 10 end
 	local sameVolume = false
-	if (parameters.SameVolumeForAll == "true"
-		or parameters.SameVolumeForAll == "TRUE"
-		or parameters.SameVolumeForAll == "1") then
-		sameVolume = true
-	end
-
-	-- If empty URI is passed, abandon all TTS/alerts
-	if (uri or "") == "" then
-		if sayPlayback[device] then
-			-- Leave queue with currently playing element
-			while sayQueue[device] and #sayQueue[device] > 1 do
-				table.remove( sayQueue[device] )
-			end
-			-- Rush the end task
-			local task = scheduler.getTask( "endSayAlert"..device)
-			if task then
-				task:delay( 0, { replace=true } )
-			end
-		end
-		return
-	end
+	saveVolume = parameters.SaveVolumeForAll and string.find( "|1|true|TRUE", parameters.SameVolumeForAll )
 
 	local targets = {}
 	local newGroup = true
@@ -2966,7 +2947,6 @@ local function sayOrAlert(device, parameters, saveAndRestore)
 	playURI(localUUID, instanceId, uri, "1", volume, newGroup and keys(targets) or nil, sameVolume, nil, newGroup, true)
 
 	if saveAndRestore then
-		if (tonumber(duration) or 0) <= 0 then duration = 30 end
 		D("sayOrAlert() delaying for duration %1", duration)
 		local t = scheduler.getTask("endSayAlert"..device) or scheduler.Task:new("endSayAlert"..device, device, endSayAlert, { device })
 		t:delay( duration, { replace=true } )
@@ -2978,6 +2958,23 @@ end
 local function queueAlert(device, settings)
 	D("queueAlert(%1,%2)", device, settings)
 	sayQueue[device] = sayQueue[device] or {}
+
+	-- If empty URI is passed, abandon all queued TTS/alerts.
+	if (settings.URI or "") == "" then
+		if sayPlayback[device] then
+			-- Leave queue with currently playing element (if any)
+			while sayQueue[device] and #sayQueue[device] > 1 do
+				table.remove( sayQueue[device] )
+			end
+			-- Rush the end task, if any
+			local task = scheduler.getTask( "endSayAlert"..device)
+			if task then
+				task:delay( 0, { replace=true } )
+			end
+		end
+		return
+	end
+
 	local first = #sayQueue[device] == 0
 	table.insert(sayQueue[device], settings)
 	-- First one kicks things off
