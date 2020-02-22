@@ -8,7 +8,7 @@
 module( "L_Sonos1", package.seeall )
 
 PLUGIN_NAME = "Sonos"
-PLUGIN_VERSION = "1.5-19354"
+PLUGIN_VERSION = "1.5-20053"
 PLUGIN_ID = 4226
 
 local DEBUG_MODE = false	-- Don't hardcode true--use state variable config
@@ -2482,7 +2482,7 @@ local function sayOrAlert(device, parameters, saveAndRestore)
 	local devices = defaultValue(parameters, "GroupDevices", "")
 	local zones = defaultValue(parameters, "GroupZones", "")
 	local uri = defaultValue(parameters, "URI", nil)
-	local duration = defaultValue(parameters, "Duration", "0")
+	local duration = tonumber(defaultValue(parameters, "Duration", "0")) or 0
 	local sameVolume = false
 	if (parameters.SameVolumeForAll == "true"
 		or parameters.SameVolumeForAll == "TRUE"
@@ -2890,6 +2890,7 @@ function actionSonosAlert( lul_device, lul_settings )
 		-- Sound already defined
 		queueAlert(lul_device, lul_settings)
 	else
+		log("Alert playing without save/restore, no Duration supplies")
 		sayOrAlert(lul_device, lul_settings, false)
 	end
 end
