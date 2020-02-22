@@ -21,7 +21,10 @@ var Sonos = (function(api, $) {
 
 	var myModule = {};
 
-	var timeoutVar;
+	var sysDefaultTTS = "MARY";
+	var TTSEngines = false;
+	var playerShowing = false;
+
 	var browserIE = false;
 	var parseXml;
 	var prevGroups;
@@ -84,10 +87,7 @@ var Sonos = (function(api, $) {
 
 	function doPlayer(device)
 	{
-		if ( timeoutVar ) {
-			clearTimeout(timeoutVar);
-			timeoutVar = false;
-		}
+		playerShowing = false;
 
 		Sonos_detectBrowser();
 		Sonos_defineUIStyle();
@@ -279,10 +279,25 @@ var Sonos = (function(api, $) {
 		prevVolume = null;
 
 		Sonos_refreshPlayer(device);
+
+		playerShowing = true;
+		api.registerEventHandler('on_ui_deviceStatusChanged', Sonos, 'onUIDeviceStatusChanged');
+	}
+
+	function onUIDeviceStatusChanged( args ) {
+		if ( !playerShowing ) {
+			return;
+		}
+		var pdev = api.getCpanelDeviceId();
+		if ( args.id == pdev ) {
+			Sonos_refreshPlayer( pdev );
+		}
 	}
 
 	function doHelp(device)
 	{
+		playerShowing = false;
+
 		var html, pos1, pos2;
 		Sonos_defineUIStyle();
 
@@ -469,6 +484,8 @@ var Sonos = (function(api, $) {
 
 	function doGroup(device)
 	{
+		playerShowing = false;
+
 		Sonos_detectBrowser();
 		Sonos_defineUIStyle();
 
@@ -533,44 +550,69 @@ var Sonos = (function(api, $) {
 		Sonos_updateGroupSelection();
 	}
 
-	function changeTTSEngine( ev ) {
-	}
-
-	function doTTS(device)
+	function doTTS( device )
 	{
-		if ( timeoutVar ) {
-			clearTimeout(timeoutVar);
-			timeoutVar = false;
-		}
+		playerShowing = false;
 
 		Sonos_detectBrowser();
 		Sonos_defineUIStyle();
 
 		api.setCpanelContent('<div id="sonos-tts"/>');
 
-$("div#sonos-tts").append('<div><strong>This very broken form is a work in progress/under development. This tab does not currently work. To test TTS, I recommend (a) using a Reactor "device action" as a playground (choose your Sonos device and the "Say" action), or (b) using Lua in the "Test Luup Code" tool.</strong></div>');
+		$container = $( 'div#sonos-tts' );
 
-		var $form = $('<form class="form form-horizontal"/>');
-		var $grp = $( '<div class="control-group"/>' );
-		$('<label class="control-label">Text:</label>').appendTo( $grp );
-		$('<div class="controls"><textarea id="tts-text" wrap="off" class="form-control form-control-sm" /></div>')
-			.appendTo( $grp );
-		$grp.appendTo( $form );
-		
-		$grp = $( '<div class="control-group"/>' );
-		$('<label class="control-label">Engine:</label>').appendTo( $grp );
-		$('<div class="controls"><select id="tts-engine" class="form-control form-control-sm" /></div>')
-			.appendTo( $grp );
-		$grp.appendTo( $form );
+		var $row = $( '<div class="row" />' );
+		$( '<div class="col-xs-6 col-md-3 col-lg-2 col-xl-1">Text to Speak:</div>' ).appendTo( $row );
+		$( '<div class="col-xs-6 col-md-9 col-lg-10 col-xl-11 form-inline"><textarea id="tts-text" wrap="off" class="form-control" /></div>' )
+			.appendTo( $row );
+		$row.appendTo( $container );
 
-		$('<fieldset id="engopts"/>').appendTo( $form );
-		
-		$grp = $( '<div class="control-group"/>' );
-		$('<div class="controls"><button id="say" class="btn btn-sm btn-primary">Say</button></div>')
-			.appendTo( $grp );
-		$grp.appendTo( $form );
+		$row = $( '<div class="row" />' );
+		$( '<div class="col-xs-6 col-md-3 col-lg-2 col-xl-1">Engine:</div>' ).appendTo( $row );
+		$( '<div class="col-xs-6 col-md-9 col-lg-10 col-xl-11 form-inline"><select id="tts-engine" class="form-control" /></div>' )
+			.appendTo( $row );
+		$row.appendTo( $container );
 
-		$( 'div#sonos-tts' ).append( $form );
+		$row = $( '<div class="row" />' );
+		$( '<div class="col-xs-6 col-md-3 col-lg-2 col-xl-1">Volume:</div>' ).appendTo( $row );
+		$( '<div class="col-xs-6 col-md-9 col-lg-10 col-xl-11 form-inline"><select id="tts-volume" class="form-control" /></div>' )
+			.appendTo( $row );
+		$row.appendTo( $container );
+		var $mm = $( 'select#tts-volume', $row );
+		$( '<option/>' ).val( "" ).text( "(current volume level)" ).appendTo( $mm );
+		for (var k=0; k<= 100; k+= 5 ) {
+			$( '<option/>' ).val( k ).text( k ).appendTo( $mm );
+		}
+
+		$row = $( '<div class="row" />' );
+		$( '<div class="col-xs-6 col-md-3 col-lg-2 col-xl-1">Zone:</div>' ).appendTo( $row );
+		$( '<div class="col-xs-6 col-md-9 col-lg-10 col-xl-11 form-inline"><select id="tts-zone" class="form-control" /></div>' )
+			.appendTo( $row );
+		$row.appendTo( $container );
+		$mm = $( 'select#tts-zone', $row );
+		$( '<option/>' ).val( "" ).text( "This zone player only" ).appendTo( $mm );
+		$( '<option/>' ).val( "CURRENT" ).text( "This player's group" ).appendTo( $mm );
+		$( '<option/>' ).val( "ALL" ).text( "All zone players" ).appendTo( $mm );
+
+		$row = $( '<div class="row" />' );
+		$( '<div class="col-xs-6 col-md-3 col-lg-2 col-xl-1">&nbsp;</div>' ).appendTo( $row );
+		$( '<div class="col-xs-6 col-md-9 col-lg-10 col-xl-11 form-inline"><button id="say" class="btn btn-sm btn-primary">Say</button></div>' )
+			.appendTo( $row );
+		$row.appendTo( $container );
+
+		$( 'button#say' ).on( 'click.sonos', function() {
+			var args = {
+				Text: $( 'textarea#tts-text' ).val(),
+				GroupZones: $( 'select#tts-zone' ).val(),
+				Engine: $( 'select#tts-engine' ).val()
+			};
+			var vol = $( 'select#tts-volume' ).val();
+			if ( ! isEmpty( vol ) ) {
+				args.Volume = vol;
+				args.SameVolumeForAll = 1;
+			}
+			api.performActionOnDevice(device, SONOS_SID, 'Say', { actionArguments: args } );
+		});
 
 		$.ajax({
 			url: api.getDataRequestURL(),
@@ -581,32 +623,40 @@ $("div#sonos-tts").append('<div><strong>This very broken form is a work in progr
 			dataType: "json",
 			timeout: 15000
 		}).done( function( data ) {
-			var $opt;
-			var $el = $( 'select#tts-engine' );
 			TTSEngines = data.engines;
+
+			var $el = $( 'select#tts-engine' );
+			$el.empty();
+
+			var val = getParentState( "TTSConfig", device );
+			var tts;
+			try {
+				tts = JSON.parse( val );
+			} catch (e) {
+				tts = { engines: {} };
+			}
+			if ( undefined === tts.engines || ( Array.isArray( tts.engines ) && tts.engines.length == 0 ) ) {
+				tts.engines = {};
+			}
+			val = tts.defaultengine || sysDefaultTTS;
+
+			var $opt;
 			for ( var eid in ( TTSEngines || {} ) ) {
 				if ( TTSEngines.hasOwnProperty( eid ) ) {
 					var eng = TTSEngines[eid];
-					$opt = $( '<option/>' ).val( eid ).text( eng.name || eid );
+					$opt = $( '<option/>' ).val( eid ).text( ( eng.name || eid ) +
+						( eid === val ? " (default)" : "" ) );
 					$el.append( $opt );
 				}
 			}
-			var val = getParentState( "DefaultEngineTTS", false ) || "";
-			if ( isEmpty(val) ) {
-				val = "GOOGLE";
-			}
 			$opt = $( 'option[value="' + val + '"]', $el );
 			if ( 0 === $opt.length ) {
-				$( '<option/>' ).val( val ).text( val + " (not available)" )
-					.appendTo( $el );
+				$( '<option/>' ).val( val ).text( val + "??" ).appendTo( $el );
 			}
-			$el.val( val ).on( 'change.sonos', changeTTSEngine );
-			changeTTSEngine();
+			$el.val( val );
 		}).fail( function() {
 			$el.replaceWith( "<span>Failed to load TTS engines; Luup may be reloading. To retry, wait a moment, then go back to the Control tab, then come back here.</span>");
 		});
-
-
 	}
 
 	function Sonos_detectBrowser()
@@ -1004,18 +1054,6 @@ input#language { width: 6em; } \
 			prevMute = mute;
 			prevVolume = volume;
 		}
-
-		timeoutVar = setTimeout(function() { Sonos_refreshPlayer(device); }, 1000);
-	}
-
-	function Sonos_refreshTTS(device)
-	{
-		var onlineState = api.getDeviceState(device, SONOS_SID, "SonosOnline", 1) || "";
-		if ( isEmpty( onlineState ) ) {
-			onlineState = '1';
-		}
-		jQuery('#say').prop( 'disabled', '0' === onlineState );
-		timeoutVar = setTimeout( function() { Sonos_refreshTTS(device); }, 1000);
 	}
 
 	function Sonos_play(device)
@@ -1182,7 +1220,7 @@ input#language { width: 6em; } \
 	myModule = {
 		uuid: uuid,
 		//onBeforeCpanelClose: onBeforeCpanelClose,
-		//onUIDeviceStatusChanged: onUIDeviceStatusChanged,
+		onUIDeviceStatusChanged: onUIDeviceStatusChanged,
 		doPlayer: function() { try { doPlayer(api.getCpanelDeviceId()); } catch(e) { console.log(e); } },
 		doGroup: function() { try { doGroup(api.getCpanelDeviceId()); } catch(e) { console.log(e); } },
 		doTTS: function() { try { doTTS(api.getCpanelDeviceId()); } catch(e) { console.log(e); } },

@@ -21,28 +21,9 @@ var SonosSystem = (function(api, $) {
 
 	var myModule = {};
 
-	var TTSLanguages = [
-						[ "en", "English" ],
-						[ "en-GB", "English (British)" ],
-						[ "en-US", "English (American)" ],
-						[ "en-CA", "English (Canadian)" ],
-						[ "en-AU", "English (Australian)" ],
-						[ "nl", "Dutch" ],
-						[ "fr", "French" ],
-						[ "fr-CA", "French (Canadian)" ],
-						[ "fr-FR", "French (French)" ],
-						[ "de", "German" ],
-						[ "it", "Italian" ],
-						[ "pt", "Portugese" ],
-						[ "pt-BR", "Portugese (Brazilian)" ],
-						[ "pt-PT", "Portugese (Portugese)" ],
-						[ "ru", 'Russian' ],
-						[ "es", "Spanish" ],
-						[ "es-mx", "Spanish (Mexican)" ],
-						[ "es-es", "Spanish (Spanish)" ]
-	];
-
 	var TTSEngines = {};
+	
+	var sysDefaultTTS = "MARY";
 
 	var isOpenLuup = false;
 
@@ -217,7 +198,7 @@ var SonosSystem = (function(api, $) {
 		} catch (e) {
 			tts = { engines: {} };
 		}
-		tts.defaultengine = $( 'select#tts-engine' ).val() || "GOOGLE";
+		tts.defaultengine = $( 'select#tts-engine' ).val() || sysDefaultTTS;
 		var opts = {};
 		$( '.enginesetting' ).each( function( ix, obj ) {
 			var $f = $(obj);
@@ -279,7 +260,7 @@ var SonosSystem = (function(api, $) {
 	function changeTTSEngine() {
 		var $container = $( 'div#sonos-settings' );
 		var $el = $( 'select#tts-engine', $container );
-		var eid = $el.val() || "GOOGLE";
+		var eid = $el.val() || sysDefaultTTS;
 		var tts;
 		var s = api.getDeviceState(api.getCpanelDeviceId(), Sonos.SONOS_SYS_SID, "TTSConfig") || "";
 		try {
@@ -512,7 +493,7 @@ div.inp-default { color: #666; font-size: 0.80em; } \
 			} catch (e) {
 				tts = { engines: {} };
 			}
-			val = isEmpty( tts.defaultengine ) ? "GOOGLE" : tts.defaultengine;
+			val = isEmpty( tts.defaultengine ) ? sysDefaultTTS : tts.defaultengine;
 
 			$opt = $( 'option[value="' + val + '"]', $el );
 			if ( 0 === $opt.length ) {
