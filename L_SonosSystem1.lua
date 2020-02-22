@@ -8,7 +8,7 @@
 module( "L_SonosSystem1", package.seeall )
 
 PLUGIN_NAME = "Sonos"
-PLUGIN_VERSION = "2.0-20052"
+PLUGIN_VERSION = "2.0-20052.2330"
 PLUGIN_ID = 4226
 
 local _CONFIGVERSION = 19298
@@ -21,6 +21,7 @@ local MIN_TTS_VERSION = 19360	-- Minimum version of L_SonosTTS that works
 local MSG_CLASS = "Sonos"
 local isOpenLuup = false
 local pluginDevice
+local logFile = false
 
 local taskHandle = -1 -- luup.task use
 local TASK_ERROR = 2
@@ -218,6 +219,7 @@ local function dump(t, seen)
 	return str
 end
 
+local logToFile
 local function L(msg, ...) -- luacheck: ignore 212
 	local str
 	local level = defaultLogLevel or 50
@@ -242,6 +244,9 @@ local function L(msg, ...) -- luacheck: ignore 212
 		end
 	)
 	luup.log(str, math.max(1, level))
+	if logFile then
+		pcall( logToFile, str, level )
+	end
 	if level == 0 and debug and debug.traceback then luup.log( debug.traceback(), 1 ) error(str) end
 end
 
@@ -397,9 +402,36 @@ local function getInstallPath()
 			W("This version of the Sonos plugin requires openLuup 2018.11.21 or higher")
 			return "./" -- punt
 		end
-		return loader.find_file( "L_Sonos1.lua" ):gsub( "L_Sonos1.lua$", "" )
+		return loader.find_file( "L_SonosSystem1.lua" ):gsub( "L_SonosSystem1.lua$", "" )
 	end
 	return "/etc/cmh-ludl/"
+end
+
+-- Log message to log file.
+logToFile = function(str, level)
+	local lfn = getInstallPath() .. "Sonos.log"
+	if logFile == false then
+		logFile = io.open(lfn, "a")
+		-- Yes, we leave nil if it can't be opened, and therefore don't
+		-- keep trying to open as a result. By design.
+	end
+	if logFile then
+		local maxsizek = getVarNumeric("MaxLogSize", 1024, pluginDevice, SONOS_SYS_SID)
+		if maxsizek <= 0 then
+			-- We should not be open now (runtime change, no reload needed)
+			logFile:close()
+			logFile = false
+			return
+		end
+		if logFile:seek("end") >= (1024*maxsizek) then
+			logFile:close()
+			os.execute("pluto-lzo c '" .. lfn .. "' '" .. lfn .. "-prev.lzo'")
+			logFile = io.open(lfn, "w")
+		end
+		level = level or 50
+		logFile:write(string.format("%02d %s %s\n", level, os.date("%x.%X"), str))
+		logFile:flush()
+	end
 end
 
 TaskManager = function( luupCallbackName )
@@ -2399,9 +2431,9 @@ setup = function(zoneDevice, flag)
 		luup.attr_set( "ip", newIP, zoneDevice )
 	end
 	if (newIP or "") == "" then
-		setVar("SonosOnline", "0", zoneDevice, SONOS_ZONE_SID)
-		setVar("CurrentStatus", "Offline", zoneDevice, UPNP_AVTRANSPORT_SID)
-		setVar("ProxyUsed", "", zoneDevice, SONOS_ZONE_SID) -- plugin variable??? different per zone?
+		setVar(SONOS_ZONE_SID, "SonosOnline", "0", zoneDevice)
+		setVar(UPNP_AVTRANSPORT_SID, "CurrentStatus", "Offline", zoneDevice)
+		setVar(SONOS_ZONE_SID, "ProxyUsed", "", zoneDevice) -- plugin variable??? different per zone?
 		E("No/invalid IP address for #%1", zoneDevice)
 		return false
 	end
@@ -2422,9 +2454,9 @@ setup = function(zoneDevice, flag)
 										{ "urn:schemas-upnp-org:device:MediaServer:1",
 											{ UPNP_MR_CONTENT_DIRECTORY_SERVICE } }})
 	if not status then
-		setVar("SonosOnline", "0", zoneDevice, SONOS_ZONE_SID)
-		setVar("CurrentStatus", "Offline", zoneDevice, UPNP_AVTRANSPORT_SID)
-		setVar("ProxyUsed", "", zoneDevice, SONOS_ZONE_SID) -- ??? plugin variable? see above
+		setVar(SONOS_ZONE_SID, "SonosOnline", "0", zoneDevice)
+		setVar(UPNP_AVTRANSPORT_SID, "CurrentStatus", "Offline", zoneDevice)
+		setVar(SONOS_ZONE_SID, "ProxyUsed", "", zoneDevice) -- ??? plugin variable? see above
 		W("Zone %1 (#%2) appears to be offline. %3", (luup.devices[zoneDevice] or {}).description,
 			zoneDevice, uuid)
 		return false
@@ -2550,6 +2582,7 @@ local function systemRunOnce( pdev )
 		initVar( "Message", "", pdev, SONOS_SYS_SID )
 		initVar( "Enabled", 1, pdev, SONOS_SYS_SID )
 		initVar( "DebugLogs", 0, pdev, SONOS_SYS_SID )
+		initVar( "MaxLogSize", "", pdev, SONOS_SYS_SID )
 	end
 
 	setVar( SONOS_SYS_SID, "ConfigVersion", _CONFIGVERSION, pdev )
@@ -2591,7 +2624,8 @@ local function deferredStartup(device)
 	local children = {}
 	for k,v in pairs( luup.devices ) do
 		if v.device_type == SONOS_ZONE_DEVICE_TYPE then
-			D("deferredStartup() found child %1 parent %2", k, v.device_num_parent)
+			local zid = luup.attr_get( "altid", k ) or ""
+			D("deferredStartup() found child %1 zoneid %3 parent %2", k, v.device_num_parent, zid)
 			if v.device_num_parent == 0 then
 				-- Old-style standalone; convert to child
 				W("Adopting standalone (old) Sonos device by new parent %1", device)
@@ -2601,14 +2635,18 @@ local function deferredStartup(device)
 				luup.set_failure( 1, k )
 				reload = true
 			elseif v.device_num_parent == device then
+				L("Starting %1 (#%2) zone id %3", v.description, k, zid)
 				children[k] = v
 				count = count + 1
+				setVar(UPNP_AVTRANSPORT_SID, "CurrentStatus", "Starting...", k)
 				local status,success = pcall( startZone, k )
 				if status and success then
 					luup.set_failure( 0, k )
 					started = started + 1
 				else
+					W("Failed to start child %1 (#%2): %3", v.description, k, success)
 					luup.set_failure( 1, k )
+					setVar(UPNP_AVTRANSPORT_SID, "CurrentStatus", tostring(success), k)
 				end
 			end
 		end
@@ -2670,7 +2708,7 @@ local function deferredStartup(device)
 	end
 
 	D("deferredStartup() done. We're up and running!")
-	setVar( SONOS_SYS_SID, "Message", string.format("Running %d zones", count), device )
+	setVar( SONOS_SYS_SID, "Message", string.format("Running %d zones", started), device )
 
 	-- Start a new master task
 	local t = scheduler.Task:new( "master", device, runMasterTick, { device } )
@@ -2701,6 +2739,11 @@ function startup( lul_device )
 
 	local debugLogs = getVarNumeric("DebugLogs", 0, lul_device, SONOS_SYS_SID)
 	setDebugLogs(debugLogs)
+
+	-- See if log file needs to be opened
+	if getVarNumeric("MaxLogSize", 1024, lul_device, SONOS_SYS_SID) > 0 then
+		pcall( logToFile, "Log file opened at startup" )
+	end
 
 	systemRunOnce( lul_device )
 
@@ -3038,7 +3081,7 @@ local function makeTTSAlert( device, settings )
 	local s = getVar( "TTSConfig", "", pluginDevice, SONOS_SYS_SID )
 	local json = require "dkjson"
 	TTSConfig = json.decode( s ) or { defaultengine=tts.getDefaultEngineId(), engines={} }
-	local eid = (settings.Engine or "") ~= "" and settings.Engine or TTSConfig.defaultengine or 
+	local eid = (settings.Engine or "") ~= "" and settings.Engine or TTSConfig.defaultengine or
 		tts.getDefaultEngineId()
 
 	local engobj = tts.getEngine( eid )
