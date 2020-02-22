@@ -2360,7 +2360,7 @@ function startup( lul_device )
 		if not sysdev and lul_device == minzone and getVarNumeric( "UpgradeAttempted", 0, lul_device, SONOS_SID ) == 0 then
 			setVar( SONOS_SID, "UpgradeAttempted", os.time(), lul_device )
 			log("Upgrade prep 2.0, didn't find SonosSystem device, creating and reloading...")
-			luup.call_action( "urn:micasaverde-com:serviceId:HomeAutomationGateway1", "CreateDevice", 
+			luup.call_action( "urn:micasaverde-com:serviceId:HomeAutomationGateway1", "CreateDevice",
 				{ UpnpDevFilename="D_SonosSystem1.xml", UpnpImplFilename="I_SonosSystem1.xml",
 				  Description="Sonos Plugin", Reload="1" }, 0 )
 			luup.call_delay( 'SonosReload', 30, "" ) -- insurance
@@ -2369,6 +2369,9 @@ function startup( lul_device )
 		setData("CurrentStatus", "Pending 2.0 upgrade...", lul_device, false)
 		return true
 	end
+
+	-- Prepare for 2.0
+	luup.attr_set( "plugin", "", lul_device )
 
 	if not isOpenLuup and luup.short_version then
 		-- Real Vera 7.30+
