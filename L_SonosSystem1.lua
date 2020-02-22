@@ -1093,7 +1093,8 @@ local function checkTransportState( uuid )
 	if dataTable[uuid].TransportState == "PLAYING" then
 		if dataTable[uuid].CurrentTrackURI == sayQueue[device][1].URI and not sayQueue[device][1].__playing then
 			D("checkTransportState() say queue playing %1", dataTable[uuid].CurrentTrackURI)
-			if dataTable[uuid].CurrentTrackDuration then
+			-- CurrentTrackDuration invalid for some generated media... :/
+			if false and dataTable[uuid].CurrentTrackDuration then
 				local hh,mm,ss = unpack( split( dataTable[uuid].CurrentTrackDuration, ":" ) )
 				ss = (tonumber(hh) or 0)*3600 + (tonumber(mm) or 0)*60 + ss + 1
 				task:delay( ss, { replace=true } )
