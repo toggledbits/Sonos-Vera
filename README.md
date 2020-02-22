@@ -23,62 +23,49 @@ Please see CHANGELOG.md for release notes.
 
 Please read the installation instructions through completely to get an idea of what you're going to be doing before you start doing it.
 
-**This section is only for users that have the current (version 1.x) Sonos plugin installed. If you have never used the Sonos 1.x plugin, proceed to *Installation -- New Installs*.**
+## Uninstalling Sonos 1.4.x
 
-Sonos v2.0 is now a parent-child plugin. When upgrading to 2.0 from 1.x, your existing Sonos devices will be converted to child devices of a new device.
+**This section only applies to those user that are currently running any 1.4.x (or earlier) version of the Sonos Plugin.** If you are not sure, you can run this part of the procedure safely anyway--it will not harm anything.
 
-### Manual Installation on Vera (upgrade from 1.x)
+Before installing 2.0, you **must** uninstall the existing Sonos plugin. This procedure will decouple your Sonos devices, so that when you uninstall the plugin, your existing Sonos devices are preserved. They will be adopted by 2.0 as children, keeping their current device numbers, which will keep your scenes, Lua, Reactor, PLEG, etc. intact.
 
-1. Go to [the Github repository for the project](https://github.com/toggledbits/Sonos-Vera).
-2. Click the green "Clone or download" button and choose "Download ZIP". Save the ZIP file somewhere.
-3. Unzip the ZIP file.
-4. Select the files (except the `.md` files and the `services` and `icons` directories and their contents--these are no longer required) as a group and drag them to the upload tool at *Apps > Develop apps > Luup files*. This will upload all the files as a single batch and then restart Luup.
-5. After the Luup restart, go to *Apps > Develop apps > Create device*, enter and submit:
-  * Description: `Sonos` (or whatever you choose)
-  * Device UPnP Filename: `D_SonosSystem1.xml` (exactly as shown)
-  * Device UPnP Filename: `I_SonosSystem1.xml` (exactly as shown)
-    > WARNING: You must enter the filenames exactly as shown above. Any error may cause your system to not restart and require intervention from Vera Support.
-  * Hit the "Create device" button.
-  * **NOTE:** if you are upgrading to 2.0 from a prior version, DO NOT SKIP THIS STEP.
-6. Go to *Apps > Develop apps > Test Luup code (Lua)* and enter/run: `luup.reload()` 
-7. After Luup finishes reloading, [hard-refresh your browser](https://www.getfilecloud.com/blog/2015/03/tech-tip-how-to-do-hard-refresh-in-browsers/). This is a vital step that cannot be skipped!
+1. Run the following Lua in *Apps > Develop apps > Test Luup code*. This code will disconnect your existing Sonos devices from the installed plugin. The devices will not be deleted, and they will still operate normally. By decoupling them from the plugin here, when you later delete the plugin (step 2), the devices will not be automatically deleted with it--we're preserving your existing devices (and thus preserving their device numbers).
+   ```
+   for n,d in pairs( luup.devices ) do
+       if d.device_type == "urn:schemas-micasaverde-com:device:Sonos:1" then
+           luup.attr_set( "plugin", "", n )
+       end
+   end
+   luup.reload()
+   ```
+2. When Luup finishes reloading, go to *Apps > My apps* and uninstall the existing Sonos plugin (if it's not listed there, no problem, just move on).
+3. Reload luup. I usually just to go *Apps > Develop apps > Test Luup code* and run `luup.reload()`
 
-Your existing (from version 1.x) Sonos zone devices will be made child devices of the new plugin master device. The device numbers will not change, so your existing scenes, Lua, Reactor, PLEG, etc. should continue to work. Child devices will also be created for any other zone players found.
+## Install Sonos Plugin 2.0 (all users)
 
-**NOTE:** The correct icon for your new player may not show up in the UI immediately. A [hard-refresh of your browser](https://www.getfilecloud.com/blog/2015/03/tech-tip-how-to-do-hard-refresh-in-browsers/) may be required to get it to display. If your new players don't show the right icon after a few minutes, reload Luup and do a hard refresh. If it hasn't settled down after about five minutes, do another Luup reload and another hard-refresh of your browser.
+1. Open the Github develop branch repository: https://github.com/toggledbits/Sonos-Vera/tree/develop
+2. Click the green "Clone or download" button and choose "Download ZIP"
+3. Save the ZIP file.
+4. Unzip the ZIP file
+5. In the Vera UI, go to *Apps > Develop apps > Luup files*
+6. Multi-select the files (not folders--ignore any folders) you unzipped and drag them as a group to the "Upload" button.
+7. When the upload completes, Luup will reload.
+8. When the reload completes, create the Sonos System master device:
+   a. Go to *Apps > Develop apps > Create device*
+   b. In the "Description" field, enter `Sonos System`
+   c. In the "UPnP Device Filename" field, enter `D_SonosSystem1.xml`
+   d. In the "UPnP Implementation Filename" field, enter `I_SonosSystem1.xml`
+   e. You may choose a room assignment if you wish.
+   f. Click "Create device"
+9. Go to *Apps > Develop apps > Test luup code* and reload luup by running `luup.reload()`
+10. Wait about five minutes. Your Vera may reload several times during this time.
+11. [Hard refresh your browser](https://www.getfilecloud.com/blog/2015/03/tech-tip-how-to-do-hard-refresh-in-browsers/). Do not skip this step. You should now see your Sonos devices, and the Sonos System master device should report the number of zone players it is managing.
+
+If anything appears out of whack and it doesn't resolve in 5-10 minutes, repeat steps 9-11. Sometimes it takes a couple of reloads and hard refreshes to get everything sorted.
+
+The new Sonos System master device will adopt your previous/existing Sonos devices as its children (with the same device number they've always had), and create new child devices for any other zone players discovered on the network. There is usually no need to run discovery manually in this version.
 
 ### Installation using AltAppStore
-
-Once published to the AltAppStore, you'll be able to install this plugin on Vera or openLuup from the AltAppStore in the usual way. Working on it...
-
-**openLuup Users:** Please note that additional configuration is required to use TTS. Please see "Special TTS Configuration for openLuup" below.
-
-## Installation - New Installs
-
-This section is only for users who do not have the legacy (version 1.x) Sonos plugin installed, or have uninstalled the plugin (any version).
-
-### Manual Installation on Vera (new installs)
-
-**If you have the Sonos plugin version 1.4 or earlier installed from the Vera App/Plugin Marketplace (with or without additional patches), you must uninstall the plugin first. See "Uninstalling the Last Released Version" below.** If you're not sure, go there for instructions on how to check.
-
-1. Go to [the Github repository for the project](https://github.com/toggledbits/Sonos-Vera).
-2. Click the green "Clone or download" button and choose "Download ZIP". Save the ZIP file somewhere.
-3. Unzip the ZIP file.
-4. Select the files (except the `.md` files and the `services` and `icons` directories and their contents--these are no longer required) as a group and drag them to the upload tool at *Apps > Develop apps > Luup files*. This will upload all the files as a single batch and then restart Luup.
-5. After the Luup restart, go to *Apps > Develop apps > Create device*, enter and submit:
-  * Description: `Sonos` (or whatever you choose)
-  * Device UPnP Filename: `D_SonosSystem1.xml` (exactly as shown)
-  * Device UPnP Filename: `I_SonosSystem1.xml` (exactly as shown)
-    > WARNING: You must enter the filenames exactly as shown above. Any error may cause your system to not restart and require intervention from Vera Support.
-  * Hit the "Create device" button.
-  * **NOTE:** if you are upgrading to 2.0 from a prior version, DO NOT SKIP THIS STEP.
-6. Go to *Apps > Develop apps > Test Luup code (Lua)* and enter/run: `luup.reload()` 
-7. After Luup finishes reloading, [hard-refresh your browser](https://www.getfilecloud.com/blog/2015/03/tech-tip-how-to-do-hard-refresh-in-browsers/). This is a vital step that cannot be skipped!
-8. You can then go into the "Settings" tab of the Sonos device and use discovery to find your zone players.
-
-**NOTE:** The correct icon for your new player may not show up in the UI immediately. A [hard-refresh of your browser](https://www.getfilecloud.com/blog/2015/03/tech-tip-how-to-do-hard-refresh-in-browsers/) may be required to get it to display. If your new players don't show the right icon after a few minutes, reload Luup and do a hard refresh. If it hasn't settled down after about five minutes, do another Luup reload and another hard-refresh of your browser.
-
-### Installation using AltAppStore (new installs)
 
 Once published to the AltAppStore, you'll be able to install this plugin on Vera or openLuup from the AltAppStore in the usual way. Working on it...
 
