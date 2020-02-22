@@ -17,7 +17,7 @@ Release in the Vera plugin marketplace is planned for later.
 
 Please see CHANGELOG.md for release notes.
 
-## Installation -- Legacy Sonos Plugin Users
+## Installation (New and Existing Users)
 
 ![Caution: Read Instructions First](https://www.toggledbits.com/assets/rtfm.png)
 
@@ -25,11 +25,11 @@ Please read the installation instructions through completely to get an idea of w
 
 ## Uninstalling Sonos 1.4.x
 
-**This section only applies to those user that are currently running any 1.4.x (or earlier) version of the Sonos Plugin.** If you are not sure, you can run this part of the procedure safely anyway--it will not harm anything.
+**This section only applies to those users that are currently running any 1.4.x (or earlier) version of the Sonos Plugin.** If you are not sure, you can run this part of the procedure safely anyway--it will not harm anything.
 
-Before installing 2.0, you **must** uninstall the existing Sonos plugin. This procedure will decouple your Sonos devices, so that when you uninstall the plugin, your existing Sonos devices are preserved. They will be adopted by 2.0 as children, keeping their current device numbers, which will keep your scenes, Lua, Reactor, PLEG, etc. intact.
+Before installing 2.0, you **must** uninstall the existing Sonos plugin using the procedure described below. This procedure will decouple your Sonos devices, so that when you uninstall the plugin, your existing Sonos devices are preserved. They will be adopted by 2.0 as children, keeping their current device numbers, which will keep your scenes, Lua, Reactor, PLEG, etc. intact.
 
-1. Run the following Lua in *Apps > Develop apps > Test Luup code*. This code will disconnect your existing Sonos devices from the installed plugin. The devices will not be deleted, and they will still operate normally. By decoupling them from the plugin here, when you later delete the plugin (step 2), the devices will not be automatically deleted with it--we're preserving your existing devices (and thus preserving their device numbers).
+1. Run the following Lua in *Apps > Develop apps > Test Luup code*.
    ```
    for n,d in pairs( luup.devices ) do
        if d.device_type == "urn:schemas-micasaverde-com:device:Sonos:1" then
@@ -38,7 +38,7 @@ Before installing 2.0, you **must** uninstall the existing Sonos plugin. This pr
    end
    luup.reload()
    ```
-2. When Luup finishes reloading, go to *Apps > My apps* and uninstall the existing Sonos plugin (if it's not listed there, no problem, just move on).
+2. When Luup finishes reloading, go to *Apps > My apps* and uninstall the existing Sonos plugin (if it's not listed there, no problem, just move on to the next step).
 3. Reload luup. I usually just to go *Apps > Develop apps > Test Luup code* and run `luup.reload()`
 
 ## Install Sonos Plugin 2.0 (all users)
