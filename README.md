@@ -51,12 +51,13 @@ Before installing 2.0, you **must** uninstall the existing Sonos plugin using th
 6. Multi-select the files (not folders--ignore any folders) you unzipped and drag them as a group to the "Upload" button.
 7. When the upload completes, Luup will reload.
 8. When the reload completes, create the Sonos System master device:
-   a. Go to *Apps > Develop apps > Create device*
-   b. In the "Description" field, enter `Sonos System`
-   c. In the "UPnP Device Filename" field, enter `D_SonosSystem1.xml`
-   d. In the "UPnP Implementation Filename" field, enter `I_SonosSystem1.xml`
-   e. You may choose a room assignment if you wish.
-   f. Click "Create device"
+
+   1. Go to *Apps > Develop apps > Create device*
+   2. In the "Description" field, enter `Sonos System`
+   3. In the "UPnP Device Filename" field, enter `D_SonosSystem1.xml`
+   4. In the "UPnP Implementation Filename" field, enter `I_SonosSystem1.xml`
+   5. You may choose a room assignment if you wish.
+   6. Click "Create device"
 9. Go to *Apps > Develop apps > Test luup code* and reload luup by running `luup.reload()`
 10. Wait about five minutes. Your Vera may reload several times during this time.
 11. [Hard refresh your browser](https://www.getfilecloud.com/blog/2015/03/tech-tip-how-to-do-hard-refresh-in-browsers/). Do not skip this step. You should now see your Sonos devices, and the Sonos System master device should report the number of zone players it is managing.
