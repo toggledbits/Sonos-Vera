@@ -8,7 +8,7 @@
 module( "L_SonosSystem1", package.seeall )
 
 PLUGIN_NAME = "Sonos"
-PLUGIN_VERSION = "2.0-20052.2330"
+PLUGIN_VERSION = "2.0-20053.1045"
 PLUGIN_ID = 4226
 
 local _CONFIGVERSION = 19298
@@ -416,7 +416,7 @@ logToFile = function(str, level)
 		-- keep trying to open as a result. By design.
 	end
 	if logFile then
-		local maxsizek = getVarNumeric("MaxLogSize", 1024, pluginDevice, SONOS_SYS_SID)
+		local maxsizek = getVarNumeric("MaxLogSize", 512, pluginDevice, SONOS_SYS_SID)
 		if maxsizek <= 0 then
 			-- We should not be open now (runtime change, no reload needed)
 			logFile:close()
@@ -2741,7 +2741,7 @@ function startup( lul_device )
 	setDebugLogs(debugLogs)
 
 	-- See if log file needs to be opened
-	if getVarNumeric("MaxLogSize", 1024, lul_device, SONOS_SYS_SID) > 0 then
+	if getVarNumeric("MaxLogSize", 512, lul_device, SONOS_SYS_SID) > 0 then
 		pcall( logToFile, "Log file opened at startup" )
 	end
 

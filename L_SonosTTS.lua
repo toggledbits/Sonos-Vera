@@ -136,7 +136,7 @@ function HTTPGetTTSEngine:say(text, destFile, engineOptions)
 	fw:close()
 	if size > 0 then
 		-- Convert bitrate in Kbps to Bps, and from that compute clip duration (aggressive rounding up)
-		return math.ceil( size / ( self.bitrate * 125 ) ) + 1
+		return math.ceil( size / ( self.bitrate * 128 ) ) + 1
 	end
 	debug("_say_http: received zero-length file")
 	return nil, "Received zero-length file"
@@ -483,7 +483,7 @@ function AzureTTSEngine:say(text, destFile, engineOptions)
 			fp:close()
 			if size > 0 then
 				-- Convert bitrate in Kbps to Bps, and from that compute clip duration (aggressive rounding up)
-				return math.ceil( size / ( self.bitrate * 125 ) ) + 1, nil, size
+				return math.ceil( size / ( self.bitrate * 128 ) ) + 1, nil, size
 			end
 			return nil, "received zero-length file"
 		elseif statusMsg == 401 then
