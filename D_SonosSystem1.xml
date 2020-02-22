@@ -6,12 +6,12 @@
 		<minor>0</minor>
 	</specVersion>
 	<device>
-		<friendlyName>Sonos Plugin</friendlyName>
+		<friendlyName>Sonos System</friendlyName>
 		<manufacturer>rigpapa</manufacturer>
 		<manufacturerURL>https://www.toggledbits.com/</manufacturerURL>
-		<modelDescription>Sonos Plugin</modelDescription>
-		<modelName>Sonos Plugin</modelName>
-		<modelNumber>T100</modelNumber>
+		<modelDescription>Sonos System</modelDescription>
+		<modelName>Sonos System</modelName>
+		<modelNumber>101</modelNumber>
 		<deviceType>urn:schemas-toggledbits-com:device:SonosSystem:1</deviceType>
 		<handleChildren>1</handleChildren>
 		<Category_Num>1</Category_Num>
