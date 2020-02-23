@@ -2330,6 +2330,15 @@ function startup( lul_device )
 
 	isOpenLuup = luup.openLuup ~= nil
 
+	if not isOpenLuup then
+		if file_exists( getInstallPath() .. "L_Sonos1.lua" ) and
+			file_exists( getInstallPath() .. "L_Sonos1.lua.lzo" ) then
+			luup.set_failure( 1, lul_device )
+			error("Invalid installation--both compressed and uncompressed plugin files found; this will give inconsistent results. Remove all files and reinstall.")
+			return false, "Invalid implementation", MSG_CLASS
+		end
+	end
+
 	initVar( "DebugLogs", 0, lul_device, SONOS_SID )
 	local debugLogs = getVarNumeric("DebugLogs", 0, lul_device)
 	if debugLogs ~= 0 then
