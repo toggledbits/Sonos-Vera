@@ -367,7 +367,7 @@ local function setData(name, value, deviceId, default)
 	end
 
 	if (deviceId == 0 or variableSidTable[name] == nil) then
-		error(string.format("setData() can't set %s on %d no SID!", tostring(name), deviceId))
+		debug(string.format("setData() can't set %s on %d no SID!", tostring(name), deviceId))
 		return (default or false)
 	end
 
@@ -2356,7 +2356,7 @@ function startup( lul_device )
 		local minzone = lul_device
 		local sysdev = false
 		for k,v in pairs( luup.devices ) do
-			if v.device_type == "urn:schemas-micasaverde-com:device:SonosSystem:1" then
+			if v.device_type == "uurn:schemas-toggledbits-com:device:SonosSystem:1" then
 				sysdev = k -- found system device
 				break
 			elseif v.device_type == "urn:schemas-micasaverde-com:device:Sonos:1" and v.device_num_parent == 0 then
@@ -2410,7 +2410,7 @@ function startup( lul_device )
 	if "0" == enabled then
 		warning(luup.devices[lul_device].description.." (#"..lul_device..") disabled by configuration; startup aborting.")
 		deviceIsOffline( lul_device )
-		return true, "Offline", MSG_CLASS
+		return true, "Disabled", MSG_CLASS
 	end
 
 	if (luup.variable_get(SONOS_SID, "DiscoveryResult", lul_device) == nil
