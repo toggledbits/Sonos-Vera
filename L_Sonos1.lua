@@ -2356,7 +2356,7 @@ function startup( lul_device )
 		local minzone = lul_device
 		local sysdev = false
 		for k,v in pairs( luup.devices ) do
-			if v.device_type == "uurn:schemas-toggledbits-com:device:SonosSystem:1" then
+			if v.device_type == "urn:schemas-toggledbits-com:device:SonosSystem:1" then
 				sysdev = k -- found system device
 				break
 			elseif v.device_type == "urn:schemas-micasaverde-com:device:Sonos:1" and v.device_num_parent == 0 then
