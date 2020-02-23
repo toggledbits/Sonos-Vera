@@ -8,7 +8,7 @@
 module( "L_Sonos1", package.seeall )
 
 PLUGIN_NAME = "Sonos"
-PLUGIN_VERSION = "1.5-20053"
+PLUGIN_VERSION = "1.5-20054"
 PLUGIN_ID = 4226
 
 local DEBUG_MODE = false	-- Don't hardcode true--use state variable config
@@ -2330,6 +2330,7 @@ function startup( lul_device )
 
 	isOpenLuup = luup.openLuup ~= nil
 
+	initVar( "DebugLogs", 0, lul_device, SONOS_SID )
 	local debugLogs = getVarNumeric("DebugLogs", 0, lul_device)
 	if debugLogs ~= 0 then
 		DEBUG_MODE = true
