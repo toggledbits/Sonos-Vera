@@ -8,7 +8,7 @@
 module( "L_SonosSystem1", package.seeall )
 
 PLUGIN_NAME = "Sonos"
-PLUGIN_VERSION = "2.0develop-20055.1005"
+PLUGIN_VERSION = "2.0develop-20055.1025"
 PLUGIN_ID = 4226
 
 local _CONFIGVERSION = 19298
@@ -942,7 +942,7 @@ end
 local function commsFailure(device, text)
 	W("Sonos %1 device #%2 (%3) at %4 comm failure. "..tostring(text or ""),
 		UUIDs[device], device, (luup.devices[device] or {}).description,
-		luup.attr_get("ip", device or -1) or "")
+		getVar( "SonosIP", "(no IP)", device or -1, SONOS_ZONE_SID ))
 	deviceIsOffline(device)
 end
 
@@ -1062,10 +1062,10 @@ local function extractDataFromMetaData(zoneUUID, currentUri, currentUriMetaData,
 		statusString = statusString .. info
 	end
 	if (albumArt ~= "") then
-		local ip = luup.attr_get( "ip", Zones[uuid]) or ""
+		local ip = getVar( "SonosIP", "", Zones[uuid] or -1, SONOS_ZONE_SID )
 		albumArt = url.absolute(string.format("http://%s:%s/", ip, port), albumArt)
 	elseif (serviceId ~= nil) then
-		local ip = luup.attr_get( "ip", Zones[uuid]) or ""
+		local ip = getVar( "SonosIP", "", Zones[uuid] or -1, SONOS_ZONE_SID )
 		albumArt = string.format("http://%s:%s/getaa?s=1&u=%s", ip, port, url.escape(currentUri))
 	else
 		albumArt = iconURL
@@ -2421,20 +2421,22 @@ setup = function(zoneDevice, flag)
 	dataTable[uuid] = nil
 
 	local newIP = getIPFromUUID( uuid )
-	local oldIP = luup.attr_get( "ip", zoneDevice )
+	local oldIP = getVar( "SonosIP", "", zoneDevice, SONOS_ZONE_SID )
 	D("setup() new IP %1 old %2", newIP, oldIP)
 	if (newIP or "") == "" then
 		-- Zone not currently in zone info (may be offline); use last known
 		newIP = oldIP
 	elseif newIP ~= oldIP then
 		-- Update last known
-		luup.attr_set( "ip", newIP, zoneDevice )
+		luup.attr_set( "mac", "", zoneDevice )
+		luup.attr_set( "ip", "", zoneDevice )
+		setVar( SONOS_ZONE_SID, "SonosIP", newIP, zoneDevice )
 	end
 	if (newIP or "") == "" then
 		setVar(SONOS_ZONE_SID, "SonosOnline", "0", zoneDevice)
 		setVar(UPNP_AVTRANSPORT_SID, "CurrentStatus", "Offline", zoneDevice)
 		setVar(SONOS_ZONE_SID, "ProxyUsed", "", zoneDevice) -- plugin variable??? different per zone?
-		E("No/invalid IP address for #%1", zoneDevice)
+		E("No/invalid current IP address for #%1", zoneDevice)
 		return false
 	end
 
@@ -2616,39 +2618,6 @@ local function deferredStartup(device)
 		scheduler.Task:new("checkProxy", device, checkProxy, { device }):delay(300)
 	end
 
-	-- Temporary: iterate to find child zones, remove duplicates (leave lowest-numbered)
-	if _CONFIGVERSION == 19298 then
-		local zch = {}
-		for k,v in pairs( luup.devices ) do
-			if v.device_num_parent == device then
-				local zid = luup.attr_get( "altid", k ) or ""
-				zch[zid] = zch[zid] or {}
-				table.insert( zch[zid], k )
-			end
-		end
-		local rmdup = false
-		for zid in pairs( zch ) do
-		L("Duplicate check %1 has %2 devices", zid, #zch[zid])
-			if #zch[zid] > 1 then
-				table.sort( zch[zid] )
-				table.remove( zch[zid], 1 )
-				for _,k in ipairs( zch[zid] ) do
-					luup.call_action( "urn:micasaverde-com:serviceId:HomeAutomationGateway1", "DeleteDevice", { DeviceNum=k }, 0 )
-					rmdup = true
-				end
-			end
-		end
-		if rmdup then
-			local t = scheduler.getTask("reload")
-			if not t then
-				t = scheduler.Task:new("reload", device, SonosReload)
-			end
-			t:delay( 30, { replace=true } )
-			setVar( SONOS_SYS_SID, "Message", "Wait... dups removed, reloading", device )
-			return false, "Reloading", MSG_CLASS
-		end
-	end
-
 	-- Start zones
 	UUIDs = {}
 	Zones = {}
@@ -2659,6 +2628,7 @@ local function deferredStartup(device)
 	for k,v in pairs( luup.devices ) do
 		if v.device_type == SONOS_ZONE_DEVICE_TYPE then
 			local zid = luup.attr_get( "altid", k ) or ""
+			local ip = luup.attr_get( "ip", k ) or ""
 			D("deferredStartup() found child %1 zoneid %3 parent %2", k, v.device_num_parent, zid)
 			if v.device_num_parent == 0 then
 				-- Old-style standalone; convert to child
@@ -2667,6 +2637,9 @@ local function deferredStartup(device)
 				luup.attr_set( "id_parent", device, k )
 				luup.attr_set( "invisible", 0, k )
 				luup.attr_set( "altid", getVar( "SonosID", tostring(k), k, UPNP_DEVICE_PROPERTIES_SID ), k )
+				setVar( SONOS_ZONE_SID, "SonosIP", ip, k )
+				luup.attr_set( "mac", "", k )
+				luup.attr_set( "ip", "", k )
 				luup.set_failure( 1, k )
 				reload = true
 			elseif v.device_num_parent == device then
@@ -2675,6 +2648,11 @@ local function deferredStartup(device)
 				childZone[zid] = k
 				count = count + 1
 				setVar(UPNP_AVTRANSPORT_SID, "CurrentStatus", "Starting...", k)
+				if ip ~= "" then
+					setVar( SONOS_ZONE_SID, "SonosIP", ip, k )
+					luup.attr_set( "mac", "", k )
+					luup.attr_set( "ip", "", k )
+				end
 				local status,success = pcall( startZone, k )
 				if status and success then
 					luup.set_failure( 0, k )
@@ -2730,8 +2708,8 @@ local function deferredStartup(device)
 			for uuid,ip in pairs( newZones ) do
 				D("deferredStartup() appending new zone %1 ip %2", uuid, ip)
 				local cv = {
-					string.format( ",ip=%s", ip ),
 					string.format( "%s,SonosID=%s", UPNP_DEVICE_PROPERTIES_SID, uuid ),
+					string.format( "%s,SonosIP=%s", SONOS_ZONE_SID, ip ),
 					",invisible=0"
 				}
 				local name = zoneInfo.zones[uuid].ZoneName or uuid:gsub("RINCON_", "")
@@ -3396,11 +3374,13 @@ function actionSonosStartDiscovery( lul_device, lul_settings ) -- luacheck: igno
 					-- New zone
 					D("actionSonosStartDiscovery() new zone %1", zone)
 					table.insert( newChildren, zone )
-				elseif zone.ip ~= luup.attr_get( "ip", zoneDev ) then
+				elseif zone.ip ~= getVar( "SonosIP", "", zoneDev, SONOS_ZONE_SID ) then
 					-- Existing zone, IP changed
 					L("Discovery detected IP address change for %1 (#%3 %4) to %2",
 						zone.udn, zone.ip, zoneDev, luup.devices[zoneDev].description)
-					luup.attr_set( "ip", zone.ip, zoneDev )
+					luup.attr_set( "mac", "", zoneDev )
+					luup.attr_set( "ip", "", zoneDev )
+					setVar( SONOS_ZONE_SID, "SonosIP", zone.ip, zoneDev )
 					-- Force zoneInfo to agree with discovery
 					if zoneInfo and zoneInfo.zones[zone.udn] then
 						D("actionSonosStartDiscovery() forcing zoneInfo location for %1 to %2",
@@ -3425,9 +3405,11 @@ function actionSonosStartDiscovery( lul_device, lul_settings ) -- luacheck: igno
 			for _,zone in ipairs( newChildren ) do
 				D("actionSonosStartDiscovery() appending new zone %1 ip %2:%3", zone.udn, zone.ip, zone.port or 1400)
 				local cv = {}
-				table.insert( cv, string.format( ",ip=%s", zone.ip ) )
+				table.insert( cv, ",manufacturer=Sonos" )
+				table.insert( cv, string.format( ",model=%s", zone.modelName or "" ) )
 				table.insert( cv, ",invisible=0" )
 				table.insert( cv, string.format( "%s,SonosID=%s", UPNP_DEVICE_PROPERTIES_SID, zone.udn ) )
+				table.insert( cv, string.format( "%s,SonosIP=%s", SONOS_ZONE_SID, zone.ip ) )
 				table.insert( cv, string.format( "%s,Port=%s", SONOS_ZONE_SID, zone.port or 1400 ) )
 				local w = {}
 				if (zone.roomName or "") ~= "" then table.insert( w, zone.roomName ) end
@@ -3457,8 +3439,9 @@ function actionSonosSelectDevice( lul_device, lul_settings )
 	local newDescrURL = url.unescape( lul_settings.URL or "" )
 	local newIP, newPort = newDescrURL:match("http://([%d%.]-):(%d+)/.-")
 	if (newIP ~= nil and newPort ~= nil) then
-		luup.attr_set("ip", newIP, lul_device)
+		luup.attr_set("ip", "", lul_device)
 		luup.attr_set("mac", "", lul_device)
+		setVar( SONOS_ZONE_SID, "SonosIP", newIP, lul_device )
 		setup(lul_device, false)
 	end
 end
@@ -3475,8 +3458,9 @@ function actionSonosSearchAndSelect( lul_device, lul_settings )
 	if (descrURL ~= nil) then
 		local newIP, newPort = descrURL:match("http://([%d%.]-):(%d+)/.-")
 	    if (newIP ~= nil and newPort ~= nil) then
-			luup.attr_set("ip", newIP, lul_device)
+			luup.attr_set("ip", "", lul_device)
 			luup.attr_set("mac", "", lul_device)
+			setVar( SONOS_ZONE_SID, "SonosIP", newIP, lul_device )
 			setup(lul_device, false)
 		end
 	end
