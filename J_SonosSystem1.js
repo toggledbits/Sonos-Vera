@@ -15,7 +15,7 @@ var SonosSystem = (function(api, $) {
 	/* unique identifier for this plugin... */
 	var uuid = '79bf9374-f989-11e9-884c-dbb32f3fa64a'; /* SonosSystem 2019-12-11 19345 */
 
-	var pluginVersion = '2.0develop-20053.1240';
+	var pluginVersion = '2.0develop-20054.2040';
 
 	var _UIVERSION = 19301;     /* must coincide with Lua core */
 
