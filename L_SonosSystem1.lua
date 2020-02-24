@@ -2616,12 +2616,46 @@ local function deferredStartup(device)
 		scheduler.Task:new("checkProxy", device, checkProxy, { device }):delay(300)
 	end
 
+	-- Temporary: iterate to find child zones, remove duplicates (leave lowest-numbered)
+	if _CONFIGVERSION == 19298 then
+		local zch = {}
+		for k,v in pairs( luup.devices ) do
+			if v.device_num_parent == device then
+				local zid = luup.attr_get( "altid", k ) or ""
+				zch[zid] = zch[zid] or {}
+				table.insert( zch[zid], k )
+			end
+		end
+		local rmdup = false
+		for zid in pairs( zch ) do
+		L("Duplicate check %1 has %2 devices", zid, #zch[zid])
+			if #zch[zid] > 1 then
+				table.sort( zch[zid] )
+				table.remove( zch[zid], 1 )
+				for _,k in ipairs( zch[zid] ) do
+					luup.call_action( "urn:micasaverde-com:serviceId:HomeAutomationGateway1", "DeleteDevice", { DeviceNum=k }, 0 )
+					rmdup = true
+				end
+			end
+		end
+		if rmdup then
+			local t = scheduler.getTask("reload")
+			if not t then
+				t = scheduler.Task:new("reload", device, SonosReload)
+			end
+			t:delay( 30, { replace=true } )
+			setVar( SONOS_SYS_SID, "Message", "Wait... dups removed, reloading", device )
+			return false, "Reloading", MSG_CLASS
+		end
+	end
+
 	-- Start zones
 	UUIDs = {}
 	Zones = {}
 	local reload = false
 	local count, started = 0, 0
 	local children = {}
+	local childZone = {}
 	for k,v in pairs( luup.devices ) do
 		if v.device_type == SONOS_ZONE_DEVICE_TYPE then
 			local zid = luup.attr_get( "altid", k ) or ""
@@ -2631,12 +2665,14 @@ local function deferredStartup(device)
 				W("Adopting standalone (old) Sonos device by new parent %1", device)
 				luup.attr_set( "impl_file", "", k )
 				luup.attr_set( "id_parent", device, k )
+				luup.attr_set( "invisible", 0, k )
 				luup.attr_set( "altid", getVar( "SonosID", tostring(k), k, UPNP_DEVICE_PROPERTIES_SID ), k )
 				luup.set_failure( 1, k )
 				reload = true
 			elseif v.device_num_parent == device then
 				L("Starting %1 (#%2) zone id %3", v.description, k, zid)
 				children[k] = v
+				childZone[zid] = k
 				count = count + 1
 				setVar(UPNP_AVTRANSPORT_SID, "CurrentStatus", "Starting...", k)
 				local status,success = pcall( startZone, k )
@@ -2678,7 +2714,7 @@ local function deferredStartup(device)
 		D("deferredStartup() taking inventory")
 		local newZones = {}
 		for uuid in pairs( zoneInfo.zones ) do
-			if not findDeviceByUUID( uuid ) then
+			if not ( childZone[uuid] or newZones[uuid] ) then
 				newZones[uuid] = getIPFromUUID( uuid ) or ""
 			end
 		end
@@ -2687,17 +2723,16 @@ local function deferredStartup(device)
 			D("deferredStartup() rebuilding family")
 			local ptr = luup.chdev.start( device )
 			for k,v in pairs( children ) do
-				if v.device_num_parent == device then
-					local df = luup.attr_get('device_file', k)
-					D("deferredStartup() appending existing child dev #%1 %2 uuid %3 device_file %4", k, v.description, v.id, df)
-					luup.chdev.append( device, ptr, v.id, v.description, "", df, "", "", false )
-				end
+				local df = luup.attr_get('device_file', k)
+				D("deferredStartup() appending existing child dev #%1 %2 uuid %3 device_file %4", k, v.description, v.id, df)
+				luup.chdev.append( device, ptr, v.id, v.description, "", df, "", "", false )
 			end
 			for uuid,ip in pairs( newZones ) do
 				D("deferredStartup() appending new zone %1 ip %2", uuid, ip)
 				local cv = {
 					string.format( ",ip=%s", ip ),
-					string.format( "%s,SonosID=%s", UPNP_DEVICE_PROPERTIES_SID, uuid )
+					string.format( "%s,SonosID=%s", UPNP_DEVICE_PROPERTIES_SID, uuid ),
+					",invisible=0"
 				}
 				local name = zoneInfo.zones[uuid].ZoneName or uuid:gsub("RINCON_", "")
 				luup.chdev.append( device, ptr, uuid, name, "", "D_Sonos1.xml", "",
