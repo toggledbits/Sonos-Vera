@@ -3384,7 +3384,7 @@ function actionSonosStartDiscovery( lul_device, lul_settings ) -- luacheck: igno
 		D("actionSonosStartDiscovery() discovered %1", devices)
 		local children = {}
 		for n,v in pairs(luup.devices) do
-			if v.device_type == SONOS_ZONE_DEVICE_TYPE and v.device_num_parent == lul_device then
+			if v.device_num_parent == lul_device then
 				children[v.id] = n
 			end
 		end
@@ -3394,7 +3394,7 @@ function actionSonosStartDiscovery( lul_device, lul_settings ) -- luacheck: igno
 				local zoneDev = children[zone.udn]
 				if not zoneDev then
 					-- New zone
-					D("actionSonosStartDiscovery() new zone %1", zone.udn)
+					D("actionSonosStartDiscovery() new zone %1", zone)
 					table.insert( newChildren, zone )
 				elseif zone.ip ~= luup.attr_get( "ip", zoneDev ) then
 					-- Existing zone, IP changed
@@ -3426,15 +3426,23 @@ function actionSonosStartDiscovery( lul_device, lul_settings ) -- luacheck: igno
 				D("actionSonosStartDiscovery() appending new zone %1 ip %2:%3", zone.udn, zone.ip, zone.port or 1400)
 				local cv = {}
 				table.insert( cv, string.format( ",ip=%s", zone.ip ) )
+				table.insert( cv, ",invisible=0" )
 				table.insert( cv, string.format( "%s,SonosID=%s", UPNP_DEVICE_PROPERTIES_SID, zone.udn ) )
 				table.insert( cv, string.format( "%s,Port=%s", SONOS_ZONE_SID, zone.port or 1400 ) )
-				local name = zone.udn:upper():gsub("RINCON_","")
+				local w = {}
+				if (zone.roomName or "") ~= "" then table.insert( w, zone.roomName ) end
+				if (zone.modelName or "") ~= "" then
+					table.insert( w, zone.modelName )
+				else
+					table.insert( w, zone.udn:upper():gsub("^RINCON_","") )
+				end
+				local name = table.concat( w, " " )
 				luup.chdev.append( lul_device, ptr, zone.udn, name, "", "D_Sonos1.xml", "",
 					table.concat( cv, "\n" ), false )
 			end
 			setVariableValue(SONOS_SYS_SID, "DiscoveryMessage",
 				string.format("Completed. %d new zones added.", #newChildren), lul_device)
-			L("Discovery complete. %d new zones added. Requesting Luup reload.", #newChildren)
+			L("Discovery complete. %1 new zones added. Requesting Luup reload.", #newChildren)
 			luup.chdev.sync( lul_device, ptr )
 		else
 			setVariableValue(SONOS_SYS_SID, "DiscoveryMessage", "Completed. No new devices found.", lul_device)
