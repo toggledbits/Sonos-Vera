@@ -61,8 +61,8 @@ local UUIDs = {}
 local metaDataKeys = {}
 local dataTable = {}
 
-local function debug( stuff )
-	if DEBUG_MODE then log( "L_SonosUPnP debug: "..tostring(stuff) ) end
+local function debug( stuff, ... )
+	if DEBUG_MODE then log( "(UPnP) "..tostring(stuff), ... ) end
 end
 
 function initialize(logger, warningLogger, errorLogger, ct)
@@ -160,8 +160,8 @@ function UPnP_subscribe(eventSubURL, callbackURL, renewalSID)
         return nil, code
     else
         local duration = respHeaders["timeout"]:match("Second%-(%d+)")
-        debug("Subscription confirmed, SID = " .. respHeaders["sid"] .. " with timeout " .. duration)
-        return respHeaders["sid"], tonumber(duration)
+        debug("UPnP_subscribe() subscription confirmed, SID %1 with timeout %2", respHeaders.sid, duration)
+        return respHeaders.sid, tonumber(duration)
     end
 end
 
@@ -220,7 +220,7 @@ function UPnP_request(controlURL, action, servicetype, args)
   end
 
   local postBody = string.format(UPNP_REQUEST, action, servicetype, table2XML(args), action)
-  debug(string.format("UPnP_request: url=[%s], body=[%s]", controlURL, postBody))
+  debug("UPnP_request() url=%1, body=%2", controlURL, postBody)
 
   --
   -- Execute the resulting URL, and collect the results as a Table
@@ -255,9 +255,7 @@ function UPnP_request(controlURL, action, servicetype, args)
     --
     -- Handle SUCCESS
     --
-    debug(string.format("UPnP_request: status=%s statusMsg=%s result=[%s]", status or "no status",
-                      statusMsg or "no message",
-                      data or "no result"))
+    debug("UPnP_request() status=%1 statusMsg=%2 result=%3", status, statusMsg, data)
 
     if (data == nil or data == "") then
       return true, ""
@@ -303,11 +301,11 @@ function service(controlURL, servicetype, actions)
     local mt = {}
 
     mt.__index = function(table, key)
-        debug("service.__index: Accessing non-existing function " .. key)
+        debug("service.__index: accessing non-existing function %1", key)
 
         local fn = function(...)
             if (actions[key]) then
-                debug(string.format("%s('%s', '%s') Called with parameter count=%d", key, controlURL, servicetype, select("#", ...)))
+                debug("service.__index: %s('%s', '%s') called with parameter count=%d", key, controlURL, servicetype, select("#", ...))
                 return UPnP_request(controlURL, key, servicetype, ...)
             else
                 return false, "action not available"
@@ -373,12 +371,27 @@ function UPnP_discover(target)
                 if not result then
                     break
                 else
+					--[[ Typical response:
+HTTP/1.1 200 OK
+CACHE-CONTROL: max-age = 1800
+EXT:
+LOCATION: http://192.168.0.53:1400/xml/device_description.xml
+SERVER: Linux UPnP/1.0 Sonos/54.2-72031 (ZPS22)
+ST: urn:schemas-upnp-org:device:ZonePlayer:1
+USN: uuid:RINCON_48A6B813879001400::urn:schemas-upnp-org:device:ZonePlayer:1
+X-RINCON-HOUSEHOLD: HHID_la6A8YyuuYAgE8yZKK7iCCEuboM
+X-RINCON-BOOTSEQ: 18
+X-RINCON-WIFIMODE: 0
+X-RINCON-VARIANT: 1
+HOUSEHOLD.SMARTSPEAKER.AUDIO: HHID_la6A8YyuuYAgE8yZKK7iCCEuboM.YwYHlZ-PEqUQuUW7NRgL
+--]]
+ 					
                     local location, ip, port = result:match("[Ll][Oo][Cc][Aa][Tt][Ii][Oo][Nn]:%s?(http://([%d%.]-):(%d+)/.-)\r\n")
                     local st = result:match("[Ss][Tt]:%s?(.-)\r\n")
 					local usn = result:match("[Uu][Ss][Nn]:%s*(.-)\r\n")
 					local udn = usn and usn:match("uuid:([^:]+)")
-					debug("discovery response from "..tostring(ip).." usn "..tostring(usn).." udn "..tostring(udn))
-					debug(tostring(result))
+					debug("UPnP_discover() response from %1 usn %2, udn %2", ip, usn, udn)
+					debug(result)
                     if (location ~= nil and ip ~= nil and port ~= nil and st ~= nil) then
                         local new = true
                         for _,device in ipairs( devices ) do
@@ -404,10 +417,13 @@ function scanUPnPDevices(deviceType, infos)
     local xml = "<devices>"
     local devices = UPnP_discover(deviceType)
     for _,dev in ipairs(devices or {}) do
+		debug("scanUPnPDevices() fetching %1", dev.descriptionURL)
         local descrXML = UPnP_getDeviceDescription(dev.descriptionURL)
-        if (descrXML ~= nil) then
+        if descrXML then
             local values, found = getInfosFromDescription(descrXML, deviceType, infos)
-            if (found) then
+			debug("scanUPnPDevices() getInfos response for %1 is %2 infos %3", descrXML, values, infos)
+			-- ??? rigpapa 2020-02-24: This built-up XML isn't used anywhere and seems wasteful
+            if found then
                 xml = xml .. "<device>"
                 xml = xml .. "<ip>" .. (dev.ip or "") .. "</ip>"
                 xml = xml .. "<port>" .. (dev.port or "") .. "</port>"
@@ -415,6 +431,7 @@ function scanUPnPDevices(deviceType, infos)
                 if (infos ~= nil) then
                     for _,tag in ipairs(infos) do
                         xml = xml .. "<" .. tag .. ">" .. (values[tag] or "") .. "</" .. tag .. ">"
+						dev[tag] = values[tag]
                     end
                 end
                 xml = xml .. "</device>"
@@ -700,7 +717,7 @@ end
     end
 
     for k,v in pairs(Services[uuid]) do
-        debug(k .. " " .. v.serviceId .. " " .. v.controlURL .. " " .. v.eventSubURL .. " " .. v.scpdURL)
+        debug("addServices() %1 %2 %3 %4 %5", k, v.serviceId, v.controlURL, v.eventSubURL, v.scpdURL)
         if (v.object == nil) then
             v.object = service(v.controlURL, k, v.actions)
         end
@@ -835,19 +852,19 @@ end
         local pattern = string.format("<%s%%s?[^>]->", tag)
         local pos0, pos1 = xml:find(pattern)
         if pos0 and pos1 then
-            if (xml:sub(pos1-1, pos1-1) == "/") then
+            if xml:sub(pos1-1, pos1-1) == "/" then
                 result = ""
             else
                 pattern = string.format("</%s>", tag)
                 local pos2 = xml:find(pattern, pos1)
-                if (pos2 ~= nil) then
+                if pos2 then
                     result = xml:sub(pos1+1, pos2-1)
 				else
-					debug("upnp:extractElementValue() lost end for "..tag.." in \n"..xml)
+					debug("upnp:extractElementValue() lost end for %1 in %2", tag, xml)
                 end
             end
 		else
-			debug("upnp:extractElementValue() tag "..tag.." not found in \n"..xml)
+			debug("upnp:extractElementValue() tag %1 not found in %2", tag, xml)
         end
     end
     return result
@@ -917,7 +934,7 @@ end
       if (result ~= "" and transformFct == nil) then
           result = result .. "</DIDL-Lite>"
       end
-      debug("browseContent " .. browseObj .. " - duration: " .. (os.clock() - t0) .. " s - " .. fetched .. " fetched elements - size result " .. #result .. " - timeout " .. (timeout or "nil"))
+      debug("browseContent() %1 duration %2s - %3 fetched elements - size result %4 timeout %5", browseObj, os.clock() - t0, fetched, #result, timeout)
       return result
   end
 
@@ -1033,19 +1050,20 @@ function processProxySubscriptions()
             r.source = ltn12.source.empty()
         end
 
-        debug("Send Proxy subscription request: " .. r.method .. " SID " .. subscription.sid )
+        debug("processProxySubscriptions() send Proxy subscription request: %1 SID %2", r.method, subscription.sid )
         local request, reason = http.request(r)
 
         if request == nil and reason == "timeout" then
-            debug("Retry Proxy subscription request: " .. r.method .. " SID " .. subscription.sid )
+            debug("processProxySubscriptions() retry proxy subscription request: %1 SID %2", r.method, subscription.sid )
             table.insert(subscriptionQueue, subscription)
         elseif request == nil then
-            debug("Give up Proxy subscription request: " .. r.method .. " SID " .. subscription.sid )
+            debug("processProxySubscriptions() give up proxy subscription request %1 SID %2", r.method, subscription.sid )
         elseif  reason ~= 200 then
             local data = table.concat(t)
-            debug("Invalid Proxy subscription request: " .. r.method .. " SID " .. subscription.sid .. " Response: " .. data )
+            debug("processProxySubscriptions() invalid proxy subscription request %1 SID %2 resp %3", 
+				r.method, subscription.sid, data )
         else
-            debug("Completed Proxy subscription request: " .. r.method .. " SID " .. subscription.sid )
+            debug("processProxySubscriptions() completed proxy subscription request %1 SID %2", r.method, subscription.sid )
         end
 
         if #subscriptionQueue > 0 then
@@ -1070,7 +1088,7 @@ end
   --   expiry date of the new or renewed subscription; nil if the subscribe process failed
   --   live duration of the new or renewed subscription; nil if the subscribe process failed
   function subscribeToUPnPEvent(device, veraIP, eventSubURL, eventVariable, actionServiceId, actionName, renewalSID)
-    debug("Subscribing to event " .. eventSubURL .. " for variable " .. eventVariable .. " with SID " .. (renewalSID or "nil"))
+    debug("subscribeToUPnPEvent(%1,%2,%3,%4,%5,%6,%7)", device, veraIP, eventSubURL, eventVariable, actionServiceId, actionName, renewalSID)
 
     -- Ask the device to inform the proxy about status changes.
     local callbackURL = string.format("http://%s:2529/upnp/event", veraIP)
@@ -1093,7 +1111,7 @@ end
   -- cancelProxySubscription(sid)
   -- Sends a DELETE /upnp/event/[sid] message to the UPnP event proxy,
   function cancelProxySubscription(sid)
-    debug("Cancelling subscription for sid " .. sid)
+    debug("Cancelling subscription for sid %1", sid)
     enqueueSubscription(sid)
   end
 
@@ -1119,15 +1137,15 @@ end
   --   true if all subscriptions succeeded
   --   false if subscriptions failed
   function subscribeToEvents(device, veraIP, subscriptions, actionServiceId, uuid)
-    debug("Subscribing to all events")
+    debug("subscribeToEvents(%1,%2,%3,%4,%5)", device, veraIP, subscriptions, actionServiceId, uuid)
 
     if not proxyVersionAtLeast(1) then
-       debug("Event subscription postponed, proxy is not running. " .. device )
+       debug("subscribeToEvents() event subscription postponed, proxy is not running. device %1", device )
 --     luup.call_delay("renewSubscriptions", 30, device .. ":" .. uuid)
        return true
     end
     if (aresServicesLoaded(uuid) == false) then
-       debug("Event subscription postponed, services are not loaded yet. " .. device )
+       debug("subscribeToEvents() event subscription postponed, services are not loaded yet. device %1", device )
 --     luup.call_delay("renewSubscriptions", 30, device .. ":" .. uuid)
       return true
     end
@@ -1153,7 +1171,8 @@ end
                                                          subscription.actionName,
                                                          sid)
             if sid then
-                debug("Event subscription succeeded => SID " .. sid .. " duration " .. duration .. " expiry " .. expiry)
+                debug("subscribeToEvents() event subscription succeeded => SID %1 duration %2 expiry %3", 
+					sid, duration, expiry)
                 subscription.id = sid
                 subscription.expiry = expiry
                 nbSubscriptions = nbSubscriptions + 1
@@ -1194,7 +1213,7 @@ end
   --   subscriptions is a table containing the current subscription data
   -- Return value: none
   function cancelProxySubscriptions(subscriptions)
-    debug("Cancelling all event subscriptions")
+    debug("cancelProxySubscriptions(%1)", subscriptions)
 
     if not proxyVersionAtLeast(1) then
         return
