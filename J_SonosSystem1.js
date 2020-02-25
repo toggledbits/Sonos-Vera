@@ -15,7 +15,7 @@ var SonosSystem = (function(api, $) {
 	/* unique identifier for this plugin... */
 	var uuid = '79bf9374-f989-11e9-884c-dbb32f3fa64a'; /* SonosSystem 2019-12-11 19345 */
 
-	var pluginVersion = '2.0develop-20055.1025';
+	var pluginVersion = '2.0develop-20055.1905';
 
 	var _UIVERSION = 19301;     /* must coincide with Lua core */
 
@@ -446,6 +446,8 @@ div.inp-default { color: #666; font-size: 0.80em; } \
 		$( '<button id="discovery-install" class="btn btn-sm">Install</button>' )
 			.appendTo( $col );
 		$( '<button id="discovery-uninstall" class="btn btn-sm">Uninstall</button>' )
+			.appendTo( $col );
+		$( '<div>Tip: try discovery without installing the discovery patch first--it works much of the time.</div>')
 			.appendTo( $col );
 		updatePatchStatus( device );
 		$( 'button#discovery-install' ).on( 'click.sonos', handlePatchInstallClick );
