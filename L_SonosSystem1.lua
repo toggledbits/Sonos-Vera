@@ -1848,14 +1848,14 @@ local function restorePlaybackContexts(device, playCxt)
 	-- Find coordinators and restore context
 	for uuid, zone in pairs( playCxt.context ) do
 		if zone.GroupCoordinator == uuid then
-			restorePlaybackContext( zone.Device or 0, uuid, zone )
+			restorePlaybackContext( Zones[uuid] or 0, uuid, zone )
 		end
 	end
 
 	-- Finally restore context for other zones -- ??? PHR do we need to? or is restoring coordinator sufficient? easy to test...
 	for uuid, cxt in pairs(playCxt.context) do
 		if cxt.GroupCoordinator ~= uuid then
-			restorePlaybackContext(cxt.Device or 0, uuid, cxt)
+			restorePlaybackContext( Zones[uuid] or 0, uuid, cxt )
 		end
 	end
 end
@@ -2873,8 +2873,7 @@ local function sayOrAlert(device, parameters, saveAndRestore)
 	local uri = defaultValue(parameters, "URI", nil)
 	local duration = tonumber( defaultValue( parameters, "Duration", "10" ) ) or 10
 	if duration <= 0 then duration = 10 end
-	local sameVolume = false
-	saveVolume = parameters.SaveVolumeForAll and string.find( "|1|true|TRUE", parameters.SameVolumeForAll )
+	local sameVolume = string.find( "|1|true|TRUE", parameters.SameVolumeForAll or "0" )
 
 	local targets = {}
 	local newGroup = true
@@ -2938,12 +2937,13 @@ local function sayOrAlert(device, parameters, saveAndRestore)
 		end
 
 		-- Save state for all affected members
-		D("sayOrAlert() final affected list is %1", affected)
 		sayPlayback[device] = savePlaybackContexts( device, keys( affected ) )
 		sayPlayback[device].newGroup = newGroup -- signal to endSay
+		sayPlayback[device].coordinator = localUUID --save temporary coordinator for clean ungroup
+		D("sayOrAlert() final affected list is %1 newGroup %2 coord %3", affected, newGroup, localUUID)
 
 		-- Pause all affected zones. If we need a temporary group, remove all non-coordinators;
-		-- this leaves all affected players as standalone. playURI will go the grouping.
+		-- this leaves all affected players as standalone. playURI will do the grouping.
 		for uuid in pairs( affected ) do
 			local gr = getZoneGroup( uuid ) or {}
 			local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
@@ -3027,15 +3027,21 @@ endSayAlert = function(task, device)
 			-- Playback state was saved, so restore it.
 			local playCxt = sayPlayback[device]
 			if playCxt.newGroup then
-				-- Temporary group was used; reset group structure.
-				-- First remove all to-be-restored devices from their current groups.
+				--[[ Temporary group was used; reset group structure. First remove all to-be-restored 
+					 devices from their current groups. It seems quite important to the zones that
+					 they are removed from the coordinator, but the coordinator itself isn't touched.
+				--]]
 				D("endSayAlert() restoring group structure after temporary group")
-				for uuid in pairs( playCxt.context or {} ) do
-					D("endSayAlert() clearing group for %1", uuid)
-					local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
-					if AVTransport ~= nil then
-						AVTransport.Stop({InstanceID="0"})
-						AVTransport.BecomeCoordinatorOfStandaloneGroup({InstanceID="0"})
+				for uuid,cxt in pairs( playCxt.context or {} ) do
+					if uuid ~= playCxt.coordinator then
+						D("endSayAlert() clearing group for %1", uuid)
+						local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
+						if AVTransport ~= nil then
+							AVTransport.Stop({InstanceID="0"})
+							AVTransport.BecomeCoordinatorOfStandaloneGroup({InstanceID="0"})
+						end
+					else
+						D("endSayAlert() %1 is coordinator of temporary group", uuid)
 					end
 				end
 
