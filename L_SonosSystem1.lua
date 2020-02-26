@@ -8,11 +8,11 @@
 module( "L_SonosSystem1", package.seeall )
 
 PLUGIN_NAME = "Sonos"
-PLUGIN_VERSION = "2.0develop-20056.2120"
+PLUGIN_VERSION = "2.0develop-20057.1500"
 PLUGIN_ID = 4226
 
 local _CONFIGVERSION = 19298
-local _UIVERSION = 20056
+local _UIVERSION = 20057
 
 local DEBUG_MODE = false	-- Don't hardcode true--use state variable config
 
@@ -401,17 +401,6 @@ local function file_symlink( old, new )
 	end
 end
 
-local function file_dtm( fpath )
-	if lfs then
-		return lfs.attributes( fpath, "modification" ) or 0
-	end
-	local f = io.popen( "stat -c %Y "..fpath )
-	if not f then return 0 end
-	local ts = tonumber( f:read("*a") ) or 0
-	f:close()
-	return ts
-end
-
 local function getInstallPath()
 	if isOpenLuup then
 		local loader = require "openLuup.loader"
@@ -752,40 +741,6 @@ local function getSimpleDIDLStatus(meta)
 		end
 	end
 	return complement, title, artist, album, details, albumArt, desc, didl, didlTable
-end
-
---[[ currently unused
-local function parseSimple(value, tag)
-	local elts = {}
-	local eltsTable = {}
-	for tmp in value:gmatch("(<"..tag.."%s?.-</"..tag..">)") do
-		local elts0, eltsTable0 = upnp.parseFirstElt(tmp, tag, nil)
-		table.insert(elts, elts0)
-		table.insert(eltsTable, eltsTable0)
-	end
-
-	return elts, eltsTable
-end
-
-local function getValueFromXML(xml, tag, subTag, value, tagResult)
-	local result = nil
-	local _, eltsTable = parseSimple(xml, tag)
-	for _, v in ipairs(eltsTable) do
-		if (v[subTag] == value and v[tagResult] ~= nil) then
-			result = v[tagResult]
-			break
-		end
-	end
-	return result
-end
---]]
-
-local function getAttribute(xml, tag, attribute)
-	local value = xml:match("<"..tag.."%s?.-%s"..attribute..'="([^"]+)"[^>]->')
-	if (value ~= nil) then
-		value = upnp.decode(value)
-	end
-	return value
 end
 
 function xmlNodesForTag( node, tag )
@@ -1143,37 +1098,6 @@ local function parseQueue(xml)
 	return result
 end
 
--- Check transport state to see if stopped. If so and TTS alerts running, rush the endSayAlert
--- task for the device.
-local function checkTransportState( uuid )
-	D("checkTransportState(%1) state %2", uuid, (dataTable[uuid] or {}).TransportState)
-	local device = findDeviceByUUID( uuid ) or -1
-	if not ( device and sayQueue[device] and #sayQueue[device] > 0 ) then return end
-	local task = scheduler.getTask("endSayAlert"..(device or 0))
-	if not task then return end
-	D("checkTransportState() device %1 task %2 queue %3", device, tostring(task), sayQueue[device])
-	if dataTable[uuid].TransportState == "PLAYING" then
-		if dataTable[uuid].CurrentTrackURI == sayQueue[device][1].URI and not sayQueue[device][1].__playing then
-			D("checkTransportState() say queue playing %1", dataTable[uuid].CurrentTrackURI)
-			-- CurrentTrackDuration invalid for some generated media... :/
-			if false and dataTable[uuid].CurrentTrackDuration then
-				local hh,mm,ss = unpack( split( dataTable[uuid].CurrentTrackDuration, ":" ) )
-				ss = (tonumber(hh) or 0)*3600 + (tonumber(mm) or 0)*60 + ss + 1
-				task:delay( ss, { replace=true } )
-				D("checkTransportState() adjusted duration %1", ss)
-			end
-			sayQueue[device][1].__playing = true
-		end
-	elseif dataTable[uuid].TransportState == "STOPPED" then
-		D("checkTransportState() stopped %1, waiting for %2",
-			dataTable[uuid].CurrentTrackURI, sayQueue[device][1].URI)
-		if dataTable[uuid].CurrentTrackURI == sayQueue[device][1].URI and sayQueue[device][1].__playing then
-			D("checkTransportState() rushing %1 for STOPPED transport status", tostring(task))
-			-- task:delay( 0, { replace=true } )
-		end
-	end
-end
-
 local setup -- forward declaration
 -- refreshNow is the refresh handle for updateWithoutProxy (task). DO NOT call this function
 -- directly. To get proper scheduling of refreshing, including on-demand refreshes, always
@@ -1242,7 +1166,7 @@ local function refreshNow(uuid, force, refreshQueue)
 		end
 
 		-- Special handling TransportState: if now STOPPED, and TTS/alerts are playing, rush endSay
-		local tschanged = setData("TransportState", upnp.extractElement("CurrentTransportState", tmp, ""), uuid, false)
+		changed = setData("TransportState", upnp.extractElement("CurrentTransportState", tmp, ""), uuid, changed)
 
 		changed = setData("TransportStatus", upnp.extractElement("CurrentTransportStatus", tmp, ""), uuid, changed)
 		changed = setData("TransportPlaySpeed", upnp.extractElement("CurrentSpeed", tmp, ""), uuid, changed)
@@ -1289,13 +1213,6 @@ local function refreshNow(uuid, force, refreshQueue)
 		changed = setData("CurrentAlbum", album, uuid, changed)
 		changed = setData("CurrentDetails", details, uuid, changed)
 		changed = setData("CurrentAlbumArt", albumArt, uuid, changed)
-
-		-- Now that we've updated everything, if TransportState has changed to stop, check
-		if tschanged then
-			changed = true
-			checkTransportState( uuid )
-		end
-
 	end
 
 	local Rendering = upnp.getService(uuid, UPNP_RENDERING_CONTROL_SERVICE)
@@ -1960,26 +1877,6 @@ local function pauseAll(device)
 	end
 end
 
-local function getMP3Duration( mp3file, bitrate )
-	if not bitrate then
-		local fp = io.popen("file "..mp3file)
-		if fp then
-			local s = fp.read("*l")
-			fp:close()
-			bitrate = tonumber( s:match( '(%d+)kbps' ) or "" ) or 32
-		else
-			bitrate = 32
-		end
-	end
-	local f = io.open( mp3file, "r" )
-	if f then
-		local sz = f:seek("end")
-		f:close()
-		return math.ceil(sz * 8 / ( bitrate * 1024 ) )
-	end
-	return 2 -- ugly default
-end
-
 local function setupTTSSettings(device)
 	D("setupTTSSettings(%1)", device)
 	TTSConfig = nil
@@ -2067,24 +1964,6 @@ local function getAvailableServices(uuid)
 		end
 	end
 	return services
-end
-
--- File copy. Why? So that symlinks are copied as actual file contents.
-local function cp( fromPath, toPath )
-	local ff = io.open( fromPath, "rb" )
-	if not ff then return false end
-	local tf = io.open( toPath, "wb" )
-	if not tf then ff:close() return false end
-	local nb = 0
-	while true do
-		local s = ff:read(2048)
-		if not s then break end
-		tf:write(s)
-		nb = nb + #s
-	end
-	tf:close()
-	ff:close()
-	return nb
 end
 
 -- Fix the locations of the legacy icons. This can eventually go away. 7.30: Or can it? :(
@@ -2315,7 +2194,6 @@ local function handleAVTransportChange(uuid, event)
 	local statusString, title, title2, artist, album, details, albumArt, desc
 	local currentUri, currentUriMetaData, trackUri, trackUriMetaData, service, serviceId
 	local changed = false
-	local tschanged = false
 	local tmp = event:match("<Event%s?[^>]-><InstanceID%s?[^>]->(.+)</InstanceID></Event>")
 	if tmp ~= nil then
 		local found = false
@@ -2333,7 +2211,6 @@ local function handleAVTransportChange(uuid, event)
 			if (attrTable.val ~= nil) then
 				-- Special handling for TransportState/TTS interaction (see also below)
 				local vchanged = setData(token, upnp.decode(attrTable.val), uuid, false)
-				if token == "TransportState" then tschanged = vchanged end
 				changed = vchanged or changed
 			end
 		end
@@ -2366,11 +2243,6 @@ local function handleAVTransportChange(uuid, event)
 				getSimpleDIDLStatus(dataTable[uuid]["r:EnqueuedTransportURIMetaData"])
 			_, serviceId = getServiceFromURI(currentUri, trackUri)
 			updateServicesMetaDataKeys(uuid, serviceId, desc)
-		end
-
-		if tschanged then
-			-- Finally, after all other updates, check transport state if changed.
-			checkTransportState(uuid)
 		end
 	end
 	if changed and findDeviceByUUID( uuid ) then
@@ -2549,7 +2421,7 @@ setup = function(zoneDevice, flag)
 
 	dataTable[uuid] = {}
 
-	local newOnline = deviceIsOnline(zoneDevice)
+	deviceIsOnline(zoneDevice)
 
 	changed = setData("SonosID", uuid, uuid, changed)
 	local roomName = upnp.decode( values.roomName or "" )
@@ -3116,7 +2988,7 @@ endSayAlert = function(task, device)
 					 they are removed from the coordinator, but the coordinator itself isn't touched.
 				--]]
 				D("endSayAlert() restoring group structure after temporary group")
-				for uuid,cxt in pairs( playCxt.context or {} ) do
+				for uuid in pairs( playCxt.context or {} ) do
 					if uuid ~= playCxt.coordinator then
 						D("endSayAlert() clearing group for %1", uuid)
 						local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
@@ -3966,14 +3838,14 @@ function actionAVTransportNextProgrammedRadioTracks( lul_device, lul_settings )
 
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
 
-	AVTransport.NextProgrammedRadioTracks({InstanceID=instanceId})
+	AVTransport.NextProgrammedRadioTracks{InstanceID=instanceId}
 
 	updateNow( device )
 end
 
 function actionAVTransportGetPositionInfo( lul_device, lul_settings )
 	assert(luup.devices[lul_device].device_type == SONOS_ZONE_DEVICE_TYPE)
-	local device, uuid = controlByCoordinator(findZoneByDevice( lul_device ))
+	local _, uuid = controlByCoordinator(findZoneByDevice( lul_device ))
 	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
 	if not AVTransport then
 		return
@@ -3981,7 +3853,7 @@ function actionAVTransportGetPositionInfo( lul_device, lul_settings )
 
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
 
-	local _, tmp = AVTransport.GetPositionInfo({InstanceID=instanceId})
+	local _, tmp = AVTransport.GetPositionInfo{InstanceID=instanceId}
 	setData("RelativeTimePosition", upnp.extractElement("RelTime", tmp, "NOT_IMPLEMENTED"), uuid, false)
 end
 
