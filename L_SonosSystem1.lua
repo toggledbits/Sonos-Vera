@@ -2578,14 +2578,13 @@ local function zoneRunOnce( dev )
 end
 
 local function systemRunOnce( pdev )
-	local s = getVarNumeric( "ConfigVersion", 0, pdev, SONOS_SYS_SID )
-	if s == 0 then
-		-- First run
-		initVar( "Message", "", pdev, SONOS_SYS_SID )
-		initVar( "Enabled", 1, pdev, SONOS_SYS_SID )
-		initVar( "DebugLogs", 0, pdev, SONOS_SYS_SID )
-		initVar( "MaxLogSize", "", pdev, SONOS_SYS_SID )
-	end
+	-- local s = getVarNumeric( "ConfigVersion", 0, pdev, SONOS_SYS_SID )
+	initVar( "Message", "", pdev, SONOS_SYS_SID )
+	initVar( "Enabled", 1, pdev, SONOS_SYS_SID )
+	initVar( "UseProxy", "", lul_device, SONOS_SYS_SID )
+	initVar( "DebugLogs", 0, pdev, SONOS_SYS_SID )
+	initVar( "MaxLogSize", "", pdev, SONOS_SYS_SID )
+	initVar("CheckStateRate", "", lul_device, SONOS_SYS_SID)
 
 	setVar( SONOS_SYS_SID, "ConfigVersion", _CONFIGVERSION, pdev )
 end
@@ -2612,7 +2611,7 @@ local function deferredStartup(device)
 	device = tonumber(device)
 
 	-- Allow configured no-proxy operation
-	if getVarNumeric( "UseProxy", 1, device, SONOS_SYS_SID, true ) == 0 then
+	if getVarNumeric( "UseProxy", 1, device, SONOS_SYS_SID ) == 0 then
 		upnp.unuseProxy()
 	else
 		scheduler.Task:new("checkProxy", device, checkProxy, { device }):delay(300)
@@ -2731,7 +2730,7 @@ end
 local function waitForProxy( task, device, tries )
 	D("waitForProxy(%1,%2,%3)", tostring(task), device, tries)
 	tries = (tries or 0) + 1
-	if getVarNumeric( "UseProxy", 1, device, SONOS_SYS_SID ) == 0
+	if getVarNumeric( "UseProxy", isOpenLuup and 0 or 1, device, SONOS_SYS_SID ) == 0
 		or upnp.getProxyApiVersion() or tries >= 10 then
 		-- Success or too long or no proxy, get going.
 		task:close() -- close current master task; deferredStartup will create anew
