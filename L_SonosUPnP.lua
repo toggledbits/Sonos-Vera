@@ -305,7 +305,7 @@ function service(controlURL, servicetype, actions)
 
         local fn = function(...)
             if (actions[key]) then
-                debug("service.__index: %s('%s', '%s') called with parameter count=%d", key, controlURL, servicetype, select("#", ...))
+                debug("service.__index: %1(%2, %3) called with parameter count=%4", key, controlURL, servicetype, select("#", ...))
                 return UPnP_request(controlURL, key, servicetype, ...)
             else
                 return false, "action not available"
