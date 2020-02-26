@@ -15,9 +15,9 @@ var SonosSystem = (function(api, $) {
 	/* unique identifier for this plugin... */
 	var uuid = '79bf9374-f989-11e9-884c-dbb32f3fa64a'; /* SonosSystem 2019-12-11 19345 */
 
-	var pluginVersion = '2.0develop-20055.1905';
+	var pluginVersion = '2.0develop-20056.2120';
 
-	var _UIVERSION = 19301;     /* must coincide with Lua core */
+	var _UIVERSION = 20056;     /* must coincide with Lua core */
 
 	var myModule = {};
 
@@ -413,6 +413,23 @@ var SonosSystem = (function(api, $) {
 
 		if (typeof Sonos.timeoutVar2 != 'undefined') {
 			clearTimeout(Sonos.timeoutVar2);
+		}
+
+		/* Check agreement of plugin core and UI */
+		var s = api.getDeviceState( device, Sonos.SONOS_SYS_SID, "_UIV", { dynamic: false } ) || "0";
+		console.log("doSettings() for device " + device + " requires UI version " + _UIVERSION + ", seeing " + s);
+		if ( String(_UIVERSION) != s ) {
+			api.setCpanelContent( '<div class="sonoswarning" style="border: 4px solid red; padding: 8px;">' +
+				" ERROR! The plugin core version and UI version do not agree." +
+				" This may cause errors or corrupt your configuration." +
+				" Please hard-reload your browser and try again " +
+				' (<a href="https://duckduckgo.com/?q=hard+reload+browser" target="_blank">how?</a>).' +
+				" If you have update plugin files, you may not have successfully installed all required files," +
+				" have left or introduced incompatible files," +
+				" or have both compressed and uncompressed copies of the files on your system." +
+				" Expected " + String(_UIVERSION) + " got " + String(s) +
+				".</div>" );
+			return false;
 		}
 
 		Sonos_detectBrowser();

@@ -8,10 +8,11 @@
 module( "L_SonosSystem1", package.seeall )
 
 PLUGIN_NAME = "Sonos"
-PLUGIN_VERSION = "2.0develop-20055.1905"
+PLUGIN_VERSION = "2.0develop-20056.2120"
 PLUGIN_ID = 4226
 
 local _CONFIGVERSION = 19298
+local _UIVERSION = 20056
 
 local DEBUG_MODE = false	-- Don't hardcode true--use state variable config
 
@@ -2058,36 +2059,84 @@ end
 
 -- Fix the locations of the legacy icons. This can eventually go away. 7.30: Or can it? :(
 local function fixLegacyIcons()
-	if isOpenLuup then return end
 	local basePath = getInstallPath()
-	function moveIcon( p )
-		if not file_exists( basePath .. p ) then
-			-- File missing from basePath; try to locate it.
-			if file_exists( basePath .. p .. ".lzo" ) then
-				-- Decompress
-				os.execute( "pluto-lzo d " .. basePath .. p..".lzo " .. basePath .. p )
-			elseif file_exists( "/www/cmh/skins/default/icons/" .. p ) then
-				-- cp instead of mv so Luup doesn't complain about missing plugin files
-				cp( "/www/cmh/skins/default/icons/"..p, basePath .. p )
-			elseif file_exists( "/www/cmh/skins/default/img/devices/device_states/" .. p ) then
-				cp( "/www/cmh/skins/default/img/device/device_states/" .. p, basePath .. p )
-			end
-		elseif file_exists( basePath .. p .. ".lzo" ) then
-			-- Both compressed and uncompressed exist.
-			if file_dtm( basePath .. p .. ".lzo" ) > file_dtm( basePath .. p ) then
-				-- Decompress newer file
-				os.execute( "pluto-lzo d " .. basePath .. p ..".lzo " .. basePath .. p )
-			end
-		end
-		if file_exists( basePath .. p ) then
-			-- Apparently as of 7.30, this is new designated location.
-			if not file_exists( "/www/cmh/skins/default/icons/"..p ) then
-				file_symlink( basePath..p, "/www/cmh/skins/default/icons/"..p )
-			end
-		end
+	local f = io.open( basePath .. "Sonos.png", "rb" )
+	if not f then
+		local m = require "mime"
+		f = io.open( basePath .. "Sonos.png", "wb" )
+		f:write( m.unb64([[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]]) )
 	end
-	moveIcon( "Sonos.png" )
-	for k=0,150,25 do moveIcon( "Sonos_"..tostring(k)..".png" ) end
+	f:close()
+
+	-- Apparently as of 7.30, this is new designated location.
+	if not ( isOpenLuup or file_exists( "/www/cmh/skins/default/icons/Sonos.png" ) ) then
+		file_symlink( basePath.."Sonos.png", "/www/cmh/skins/default/icons/Sonos.png" )
+	end
 end
 
 -- Set up custom icon for device. The icon is retrieved from the device
@@ -2500,7 +2549,7 @@ setup = function(zoneDevice, flag)
 		-- Newer hardware revision of Play 1
 		model = 6 -- 2019-07-05 rigpapa; from @cranb https://community.getvera.com/t/version-1-4-3-development/209171/11
 	end
-	changed = setData("SonosModel", string.format("%d", model), uuid, changed)
+	changed = setData("SonosModel", tostring(model), uuid, changed)
 
 	L("Device #%1 at %2 is %3, %4 (%5) uuid %6",
 		tostring( zoneDevice ),
@@ -2581,10 +2630,10 @@ local function systemRunOnce( pdev )
 	-- local s = getVarNumeric( "ConfigVersion", 0, pdev, SONOS_SYS_SID )
 	initVar( "Message", "", pdev, SONOS_SYS_SID )
 	initVar( "Enabled", 1, pdev, SONOS_SYS_SID )
-	initVar( "UseProxy", "", lul_device, SONOS_SYS_SID )
+	initVar( "UseProxy", "", pdev, SONOS_SYS_SID )
 	initVar( "DebugLogs", 0, pdev, SONOS_SYS_SID )
 	initVar( "MaxLogSize", "", pdev, SONOS_SYS_SID )
-	initVar("CheckStateRate", "", lul_device, SONOS_SYS_SID)
+	initVar("CheckStateRate", "", pdev, SONOS_SYS_SID)
 
 	setVar( SONOS_SYS_SID, "ConfigVersion", _CONFIGVERSION, pdev )
 end
@@ -2611,7 +2660,7 @@ local function deferredStartup(device)
 	device = tonumber(device)
 
 	-- Allow configured no-proxy operation
-	if getVarNumeric( "UseProxy", 1, device, SONOS_SYS_SID ) == 0 then
+	if getVarNumeric( "UseProxy", isOpenLuup and 0 or 1, device, SONOS_SYS_SID ) == 0 then
 		upnp.unuseProxy()
 	else
 		scheduler.Task:new("checkProxy", device, checkProxy, { device }):delay(300)
@@ -2760,7 +2809,12 @@ function startup( lul_device )
 	systemRunOnce( lul_device )
 
 	setVar( SONOS_SYS_SID, "PluginVersion", PLUGIN_VERSION, lul_device )
+	setVar( SONOS_SYS_SID, "_UIV", _UIVERSION, lul_device )
 	setVar( SONOS_SYS_SID, "Message", "Starting...", lul_device )
+
+	if file_exists( getInstallPath() .. "L_SonosSystem1.lua" ) and file_exists( getInstallPath() .. "L_SonosSystem1.lua.lzo" ) then
+		return false, "Invalid install files", MSG_CLASS
+	end
 
 	scheduler = TaskManager( 'sonosTick' )
 
@@ -3026,7 +3080,7 @@ endSayAlert = function(task, device)
 			-- Playback state was saved, so restore it.
 			local playCxt = sayPlayback[device]
 			if playCxt.newGroup then
-				--[[ Temporary group was used; reset group structure. First remove all to-be-restored 
+				--[[ Temporary group was used; reset group structure. First remove all to-be-restored
 					 devices from their current groups. It seems quite important to the zones that
 					 they are removed from the coordinator, but the coordinator itself isn't touched.
 				--]]
@@ -3399,7 +3453,7 @@ function actionSonosStartDiscovery( lul_device, lul_settings ) -- luacheck: igno
 		D("actionSonosStartDiscovery() new zones %1", newChildren)
 		if #newChildren > 0 then
 			setVariableValue(SONOS_SYS_SID, "DiscoveryMessage",
-				string.format("Found %d new zones; creating devices...", #newChildren), lul_device)
+				string.format("Found %s new zones; creating devices...", #newChildren), lul_device)
 			local ptr = luup.chdev.start( lul_device )
 			for uuid,k in pairs( children ) do
 				local df = luup.attr_get('device_file', k)
@@ -3428,7 +3482,7 @@ function actionSonosStartDiscovery( lul_device, lul_settings ) -- luacheck: igno
 					table.concat( cv, "\n" ), false )
 			end
 			setVariableValue(SONOS_SYS_SID, "DiscoveryMessage",
-				string.format("Completed. %d new zones added.", #newChildren), lul_device)
+				string.format("Completed. %s new zones added.", #newChildren), lul_device)
 			L("Discovery complete. %1 new zones added. Requesting Luup reload.", #newChildren)
 			luup.chdev.sync( lul_device, ptr )
 		else
