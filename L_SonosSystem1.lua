@@ -8,7 +8,7 @@
 module( "L_SonosSystem1", package.seeall )
 
 PLUGIN_NAME = "Sonos"
-PLUGIN_VERSION = "2.0develop-20057.1500"
+PLUGIN_VERSION = "2.0develop-20060.2005"
 PLUGIN_ID = 4226
 
 local _CONFIGVERSION = 19298
@@ -2078,7 +2078,7 @@ local function setDeviceIcon( device, icon, model, uuid )
 	-- See if we've already created a custom static JSON for this UUID or model.
 	local staticJSONFile
 	if ( uuid or "") ~= "" then
-		staticJSONFile = string.format( "D_Sonos1_%s.json", tostring( uuid ):lower():gsub( "[^a-z0-9_]", "_" ) )
+		staticJSONFile = string.format( "D_Sonos1_%s.json", ( tostring( uuid ):lower():gsub( "[^a-z0-9_]", "_" ) ) )
 		if file_exists_LZO( installPath .. staticJSONFile ) then
 			L("Using device-specific UI %s", staticJSONFile )
 		else
@@ -2086,7 +2086,7 @@ local function setDeviceIcon( device, icon, model, uuid )
 		end
 	end
 	if not staticJSONFile then
-		staticJSONFile = string.format( "D_Sonos1_%s.json", tostring( model or "GENERIC" ):upper():gsub( "[^A-Z0-9_]", "_" ) )
+		staticJSONFile = string.format( "D_Sonos1_%s.json", ( tostring( model or "GENERIC" ):upper():gsub( "[^A-Z0-9_]", "_" ) ) )
 	end
 	if icorev < ICONREV or not file_exists_LZO( installPath .. staticJSONFile ) then
 		-- Create model-specific version of static JSON
@@ -3378,7 +3378,7 @@ function actionSonosStartDiscovery( lul_device, lul_settings ) -- luacheck: igno
 				if (zone.modelName or "") ~= "" then
 					table.insert( w, zone.modelName )
 				else
-					table.insert( w, zone.udn:upper():gsub("^RINCON_","") )
+					table.insert( w, ( zone.udn:upper():gsub("^RINCON_","") ) ) -- N.B. gsub returns 2 values
 				end
 				local name = table.concat( w, " " )
 				luup.chdev.append( lul_device, ptr, zone.udn, name, "", "D_Sonos1.xml", "",
