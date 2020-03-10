@@ -43,6 +43,11 @@
 		<stateVariable sendEvents="no">
 			<name>A_ARG_TYPE_Zones</name>
 			<dataType>string</dataType>
+			<allowedValueList>
+				<allowedValue></allowedValue>
+				<allowedValue>CURRENT</allowedValue>
+				<allowedValue>ALL</allowedValue>
+			</allowedValueList>
 		</stateVariable>
 		<stateVariable sendEvents="no">
 			<name>A_ARG_TYPE_Text</name>
@@ -67,6 +72,15 @@
 		<stateVariable sendEvents="no">
 			<name>A_ARG_TYPE_boolean</name>
 			<dataType>boolean</dataType>
+		</stateVariable>
+		<stateVariable sendEvents="no">
+			<name>A_ARG_TYPE_repeat</name>
+			<dataType>ui1</dataType>
+			<defaultValue>1</defaultValue>
+			<allowedValueRange>
+				<minimum>1</minimum>
+				<maximum>255</maximum>
+			</allowedValueRange>
 		</stateVariable>
 		<stateVariable sendEvents="no">
 			<name>A_ARG_TYPE_LastChange</name>
@@ -94,10 +108,6 @@
 		<stateVariable sendEvents="yes">
 			<name>SonosOnline</name>
 			<shortCode>online</shortCode>
-			<dataType>boolean</dataType>
-		</stateVariable>
-		<stateVariable sendEvents="no">
-			<name>A_ARG_TYPE_enable</name>
 			<dataType>boolean</dataType>
 		</stateVariable>
 		<stateVariable sendEvents="no">
@@ -183,6 +193,11 @@
 					<direction>in</direction>
 					<relatedStateVariable>A_ARG_TYPE_Zones</relatedStateVariable>
 				</argument>
+				<argument>
+					<name>Repeat</name>
+					<direction>in</direction>
+					<relatedStateVariable>A_ARG_TYPE_repeat</relatedStateVariable>
+				</argument>
 			</argumentList>
 		</action>
 		<action>
@@ -224,6 +239,11 @@
 					<relatedStateVariable>A_ARG_TYPE_Zones</relatedStateVariable>
 				</argument>
 				<argument>
+					<name>Repeat</name>
+					<direction>in</direction>
+					<relatedStateVariable>A_ARG_TYPE_repeat</relatedStateVariable>
+				</argument>
+				<argument>
 					<name>Chime</name>
 					<direction>in</direction>
 					<relatedStateVariable>A_ARG_TYPE_boolean</relatedStateVariable>
@@ -257,7 +277,7 @@
 				<argument>
 					<name>Zones</name>
 					<direction>in</direction>
-					<relatedStateVariable>A_ARG_TYPE_Zones</relatedStateVariable>
+					<relatedStateVariable>A_ARG_TYPE_Zone</relatedStateVariable>
 				</argument>
 			</argumentList>
 		</action>
@@ -337,7 +357,7 @@
 				<argument>
 					<name>enable</name>
 					<direction>in</direction>
-					<relatedStateVariable>A_ARG_TYPE_enable</relatedStateVariable>
+					<relatedStateVariable>A_ARG_TYPE_boolean</relatedStateVariable>
 				</argument>
 			</argumentList>
 		</action>
