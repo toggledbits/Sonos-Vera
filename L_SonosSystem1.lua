@@ -8,7 +8,7 @@
 module( "L_SonosSystem1", package.seeall )
 
 PLUGIN_NAME = "Sonos"
-PLUGIN_VERSION = "2.0develop-20060.2005"
+PLUGIN_VERSION = "2.0develop-20070.1130"
 PLUGIN_ID = 4226
 
 local _CONFIGVERSION = 19298
@@ -1937,6 +1937,7 @@ local function setupTTSSettings(device)
 		TTSChime = { URI=TTSBaseURL..chimefile }
 		TTSChime.URIMetadata = TTS_METADATA:format( "TTS Chime", "http-get:*:audio/mpeg:*", TTSChime.URI )
 		TTSChime.Duration = tonumber( chimedur ) or 5
+		TTSChime.Repeat = 1
 		TTSChime.Volume = tonumber( chimevol )
 		TTSChime.TempFile = nil -- flag no delete in endPlayback
 	end
@@ -2945,7 +2946,13 @@ local function queueAlert(device, settings)
 	end
 
 	local first = #sayQueue[device] == 0
-	table.insert(sayQueue[device], settings)
+	local rept = tonumber( settings.Repeat ) or 1
+	if rept < 1 then rept = 1 end
+	while rept > 0 do
+		table.insert(sayQueue[device], settings)
+		rept = rept - 1
+	end
+
 	-- First one kicks things off
 	if first then
 		sayOrAlert(device, settings, true)
@@ -3168,6 +3175,7 @@ function actionSonosSay( lul_device, lul_settings )
 			ch.GroupZones = alert_settings.GroupZones
 			ch.Volume = (ch.Volume or 0) > 0 and ch.Volume or alert_settings.Volume
 			ch.SameVolumeForAll = alert_settings.SameVolumeForAll
+			ch.Repeat = 1
 			queueAlert( lul_device, ch )
 
 			-- Override alert settings to use same zone group as chime

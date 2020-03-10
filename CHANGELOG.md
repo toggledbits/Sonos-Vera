@@ -5,6 +5,7 @@
 ## Version 2.0 (development)
 
 * The plugin has been converted to parent-child, which is more memory efficient. It also has the benefit of discovering and configuring all zones once the first zone has been created. Existing standalone zone devices from prior versions of the plugin are converted in-place to children, so their Vera/Luup device IDs *do not change*, thus preserving scenes, Lua, Reactor conditions and activities, etc.
+* `Say` and `Alert` actions now support `Repeat` parameter (value 1-255) to repeat speech or alert, respectively.
 * TTS now supports Azure (which is very nice quality, BTW); the old Microsoft TTS has been removed. The TTS module has been refactored to be a good bit more modular.
 * Handling of TTS engine settings has been modified to conform to the new TTS module interface. This means, among other things, that you are only asked for settings for the TTS engine you are using, and the UI dependencies between the plugin core and the TTS module have been greatly reduced. This makes the addition of future TTS engines easier (no core changes required).
 * Discovery is now run automatically at startup if there are no Sonos devices configured. All Sonos zones found will be created automatically. Combined with the new parent-child structure, this makes initial setup of the system almost completely automated.
