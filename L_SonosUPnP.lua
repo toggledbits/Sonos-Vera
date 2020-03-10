@@ -1,7 +1,7 @@
 --[[
-	L_SonosUPnP.lua - Implementation module for UPnP for the Sonos plugin for Luup
-	Current maintainer: rigpapa https://community.getvera.com/u/rigpapa/summary
-	For license information, see https://github.com/toggledbits/Sonos-Vera
+    L_SonosUPnP.lua - Implementation module for UPnP for the Sonos plugin for Luup
+    Current maintainer: rigpapa https://community.getvera.com/u/rigpapa/summary
+    For license information, see https://github.com/toggledbits/Sonos-Vera
 --]]
 
 module("L_SonosUPnP", package.seeall)
@@ -62,7 +62,7 @@ local metaDataKeys = {}
 local dataTable = {}
 
 local function debug( stuff, ... )
-	if DEBUG_MODE then log( "(UPnP) "..tostring(stuff), ... ) end
+    if DEBUG_MODE then log( "(UPnP) "..tostring(stuff), ... ) end
 end
 
 function initialize(logger, warningLogger, errorLogger, ct)
@@ -371,7 +371,7 @@ function UPnP_discover(target)
                 if not result then
                     break
                 else
-					--[[ Typical response:
+                    --[[ Typical response:
 HTTP/1.1 200 OK
 CACHE-CONTROL: max-age = 1800
 EXT:
@@ -385,13 +385,13 @@ X-RINCON-WIFIMODE: 0
 X-RINCON-VARIANT: 1
 HOUSEHOLD.SMARTSPEAKER.AUDIO: HHID_la6A8YyuuYAgE8yZKK7iCCEuboM.YwYHlZ-PEqUQuUW7NRgL
 --]]
- 					
+
                     local location, ip, port = result:match("[Ll][Oo][Cc][Aa][Tt][Ii][Oo][Nn]:%s?(http://([%d%.]-):(%d+)/.-)\r\n")
                     local st = result:match("[Ss][Tt]:%s?(.-)\r\n")
-					local usn = result:match("[Uu][Ss][Nn]:%s*(.-)\r\n")
-					local udn = usn and usn:match("uuid:([^:]+)")
-					debug("UPnP_discover() response from %1 usn %2, udn %2", ip, usn, udn)
-					debug(result)
+                    local usn = result:match("[Uu][Ss][Nn]:%s*(.-)\r\n")
+                    local udn = usn and usn:match("uuid:([^:]+)")
+                    log("UPnP_discover() response from %1 usn %2, udn %2", ip, usn, udn)
+                    log(result)
                     if (location ~= nil and ip ~= nil and port ~= nil and st ~= nil) then
                         local new = true
                         for _,device in ipairs( devices ) do
@@ -417,12 +417,14 @@ function scanUPnPDevices(deviceType, infos)
     local xml = "<devices>"
     local devices = UPnP_discover(deviceType)
     for _,dev in ipairs(devices or {}) do
-		debug("scanUPnPDevices() fetching %1", dev.descriptionURL)
+        debug("scanUPnPDevices() fetching %1", dev.descriptionURL)
         local descrXML = UPnP_getDeviceDescription(dev.descriptionURL)
         if descrXML then
+            log("scanUPnPDevices() returned device description for %1", dev.descriptionURL)
+            log(descrXML)
             local values, found = getInfosFromDescription(descrXML, deviceType, infos)
-			debug("scanUPnPDevices() getInfos response for %1 is %2 infos %3", descrXML, values, infos)
-			-- ??? rigpapa 2020-02-24: This built-up XML isn't used anywhere and seems wasteful
+            debug("scanUPnPDevices() getInfos response for %1 is %2 infos %3", descrXML, values, infos)
+            -- ??? rigpapa 2020-02-24: This built-up XML isn't used anywhere and seems wasteful
             if found then
                 xml = xml .. "<device>"
                 xml = xml .. "<ip>" .. (dev.ip or "") .. "</ip>"
@@ -431,7 +433,7 @@ function scanUPnPDevices(deviceType, infos)
                 if (infos ~= nil) then
                     for _,tag in ipairs(infos) do
                         xml = xml .. "<" .. tag .. ">" .. (values[tag] or "") .. "</" .. tag .. ">"
-						dev[tag] = values[tag]
+                        dev[tag] = values[tag]
                     end
                 end
                 xml = xml .. "</device>"
@@ -859,12 +861,12 @@ end
                 local pos2 = xml:find(pattern, pos1)
                 if pos2 then
                     result = xml:sub(pos1+1, pos2-1)
-				else
-					debug("upnp:extractElementValue() lost end for %1 in %2", tag, xml)
+                else
+                    debug("upnp:extractElementValue() lost end for %1 in %2", tag, xml)
                 end
             end
-		else
-			debug("upnp:extractElementValue() tag %1 not found in %2", tag, xml)
+        else
+            debug("upnp:extractElementValue() tag %1 not found in %2", tag, xml)
         end
     end
     return result
@@ -1060,8 +1062,8 @@ function processProxySubscriptions()
             debug("processProxySubscriptions() give up proxy subscription request %1 SID %2", r.method, subscription.sid )
         elseif  reason ~= 200 then
             local data = table.concat(t)
-            debug("processProxySubscriptions() invalid proxy subscription request %1 SID %2 resp %3", 
-				r.method, subscription.sid, data )
+            debug("processProxySubscriptions() invalid proxy subscription request %1 SID %2 resp %3",
+                r.method, subscription.sid, data )
         else
             debug("processProxySubscriptions() completed proxy subscription request %1 SID %2", r.method, subscription.sid )
         end
@@ -1171,8 +1173,8 @@ end
                                                          subscription.actionName,
                                                          sid)
             if sid then
-                debug("subscribeToEvents() event subscription succeeded => SID %1 duration %2 expiry %3", 
-					sid, duration, expiry)
+                debug("subscribeToEvents() event subscription succeeded => SID %1 duration %2 expiry %3",
+                    sid, duration, expiry)
                 subscription.id = sid
                 subscription.expiry = expiry
                 nbSubscriptions = nbSubscriptions + 1
@@ -1187,7 +1189,7 @@ end
                 break
             end
         else
-			warning("Event subscription for service "..tostring(subscription.service).." ignored, unregistered service")
+            warning("Event subscription for service "..tostring(subscription.service).." ignored, unregistered service")
         end
     end
 
@@ -1246,8 +1248,8 @@ end
     else
         for _,subscription in ipairs(subscriptions) do
             if subscription.id == sid then
-				return true
-			end
+                return true
+            end
         end
         warning("Call to " .. notifyAction .. " with bad SID " .. sid)
     end

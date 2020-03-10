@@ -1925,7 +1925,13 @@ local function setupTTSSettings(device)
 	TTSChime = nil
 	local installPath = getInstallPath()
 	local chd = getVar( "TTSChime", "", device, SONOS_SYS_SID, true )
-	if chd == "" then chd = "Sonos_chime.mp3,3" end
+	if chd == "" then 
+		if not file_exists( installPath .. "Sonos_chime.mp3" ) then
+			os.execute("curl -s -m 10 -o '" .. installPath .. "/Sonos_chime.mp3' " ..
+				"'https://raw.githubusercontent.com/toggledbits/Sonos-Vera/develop/Sonos_chime.mp3'")
+		end
+		chd = "Sonos_chime.mp3,3"
+	end
 	local chimefile, chimedur, chimevol = unpack( split( chd, "," ) )
 	D("setupTTSSettings() chime file %1 duration %2 from %3", chimefile, chimedur, chd)
 	if chimefile ~= "" and file_exists( installPath .. chimefile ) then
@@ -3324,7 +3330,7 @@ end
 function actionSonosStartDiscovery( lul_device, lul_settings ) -- luacheck: ignore 212
 	assert(luup.devices[lul_device].device_type == SONOS_SYS_DEVICE_TYPE)
 	setVariableValue(SONOS_SYS_SID, "DiscoveryMessage", "Scanning...", lul_device)
-	local xml, devices = upnp.scanUPnPDevices("urn:schemas-upnp-org:device:ZonePlayer:1", { "modelName", "friendlyName", "roomName" })
+	local xml, devices = upnp.scanUPnPDevices("urn:schemas-upnp-org:device:ZonePlayer:1", { "modelName", "roomName", "displayName" })
 	setVariableValue(SONOS_SYS_SID, "DiscoveryResult", xml, lul_device)
 	if not devices then
 		setVariableValue(SONOS_SYS_SID, "DiscoveryMessage", "Aborted. See log for errors.", lul_device)
@@ -3383,10 +3389,13 @@ function actionSonosStartDiscovery( lul_device, lul_settings ) -- luacheck: igno
 				table.insert( cv, string.format( "%s,Port=%s", SONOS_ZONE_SID, zone.port or 1400 ) )
 				local w = {}
 				if (zone.roomName or "") ~= "" then table.insert( w, zone.roomName ) end
-				if (zone.modelName or "") ~= "" then
-					table.insert( w, zone.modelName )
-				else
-					table.insert( w, ( zone.udn:upper():gsub("^RINCON_","") ) ) -- N.B. gsub returns 2 values
+				if (zone.displayName or "") ~= "" then table.insert( w, zone.displayName ) end
+				if #w == 0 then
+					if (zone.modelName or "") ~= "" then
+						table.insert( w, zone.modelName )
+					else
+						table.insert( w, ( zone.udn:upper():gsub("^RINCON_","") ) ) -- N.B. gsub returns 2 values
+					end
 				end
 				local name = table.concat( w, " " )
 				luup.chdev.append( lul_device, ptr, zone.udn, name, "", "D_Sonos1.xml", "",
