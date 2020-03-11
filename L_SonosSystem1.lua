@@ -8,7 +8,7 @@
 module( "L_SonosSystem1", package.seeall )
 
 PLUGIN_NAME = "Sonos"
-PLUGIN_VERSION = "2.0develop-20071.1405"
+PLUGIN_VERSION = "2.0develop-20071.1455"
 PLUGIN_ID = 4226
 
 local _CONFIGVERSION = 19298
@@ -433,6 +433,8 @@ logToFile = function(str, level)
 			logFile:close()
 			os.execute("pluto-lzo c '" .. lfn .. "' '" .. lfn .. "-prev.lzo'")
 			logFile = io.open(lfn, "w")
+			if not logFile then return end
+			logFile:write(string.format("Log rotated; %s\n", PLUGIN_VERSION))
 		end
 		level = level or 50
 		logFile:write(string.format("%02d %s %s\n", level, os.date("%x.%X"), str))
@@ -505,6 +507,7 @@ TaskManager = function( luupCallbackName )
 		-- Run the to-do list tasks.
 		table.sort( todo, function( a, b ) return a.when < b.when end )
 		for _,v in ipairs(todo) do
+			D("Task:runReadyTasks() running %1", v.id)
 			v:run()
 		end
 
@@ -1366,6 +1369,7 @@ local function updateWithoutProxy(task, device)
 end
 
 local function updateNow( device )
+	D("updateNow(%1)", device)
 	if findZoneByDevice( device or -1 ) then
 		local task = scheduler.getTask("update"..device) or scheduler.Task:new( "update"..device, device, updateWithoutProxy, { device } )
 		task:delay(0, { replace=true } )
@@ -1373,11 +1377,13 @@ local function updateNow( device )
 end
 
 local function controlAnotherZone(targetUUID, sourceUUID)
+	D("controlAnotherZone(%1,%2)", targetUUID, sourceUUID)
 	return targetUUID
 end
 
 -- Return dev,uuid for the group coordinator of the zone (which may be the zone itself).
 local function controlByCoordinator(uuid)
+	D("controlByCoordinator(%1)", uuid)
 	local gr = getZoneGroup( uuid )
 	if gr then
 		uuid = gr.Coordinator or uuid
@@ -1810,6 +1816,7 @@ end
 
 -- The device is added to the same group as zone (UUID or name)
 local function joinGroup(localUUID, zone)
+	D("joinGroup(%1,%2)", localUUID, zone)
 	local uuid = zone:match("RINCON_%x+") and zone or getUUIDFromZoneName(zone)
 	if uuid ~= nil and zoneInfo.zones[uuid] then
 		local groupInfo = zoneInfo.groups[zoneInfo.zones[uuid].Group]
@@ -1821,6 +1828,7 @@ local function joinGroup(localUUID, zone)
 end
 
 local function leaveGroup(localUUID)
+	D("leaveGroup(%1)", localUUID)
 	local AVTransport = upnp.getService(localUUID, UPNP_AVTRANSPORT_SERVICE)
 	if AVTransport ~= nil then
 		AVTransport.BecomeCoordinatorOfStandaloneGroup({InstanceID="0"})
@@ -1828,6 +1836,7 @@ local function leaveGroup(localUUID)
 end
 
 local function updateGroupMembers(gc, members)
+	D("updateGroupMembers(%1,%2)", gc, members)
 	local prevMembers, coordinator = getGroupInfos(gc)
 	local targetMap = {}
 	if members:upper() == "ALL" then
@@ -1865,6 +1874,7 @@ local function updateGroupMembers(gc, members)
 end
 
 local function pauseAll(device)
+	D("pauseAll(%1)", device)
 	local localUUID = findZoneByDevice( device )
 	local _, uuids = getAllUUIDs()
 	for uuid in ipairs( uuids ) do
@@ -2267,15 +2277,15 @@ local function handleContentDirectoryChange(device, uuid, id)
 	if (id:find("SQ:,") == 1) then
 		-- Sonos playlists
 		info = upnp.browseContent(uuid, UPNP_MR_CONTENT_DIRECTORY_SERVICE, "SQ:", false, "dc:title", parseSavedQueues, BROWSE_TIMEOUT)
-		changed = setData("SavedQueues", info, device, changed)
+		changed = setData("SavedQueues", info, uuid, changed)
 	elseif (id:find("R:0,") == 1) then
 		-- Favorites radio stations
 		info = upnp.browseContent(uuid, UPNP_MR_CONTENT_DIRECTORY_SERVICE, "R:0/0", false, "dc:title", parseIdTitle, BROWSE_TIMEOUT)
-		changed = setData("FavoritesRadios", info, device, changed)
+		changed = setData("FavoritesRadios", info, uuid, changed)
 	elseif (id:find("FV:2,") == 1) then
 		-- Sonos favorites
 		info = upnp.browseContent(uuid, UPNP_MR_CONTENT_DIRECTORY_SERVICE, "FV:2", false, "dc:title", parseIdTitle, BROWSE_TIMEOUT)
-		changed = setData("Favorites", info, device, changed)
+		changed = setData("Favorites", info, uuid, changed)
 	elseif (id:find("Q:0,") == 1) then
 		-- Sonos queue
 		if (fetchQueue) then
@@ -2283,7 +2293,7 @@ local function handleContentDirectoryChange(device, uuid, id)
 		else
 			info = ""
 		end
-		changed = setData("Queue", info, device, changed)
+		changed = setData("Queue", info, uuid, changed)
 	end
 	if changed then
 		setVariableValue(HADEVICE_SID, "LastUpdate", os.time(), device)
@@ -2443,7 +2453,7 @@ setup = function(zoneDevice, flag)
 		setVar(SONOS_ZONE_SID, "SonosOnline", "0", zoneDevice)
 		setVar(UPNP_AVTRANSPORT_SID, "CurrentStatus", "Offline", zoneDevice)
 		setVar(SONOS_ZONE_SID, "ProxyUsed", "", zoneDevice) -- ??? plugin variable? see above
-		W("Zone %1 (#%2) appears to be offline. %3", (luup.devices[zoneDevice] or {}).description,
+		E("Zone %1 (#%2) appears to be offline. %3", (luup.devices[zoneDevice] or {}).description,
 			zoneDevice, uuid)
 		return false
 	end
@@ -2722,6 +2732,7 @@ function startup( lul_device )
 	-- See if log file needs to be opened
 	if getVarNumeric("MaxLogSize", 512, lul_device, SONOS_SYS_SID) > 0 then
 		pcall( logToFile, "Log file opened at startup" )
+		pcall( logToFile, PLUGIN_VERSION )
 	end
 
 	systemRunOnce( lul_device )
@@ -2836,6 +2847,7 @@ end
 endSayAlert = false-- Forward declaration, non-local
 
 local function sayOrAlert(device, parameters, saveAndRestore)
+	D("sayOrAlert(%1,%2,%3)", device, parameters, saveAndRestore)
 	local instanceId = defaultValue(parameters, "InstanceID", "0")
 	-- local channel = defaultValue(parameters, "Channel", "Master")
 	local volume = defaultValue(parameters, "Volume", nil)
