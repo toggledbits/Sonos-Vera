@@ -15,7 +15,7 @@ var SonosSystem = (function(api, $) {
 	/* unique identifier for this plugin... */
 	var uuid = '79bf9374-f989-11e9-884c-dbb32f3fa64a'; /* SonosSystem 2019-12-11 19345 */
 
-	var pluginVersion = '2.0develop-20071.1455';
+	var pluginVersion = '2.0develop-20071.1710';
 
 	var _UIVERSION = 20057;     /* must coincide with Lua core */
 
@@ -240,6 +240,8 @@ var SonosSystem = (function(api, $) {
 						api.performActionOnDevice( device, Sonos.SONOS_SYS_SID, "SetReadQueueContent",
 							{ actionArguments: { enable: val ? "1" : "0" } } );
 					}
+
+					alert("Settings saved!");
 				},
 				'onFailure' : function( a,b,c ) {
 					alert('There was a problem saving the configuration. Vera/Luup may have been restarting. Please wait a few seconds and try again.');

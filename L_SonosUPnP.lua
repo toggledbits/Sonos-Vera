@@ -153,10 +153,10 @@ function UPnP_subscribe(eventSubURL, callbackURL, renewalSID)
     })
 
     if request == nil and code ~= "closed" then
-        error("Failed to subscribe to " .. eventSubURL .. ": " .. code)
+        error("Failed (conn) to subscribe to " .. eventSubURL .. ": " .. code)
         return nil, code
     elseif code ~= 200 then
-        error("Failed to subscribe to " .. eventSubURL .. ": " .. code)
+        error("Failed (error) to subscribe to " .. eventSubURL .. ": " .. code)
         return nil, code
     else
         local duration = respHeaders["timeout"]:match("Second%-(%d+)")
@@ -368,10 +368,10 @@ function UPnP_discover(target)
             udp:settimeout(5)
             local endtime = os.time() + 15
             while endtime > os.time() do
-				local peer, port
+                local peer, port
                 result, peer, port = udp:receivefrom()
                 if not result then
-					debug("UPnP_discover() receive timeout")
+                    debug("UPnP_discover() receive timeout")
                     break
                 else
                     --[[ Typical response:
@@ -389,15 +389,15 @@ X-RINCON-VARIANT: 1
 HOUSEHOLD.SMARTSPEAKER.AUDIO: HHID_la6A8YyuuYAgE8yZKK7iCCEuboM.YwYHlZ-PEqUQuUW7NRgL
 --]]
 
-					debug("UPnP_discover() receivefrom %2:%3", result, peer, port)
+                    debug("UPnP_discover() receivefrom %2:%3", result, peer, port)
                     local location, ip, pp = result:match("[Ll][Oo][Cc][Aa][Tt][Ii][Oo][Nn]:%s?(http://([%d%.]-):(%d+)/.-)\r\n")
                     local st = result:match("[Ss][Tt]:%s?(.-)\r\n")
                     local usn = result:match("[Uu][Ss][Nn]:%s*(.-)\r\n")
                     local udn = usn and usn:match("uuid:([^:]+)")
                     log("UPnP_discover() response from %1 usn %2, udn %2", ip, usn, udn)
                     log(result)
-					if st ~= target then
-						warning("Ignoring erroneous response from non-compliant device at %1 (%2); it's not the requested type (%3).", ip, st, target)
+                    if st ~= target then
+                        warning("Ignoring erroneous response from non-compliant device at %1 (%2); it's not the requested type (%3).", ip, st, target)
                     elseif (location ~= nil and ip ~= nil and pp ~= nil and st ~= nil) then
                         local new = true
                         for _,device in ipairs( devices ) do
@@ -1163,7 +1163,7 @@ end
     local sid, expiry, duration
 
     local nbSubscriptions = 0
-    local minDuration = 3600
+    local minDuration = 0
 
     for _,subscription in ipairs(subscriptions) do
         if (Services[uuid][subscription.service] ~= nil) then
@@ -1173,7 +1173,7 @@ end
             end
             sid, expiry, duration = subscribeToUPnPEvent(device,
                                                          veraIP,
-                                                         Services[uuid][subscription.service].eventSubURL,
+                                                         Services[uuid][subscription.service].eventSubURL .. "X",
                                                          subscription.eventVariable,
                                                          actionServiceId,
                                                          subscription.actionName,
@@ -1184,21 +1184,29 @@ end
                 subscription.id = sid
                 subscription.expiry = expiry
                 nbSubscriptions = nbSubscriptions + 1
-                if (duration < minDuration) then
+                if minDuration <= 0 or duration < minDuration then
                     minDuration = duration
                 end
             else
-                error("Event subscription failed: " .. Services[uuid][subscription.service].eventSubURL)
+                warning("Event subscription failed for %1 service %2: %3 error %4", uuid,
+                    subscription.service, Services[uuid][subscription.service].eventSubURL,
+                    duration)
+                subscription.id = ""
+                subscription.expiry = ""
+                --[[ Not getting a subscription should not be a fatal error.
                 cancelProxySubscriptions(subscriptions)
                 nbSubscriptions = 0
                 result = false
                 break
+                --]]
             end
         else
-            warning("Event subscription for service "..tostring(subscription.service).." ignored, unregistered service")
+            warning("Event subscription for %2 service %1 ignored, unregistered service",
+                subscription.service, uuid)
         end
     end
 
+--[[
     if (nbSubscriptions > 0) then
         if (minDuration >= 600) then
             minDuration = minDuration - 300
@@ -1206,8 +1214,15 @@ end
     else
         minDuration = 60
     end
+--]]
 
-    luup.call_delay("renewSubscriptions", minDuration, device .. ":" .. uuid)
+    if result and nbSubscriptions > 0 and minDuration > 0 then
+        debug("subscribeToEvents() renew delay %1 for %2:%3", minDuration, device, uuid)
+        luup.call_delay("renewSubscriptions", minDuration, device .. ":" .. uuid)
+    else
+        debug("subscribeToEvents() no subscription renewal, result=%1, num=%2, dur=%3",
+            result, nbSubscriptions, minDuration)
+    end
 
     return result
   end

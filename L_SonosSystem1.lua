@@ -8,7 +8,7 @@
 module( "L_SonosSystem1", package.seeall )
 
 PLUGIN_NAME = "Sonos"
-PLUGIN_VERSION = "2.0develop-20071.1455"
+PLUGIN_VERSION = "2.0develop-20071.1710"
 PLUGIN_ID = 4226
 
 local _CONFIGVERSION = 19298
@@ -2314,8 +2314,9 @@ function renewSubscriptions(data)
 	if device and uuid then
 		if uuid ~= findZoneByDevice( device )  then
 			D("Renewal ignored for uuid %1 (device %2/UUID mismatch, got %3)", uuid, device, findZoneByDevice( device ))
-		elseif not upnp.subscribeToEvents(device, VERA_IP, EventSubscriptions[uuid], SONOS_ZONE_SID, uuid) then
-			setup(device, true)
+		else
+			-- Attempt renewal
+			upnp.subscribeToEvents(device, VERA_IP, EventSubscriptions[uuid], SONOS_ZONE_SID, uuid)
 		end
 	end
 end
