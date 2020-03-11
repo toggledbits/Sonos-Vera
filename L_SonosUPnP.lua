@@ -362,13 +362,16 @@ function UPnP_discover(target)
     local devices = {}
     local udp = socket.udp()
     if udp then
+        udp:setsockname('*', 1900)
         local result = udp:sendto(UPNP_DISCOVERY:format(target), "239.255.255.250", 1900)
         if result ~= nil then
             udp:settimeout(5)
-            local endtime = os.time() + 30
+            local endtime = os.time() + 15
             while endtime > os.time() do
-                result = udp:receivefrom()
+				local peer, port
+                result, peer, port = udp:receivefrom()
                 if not result then
+					debug("UPnP_discover() receive timeout")
                     break
                 else
                     --[[ Typical response:
@@ -386,13 +389,16 @@ X-RINCON-VARIANT: 1
 HOUSEHOLD.SMARTSPEAKER.AUDIO: HHID_la6A8YyuuYAgE8yZKK7iCCEuboM.YwYHlZ-PEqUQuUW7NRgL
 --]]
 
-                    local location, ip, port = result:match("[Ll][Oo][Cc][Aa][Tt][Ii][Oo][Nn]:%s?(http://([%d%.]-):(%d+)/.-)\r\n")
+					debug("UPnP_discover() receivefrom %2:%3", result, peer, port)
+                    local location, ip, pp = result:match("[Ll][Oo][Cc][Aa][Tt][Ii][Oo][Nn]:%s?(http://([%d%.]-):(%d+)/.-)\r\n")
                     local st = result:match("[Ss][Tt]:%s?(.-)\r\n")
                     local usn = result:match("[Uu][Ss][Nn]:%s*(.-)\r\n")
                     local udn = usn and usn:match("uuid:([^:]+)")
                     log("UPnP_discover() response from %1 usn %2, udn %2", ip, usn, udn)
                     log(result)
-                    if (location ~= nil and ip ~= nil and port ~= nil and st ~= nil) then
+					if st ~= target then
+						warning("Ignoring erroneous response from non-compliant device at %1 (%2); it's not the requested type (%3).", ip, st, target)
+                    elseif (location ~= nil and ip ~= nil and pp ~= nil and st ~= nil) then
                         local new = true
                         for _,device in ipairs( devices ) do
                             if device.descriptionURL == location and device.st == st then
@@ -401,7 +407,7 @@ HOUSEHOLD.SMARTSPEAKER.AUDIO: HHID_la6A8YyuuYAgE8yZKK7iCCEuboM.YwYHlZ-PEqUQuUW7N
                             end
                         end
                         if new then
-                            table.insert(devices, { descriptionURL=location, ip=ip, port=port, st=st, udn=udn })
+                            table.insert(devices, { descriptionURL=location, ip=ip, port=pp, st=st, udn=udn })
                         end
                     end
                 end

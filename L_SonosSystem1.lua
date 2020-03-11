@@ -8,7 +8,7 @@
 module( "L_SonosSystem1", package.seeall )
 
 PLUGIN_NAME = "Sonos"
-PLUGIN_VERSION = "2.0develop-20070.1130"
+PLUGIN_VERSION = "2.0develop-20071.1405"
 PLUGIN_ID = 4226
 
 local _CONFIGVERSION = 19298
@@ -189,7 +189,7 @@ local TTSChime
 
 local scheduler
 
-local function Q(str) return "'" .. string.gsub(tostring(str), "(')", "\\%1") .. "'" end
+local function Q(...) return "'" .. string.gsub(table.concat( arg, "" ), "(')", "\\%1") .. "'" end
 
 local function dump(t, seen)
 	if t == nil then return "nil" end
@@ -763,7 +763,7 @@ function updateZoneInfo( uuid )
 	D("updateZoneInfo(%1)", uuid)
 	zoneInfo = { zones={}, groups={} }
 	local zs = dataTable[uuid].ZoneGroupState
-	-- D("updateZoneInfo() zone info is \r\n%1", tostring(zs))
+	D("updateZoneInfo() zone info is \r\n%1", tostring(zs))
 	local root = lom.parse( zs )
 	assert( root and root.tag == "ZoneGroupState" )
 	local groups = xmlNodesForTag( root, "ZoneGroups" )()
@@ -866,7 +866,7 @@ local function deviceIsOffline(device)
 	local changed = setData("SonosOnline", "0", uuid, false)
 	if changed and uuid then
 		W("Setting device #%1 to off-line state", device)
-		groupsState = "<ZoneGroups></ZoneGroups>"
+		groupsState = "<ZoneGroupState><ZoneGroups></ZoneGroups></ZoneGroupState>"
 
 		changed = setData("TransportState", "STOPPED", uuid, changed)
 		changed = setData("TransportStatus", "KO", uuid, changed)
@@ -1099,7 +1099,7 @@ local function parseQueue(xml)
 end
 
 local setup -- forward declaration
--- refreshNow is the refresh handle for updateWithoutProxy (task). DO NOT call this function
+-- refreshNow is the refresh handler for updateWithoutProxy (task). DO NOT call this function
 -- directly. To get proper scheduling of refreshing, including on-demand refreshes, always
 -- use updateNow()
 local function refreshNow(uuid, force, refreshQueue)
@@ -1220,51 +1220,51 @@ local function refreshNow(uuid, force, refreshQueue)
 		D("refreshNow() refreshing rendering state")
 		-- Get Mute status
 		status, tmp = Rendering.GetMute({OrderedArgs={"InstanceID=0", "Channel=Master"}})
-		if status ~= true then
-			commsFailure(device, tmp)
-			return ""
+		if not status then
+			changed = setData("Mute", "", uuid, changed)
+		else
+			changed = setData("Mute", upnp.extractElement("CurrentMute", tmp, ""), uuid, changed)
 		end
-		changed = setData("Mute", upnp.extractElement("CurrentMute", tmp, ""), uuid, changed)
 
 		-- Get Volume
 		status, tmp = Rendering.GetVolume({OrderedArgs={"InstanceID=0", "Channel=Master"}})
 		if not status then
-			commsFailure(device, tmp)
-			return ""
+			changed = setData("Volume", "", uuid, changed)
+		else
+			changed = setData("Volume", upnp.extractElement("CurrentVolume", tmp, ""), uuid, changed)
 		end
-		changed = setData("Volume", upnp.extractElement("CurrentVolume", tmp, ""), uuid, changed)
 
 		-- Get Bass
 		status, tmp = Rendering.GetBass({OrderedArgs={"InstanceID=0", "Channel=Master"}})
-		if status ~= true then
-			commsFailure(device, tmp)
-			return ""
+		if not status then
+			changed = setData("Bass", "", uuid, changed)
+		else
+			changed = setData("Bass", upnp.extractElement("CurrentBass", tmp, ""), uuid, changed)
 		end
-		changed = setData("Bass", upnp.extractElement("CurrentBass", tmp, ""), uuid, changed)
 
 		-- Get Treble
 		status, tmp = Rendering.GetTreble({OrderedArgs={"InstanceID=0", "Channel=Master"}})
-		if status ~= true then
-			commsFailure(device, tmp)
-			return ""
+		if not status then
+			changed = setData("Treble", "", uuid, changed)
+		else
+			changed = setData("Treble", upnp.extractElement("CurrentTreble", tmp, ""), uuid, changed)
 		end
-		changed = setData("Treble", upnp.extractElement("CurrentTreble", tmp, ""), uuid, changed)
 
 		-- Get Loudness
 		status, tmp = Rendering.GetLoudness({OrderedArgs={"InstanceID=0", "Channel=Master"}})
-		if status ~= true then
-			commsFailure(device, tmp)
-			return ""
+		if not status then
+			changed = setData("Loudness", "", uuid, changed)
+		else
+			changed = setData("Loudness", upnp.extractElement("CurrentLoudness", tmp, ""), uuid, changed)
 		end
-		changed = setData("Loudness", upnp.extractElement("CurrentLoudness", tmp, ""), uuid, changed)
 
 		-- Get OutputFixed
 		status, tmp = Rendering.GetOutputFixed({OrderedArgs={"InstanceID=0"}})
-		if status ~= true then
-			commsFailure(device, tmp)
-			return ""
+		if not status then
+			changed = setData("OutputFixed", "0", uuid, changed)
+		else
+			changed = setData("OutputFixed", upnp.extractElement("CurrentFixed", tmp, ""), uuid, changed)
 		end
-		changed = setData("OutputFixed", upnp.extractElement("CurrentFixed", tmp, ""), uuid, changed)
 	end
 
 	-- Sonos queue
@@ -1366,7 +1366,7 @@ local function updateWithoutProxy(task, device)
 end
 
 local function updateNow( device )
-	if findZoneByDevice( device or -1 )  then
+	if findZoneByDevice( device or -1 ) then
 		local task = scheduler.getTask("update"..device) or scheduler.Task:new( "update"..device, device, updateWithoutProxy, { device } )
 		task:delay(0, { replace=true } )
 	end
@@ -1925,10 +1925,12 @@ local function setupTTSSettings(device)
 	TTSChime = nil
 	local installPath = getInstallPath()
 	local chd = getVar( "TTSChime", "", device, SONOS_SYS_SID, true )
-	if chd == "" then 
+	if chd == "" then
+		os.execute( "rm -f /www/sonos/Sonos_chime.mp3" )
+		os.execute( "rm -f /etc/cmh-ludl/Sonos_chime.mp3" )
 		if not file_exists( installPath .. "Sonos_chime.mp3" ) then
-			os.execute("curl -s -m 10 -o '" .. installPath .. "/Sonos_chime.mp3' " ..
-				"'https://raw.githubusercontent.com/toggledbits/Sonos-Vera/develop/Sonos_chime.mp3'")
+			os.execute("curl -s -m 10 -o " .. Q( installPath, "Sonos_chime.mp3" ) ..
+				" 'https://raw.githubusercontent.com/toggledbits/Sonos-Vera/develop/Sonos_chime.mp3'")
 		end
 		chd = "Sonos_chime.mp3,3"
 	end
@@ -2077,10 +2079,10 @@ local function setDeviceIcon( device, icon, model, uuid )
 	local iconFile = string.format( "Sonos_%s%s", model, icon:match( "[^/]+$" ):match( "%..+$" ) )
 	if icorev < ICONREV or not file_exists( installPath..iconFile ) then
 		L("Fetching custom device icon from %1 to %2 as %3", icon, installPath, iconFile )
-		os.execute( "curl -s -o " .. Q( installPath..iconFile ) .. " " .. Q( icon ) )
+		os.execute( "curl -s -m 10 -o " .. Q( installPath, iconFile ) .. " " .. Q( icon ) )
 	end
 	if installPath ~= iconPath then
-		os.execute( "ln -sf " .. Q(installPath..iconFile) .. " " .. Q(iconPath) )
+		os.execute( "ln -sf " .. Q(installPath, iconFile) .. " " .. Q(iconPath) )
 	end
 	-- See if we've already created a custom static JSON for this UUID or model.
 	local staticJSONFile
@@ -2100,7 +2102,7 @@ local function setDeviceIcon( device, icon, model, uuid )
 		L("Creating custom static JSON (device UI) in %1", staticJSONFile)
 		local s,f = file_exists( installPath.."D_Sonos1.json", true )
 		if not s then
-			os.execute( 'pluto-lzo d ' .. Q(installPath .. 'D_Sonos1.json.lzo') .. ' /tmp/D_Sonos1.json.tmp' )
+			os.execute( 'pluto-lzo d ' .. Q(installPath, 'D_Sonos1.json.lzo') .. ' /tmp/D_Sonos1.json.tmp' )
 			f = io.open( '/tmp/D_Sonos1.json.tmp', 'r' )
 			if not f then
 				W("Failed to open /tmp/D_Sonos1.json.tmp")
@@ -2410,19 +2412,39 @@ setup = function(zoneDevice, flag)
 											UPNP_GROUP_RENDERING_CONTROL_SERVICE } },
 										{ "urn:schemas-upnp-org:device:MediaServer:1",
 											{ UPNP_MR_CONTENT_DIRECTORY_SERVICE } }})
+	if status then
+		local newuuid = values.UDN:match("uuid:(.+)") or ""
+		if uuid ~= newuuid then
+			W("Zone %1 (#%2) uuid changed from %3 to %4; offline", (luup.devices[zoneDevice] or {}).description,
+				zoneDevice, uuid, newuuid)
+			status = false
+		end
+	end
+
+	if status then
+		if upnp.proxyVersionAtLeast(1) then
+			EventSubscriptions[uuid] = deepCopy( EventSubscriptionsTemplate )
+			upnp.subscribeToEvents(zoneDevice, VERA_IP, EventSubscriptions[uuid], SONOS_ZONE_SID, uuid)
+			if DEBUG_MODE then
+				for _,sub in ipairs(EventSubscriptions[uuid]) do
+					D("%1 event service %2 sid %3 expiry %4", uuid, sub.service, sub.id, sub.expiry)
+				end
+			end
+
+			setVar(SONOS_SYS_SID, "ProxyUsed", "proxy is in use", zoneDevice)
+			BROWSE_TIMEOUT = 30
+		else
+			setVar(SONOS_SYS_SID, "ProxyUsed", "proxy is not in use", zoneDevice)
+			BROWSE_TIMEOUT = 5
+		end
+	end
+
 	if not status then
 		setVar(SONOS_ZONE_SID, "SonosOnline", "0", zoneDevice)
 		setVar(UPNP_AVTRANSPORT_SID, "CurrentStatus", "Offline", zoneDevice)
 		setVar(SONOS_ZONE_SID, "ProxyUsed", "", zoneDevice) -- ??? plugin variable? see above
 		W("Zone %1 (#%2) appears to be offline. %3", (luup.devices[zoneDevice] or {}).description,
 			zoneDevice, uuid)
-		return false
-	end
-
-	local newuuid = values.UDN:match("uuid:(.+)") or ""
-	if uuid ~= newuuid then
-		-- Device now at this IP responding with different UID. No good.
-		deviceIsOffline( zoneDevice )
 		return false
 	end
 
@@ -2473,22 +2495,6 @@ setup = function(zoneDevice, flag)
 	-- Use pcall so any issue setting up icon does not interfere with initialization and operation
 	pcall( setDeviceIcon, zoneDevice, icon, values.modelNumber, uuid )
 
-	if upnp.proxyVersionAtLeast(1) then
-		EventSubscriptions[uuid] = deepCopy( EventSubscriptionsTemplate )
-		upnp.subscribeToEvents(zoneDevice, VERA_IP, EventSubscriptions[uuid], SONOS_ZONE_SID, uuid)
-		if DEBUG_MODE then
-			for _,sub in ipairs(EventSubscriptions[uuid]) do
-				D("%1 event service %2 sid %3 expiry %4", uuid, sub.service, sub.id, sub.expiry)
-			end
-		end
-
-		setVar(SONOS_SYS_SID, "ProxyUsed", "proxy is in use", zoneDevice)
-		BROWSE_TIMEOUT = 30
-	else
-		setVar(SONOS_SYS_SID, "ProxyUsed", "proxy is not in use", zoneDevice)
-		BROWSE_TIMEOUT = 5
-	end
-
 	if not sonosServices then
 		sonosServices = getAvailableServices(uuid)
 	end
@@ -2520,7 +2526,7 @@ setup = function(zoneDevice, flag)
 		t:delay( rate, { replace=true } )
 	end
 
-	refreshNow( uuid, true, true ) -- direct call for inline
+	updateNow( zoneDevice )
 
 	return true
 end
@@ -2626,10 +2632,12 @@ local function deferredStartup(device)
 	L("Started %1 children of %2", started, count)
 	-- Disable old plugin implementation if present.
 	local ipath = getInstallPath()
-	if file_exists( ipath .. "I_Sonos1.xml.lzo" ) or file_exists( ipath .. "I_Sonos1.xml.lzo" ) then
+	if file_exists( ipath .. "I_Sonos1.xml.lzo" ) or file_exists( ipath .. "I_Sonos1.xml" ) then
 		W("Removing old Sonos plugin implementations files (for standalone devices, no longer used)")
 		os.remove(ipath.."I_Sonos1.xml.lzo")
 		os.remove(ipath.."I_Sonos1.xml")
+	end
+	if file_exists( ipath .. "L_Sonos1.lua.lzo" ) or file_exists( ipath .. "L_Sonos1.lua" ) then
 		os.remove(ipath.."L_Sonos1.lua.lzo")
 		os.remove(ipath.."L_Sonos1.lua")
 	end
@@ -3130,7 +3138,7 @@ local function makeTTSAlert( device, settings )
 			zf:close()
 			fmeta.nextfile = fmeta.nextfile + 1
 		end
-		if os.execute( "cp -f -- " .. Q( destFile ) .. " " .. Q( cpath .. fmeta.nextfile .. ft ) ) ~= 0 then
+		if os.execute( "cp -f -- " .. Q( destFile ) .. " " .. Q( cpath, fmeta.nextfile, ft ) ) ~= 0 then
 			W("(TTS) Cache failed to copy %1 to %2", destFile, cpath..fmeta.nextfile..ft)
 		else
 			fmeta.strings[text] = { duration=settings.Duration, url=curl .. fmeta.nextfile .. ft, created=os.time() }
@@ -3194,12 +3202,12 @@ end
 
 function actionSonosSetupTTS( lul_device, lul_settings )
 	D("actionSonosSetupTTS(%1,%2)", lul_device, lul_settings )
-	os.execute( "rm -rf -- " .. Q(TTSBasePath .. "ttscache") )
+	os.execute( "rm -rf -- " .. Q(TTSBasePath, "ttscache") )
 end
 
 function actionSonosResetTTS( lul_device )
 	assert(luup.devices[lul_device].device_type == SONOS_SYS_DEVICE_TYPE)
-	os.execute( "rm -rf -- " .. Q(TTSBasePath .. "ttscache") )
+	os.execute( "rm -rf -- " .. Q(TTSBasePath, "ttscache") )
 end
 
 function actionSonosSetURIToPlay( lul_device, lul_settings )
@@ -3772,7 +3780,15 @@ end
 
 function actionAVTransportStop( lul_device, lul_settings )
 	assert(luup.devices[lul_device].device_type == SONOS_ZONE_DEVICE_TYPE)
-	local device, uuid = controlByCoordinator(findZoneByDevice( lul_device ))
+
+	local device, uuid
+	uuid = findZoneByDevice( lul_device )
+	if not ( isOnline(uuid) or setup(lul_device, true) ) then
+		W("%1 (#%2) is offline and cannot be started", luup.devices[lul_device].description, lul_device)
+		return
+	end
+
+	device, uuid = controlByCoordinator(uuid)
 	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
 	if not AVTransport then
 		return
@@ -4356,6 +4372,11 @@ end
 function actionRCSetMute( lul_device, lul_settings )
 	assert(luup.devices[lul_device].device_type == SONOS_ZONE_DEVICE_TYPE)
 	local uuid = findZoneByDevice( lul_device )
+	if not ( isOnline(uuid) or setup(lul_device, true) ) then
+		W("%1 (#%2) is offline and cannot be started", luup.devices[lul_device].description, lul_device)
+		return
+	end
+
 	local Rendering = upnp.getService(uuid, UPNP_RENDERING_CONTROL_SERVICE)
 	if not Rendering then
 		return false
