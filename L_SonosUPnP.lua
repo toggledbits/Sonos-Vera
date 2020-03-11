@@ -1173,7 +1173,7 @@ end
             end
             sid, expiry, duration = subscribeToUPnPEvent(device,
                                                          veraIP,
-                                                         Services[uuid][subscription.service].eventSubURL .. "X",
+                                                         Services[uuid][subscription.service].eventSubURL,
                                                          subscription.eventVariable,
                                                          actionServiceId,
                                                          subscription.actionName,
