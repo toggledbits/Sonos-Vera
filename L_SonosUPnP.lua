@@ -6,7 +6,7 @@
 
 module("L_SonosUPnP", package.seeall)
 
-VERSION = 19191
+VERSION = 20071
 DEBUG_MODE = false
 
 local url = require("socket.url")
@@ -1203,6 +1203,8 @@ end
         else
             warning("Event subscription for %2 service %1 ignored, unregistered service",
                 subscription.service, uuid)
+			subscription.id = ""
+			subscription.expiry = ""
         end
     end
 

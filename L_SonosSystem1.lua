@@ -8,7 +8,7 @@
 module( "L_SonosSystem1", package.seeall )
 
 PLUGIN_NAME = "Sonos"
-PLUGIN_VERSION = "2.0develop-20071.1710"
+PLUGIN_VERSION = "2.0develop-20071.1855"
 PLUGIN_ID = 4226
 
 local _CONFIGVERSION = 19298
@@ -16,7 +16,7 @@ local _UIVERSION = 20057
 
 local DEBUG_MODE = false	-- Don't hardcode true--use state variable config
 
-local MIN_UPNP_VERSION = 19191	-- Minimum version of L_SonosUPnP that works
+local MIN_UPNP_VERSION = 20071	-- Minimum version of L_SonosUPnP that works
 local MIN_TTS_VERSION = 19360	-- Minimum version of L_SonosTTS that works
 
 local MSG_CLASS = "Sonos"
@@ -776,12 +776,25 @@ function updateZoneInfo( uuid )
 		zoneInfo.groups[v.attr.ID] = gr
 		for v2 in xmlNodesForTag( v, "ZoneGroupMember" ) do
 			local zi = {}
-			for _,v3 in ipairs( v2.attr or {} ) do
+			for _,v3 in ipairs( v2.attr ) do
 				zi[v3] = tonumber( v2.attr[v3] ) or v2.attr[v3]
 			end
 			zi.Group = gr.UUID
 			zoneInfo.zones[v2.attr.UUID] = zi
 			table.insert( gr.members, v2.attr.UUID )
+--[[
+			for sat in xmlNodesForTag( v2, "Satellite" ) do
+				debug("updateZoneInfo() zone %1 has satellite %2", v2.attr.UUID, sat.attr.UUID)
+				zi = {}
+				for _,v3 in ipairs( sat.attr ) do
+					zi[v3] = tonumber( sat.attr[v3] ) or sat.attr[v3]
+				end
+				zi.Group = false
+				zi.Satellite = true
+				zi.Sun = v2.attr.UUID
+				zoneInfo.zones[sat.attr.UUID] = zi
+			end
+--]]
 		end
 	end
 	D("updateZoneInfo() updated zoneInfo: %1", zoneInfo)
@@ -2462,6 +2475,7 @@ setup = function(zoneDevice, flag)
 	dataTable[uuid] = {}
 
 	deviceIsOnline(zoneDevice)
+	changed = setData("CurrentStatus", "Online", uuid, changed)
 
 	changed = setData("SonosID", uuid, uuid, changed)
 	local roomName = upnp.decode( values.roomName or "" )
@@ -3188,8 +3202,7 @@ function actionSonosSay( lul_device, lul_settings )
 		W"The L_SonosTTS module installed may not be compatible with this version of the plugin core."
 	end
 	if ( luup.attr_get( 'UnsafeLua', 0 ) or "0" ) ~= "1" and not isOpenLuup then
-		W"Some engines used with the TTS module require that 'Enable Unsafe Lua' (under 'Users & Account Info > Security') be enabled in your controller settings."
-		return
+		W"Some engines used with the TTS module require that 'Enable Unsafe Lua' (under 'Users & Account Info > Security') be enabled in your controller settings. If your TTS actions fail, try enabling this setting."
 	end
 	-- ??? Request handler doesn't unescape?
 	lul_settings.Text = url.unescape( lul_settings.Text )
