@@ -1097,11 +1097,13 @@ local function extractDataFromMetaData(zoneUUID, currentUri, currentUriMetaData,
 end
 
 local function parseSavedQueues(xml)
+	D("parseSavedQueues(%1)", xml)
 	local result = ""
 	for id, title in xml:gmatch('<container%s?.-id="([^"]-)"[^>]->.-<dc:title%s?[^>]->(.-)</dc:title>.-</container>') do
 		id = upnp.decode(id)
 		title = upnp.decode(title)
 		result = result .. id .. "@" .. title .. "\n"
+		L("Saved queue %1 %2", id, title)
 	end
 	return result
 end
@@ -1428,37 +1430,44 @@ local function decodeURI(localUUID, coordinator, uri)
 	local controlByGroup = true
 	local requireQueueing = false
 
+	-- Handle URI shortcuts (plugin-specific, not Sonos)
 	if uri:sub(1, 2) == "Q:" then
+		-- Queue: Q: becomes x-rincon-queue:controllerUUID#0 plus possible seek for right song.
 		track = uri:sub(3)
 		uri = QUEUE_URI:format(coordinator)
+
 	elseif uri:sub(1, 3) == "AI:" then
+		-- Audio input: AI:zonename becomes x-rincon-stream:zoneUUID (if no zonename, current uuid)
 		if #uri > 3 then
 			uuid = getUUIDFromZoneName(uri:sub(4))
 		else
 			uuid = localUUID
 		end
-		if uuid ~= nil then
-			uri = "x-rincon-stream:" .. uuid
-		else
-			uri = nil
-		end
+		uri = uuid and ( "x-rincon-stream:" .. uuid ) or nil
+
 	elseif uri:sub(1, 3) == "SQ:" then
+		-- Saved queue: SQ:Cubano becomes ID:savedqueueid
+		-- Also allows SQ:12 if known
 		local found = false
-		if dataTable[localUUID].SavedQueues ~= nil then
+		local rest = uri:sub(4)
+		if dataTable[localUUID].SavedQueues then
 			local id, title
 			for line in dataTable[localUUID].SavedQueues:gmatch("(.-)\n") do
 				id, title = line:match("^(.+)@(.-)$")
-				if (id ~= nil and title == uri:sub(4)) then
+				if (id ~= nil and title == rest) or id == uri then
 					found = true
 					uri = "ID:" .. id
 					break
 				end
 			end
 		end
-		if found == false then
+		if not found then
+			W("Unable to resolve URI: saved queue %1 not found", rest)
 			uri = nil
 		end
+
 	elseif uri:sub(1, 3) == "FR:" then
+		-- Favorite radio
 		title = uri:sub(4)
 		local found = false
 		if dataTable[localUUID].FavoritesRadios ~= nil then
@@ -1472,13 +1481,16 @@ local function decodeURI(localUUID, coordinator, uri)
 				end
 			end
 		end
-		if found == false then
+		if not found then
+			W("Unable to resolve URI: Favorite Radio %1 not found", title)
 			uri = nil
 		end
+
 	elseif uri:sub(1, 3) == "SF:" then
+		-- Favorite
 		title = uri:sub(4)
 		local found = false
-		if dataTable[localUUID].Favorites ~= nil then
+		if dataTable[localUUID].Favorites then
 			local id, title
 			for line in dataTable[localUUID].Favorites:gmatch("(.-)\n") do
 				id, title = line:match("^(.+)@(.-)$")
@@ -1489,72 +1501,83 @@ local function decodeURI(localUUID, coordinator, uri)
 				end
 			end
 		end
-		if found == false then
+		if not found then
+			W("Unable to resolve URI: Favorite %1 not found", title)
 			uri = nil
 		end
+
 	elseif uri:sub(1, 3) == "TR:" then
+		-- TuneIn radio: TR:50486 becomes x-sonosapi-stream:s50486?sid=254&flags=32 + metadata
 		title = uri:sub(4)
 		serviceId = getSonosServiceId("TuneIn") or "254"
 		uri = "x-sonosapi-stream:s" .. uri:sub(4) .. "?sid=" .. serviceId .. "&flags=32"
+
 	elseif uri:sub(1, 3) == "SR:" then
+		-- Sirius radio: SR:shade45 becomes x-sonosapi-hls:r%3ashade45?sid=37&flags=288 + metadata
 		title = uri:sub(4)
 		serviceId = getSonosServiceId("SiriusXM") or "37"
 		uri = "x-sonosapi-hls:r%3a" .. title .. "?sid=" .. serviceId .. "&flags=288"
+
 	elseif uri:sub(1, 3) == "GZ:" then
+		-- Group to zone: GZ:controllername becomes x-rincon:controllerUUID
 		controlByGroup = false
-		if (#uri > 3) then
-			uuid = getUUIDFromZoneName(uri:sub(4))
-		end
-		if uuid ~= nil then
-			uri = "x-rincon:" .. uuid
+		local zone = uri:sub(4)
+		if zone:match("^RINCON_%x+") then
+			uuid = zone
 		else
-			uri = nil
+			uuid = getUUIDFromZoneName(zone)
 		end
+		uri = uuid and ( "x-rincon:" .. uuid ) or nil
 	end
 
-	if uri:sub(1, 3) == "ID:" then
-		local xml = upnp.browseContent(localUUID, UPNP_MR_CONTENT_DIRECTORY_SERVICE, uri:sub(4), true, nil, nil, nil)
-		D("data from server:\r\n%1", xml)
-		if xml == "" then
-			uri = nil
-		else
-			title, uri = xml:match("<DIDL%-Lite%s?[^>]-><item%s?[^>]->.-<dc:title%s?[^>]->(.-)</dc:title>.-<res%s?[^>]->(.*)</res>.-</item></DIDL%-Lite>")
-			if uri ~= nil then
-				uriMetaData = upnp.decode(xml:match("<DIDL%-Lite%s?[^>]-><item%s?[^>]->.-<r:resMD%s?[^>]->(.*)</r:resMD>.-</item></DIDL%-Lite>") or "")
+	D("decodeURI() uri now %1 title %2 track %3 serviceId %4", uri, title, track, serviceId)
+
+	if uri then
+		if uri:sub(1, 3) == "ID:" then
+			local xml = upnp.browseContent(localUUID, UPNP_MR_CONTENT_DIRECTORY_SERVICE, uri:sub(4), true, nil, nil, nil)
+			D("data from server:\r\n%1", xml)
+			if xml == "" then
+				uri = nil
 			else
-				title, uri = xml:match("<DIDL%-Lite%s?[^>]-><container%s?[^>]->.-<dc:title%s?[^>]->(.-)</dc:title>.-<res%s?[^>]->(.*)</res>.-</container></DIDL%-Lite>")
-				if uri ~= nil then
-					uriMetaData = upnp.decode(xml:match("<DIDL%-Lite%s?[^>]-><container%s?[^>]->.-<r:resMD%s?[^>]->(.*)</r:resMD>.-</container></DIDL%-Lite>") or "")
+				title, uri = xml:match("<DIDL%-Lite%s?[^>]-><item%s?[^>]->.-<dc:title%s?[^>]->(.-)</dc:title>.-<res%s?[^>]->(.*)</res>.-</item></DIDL%-Lite>")
+				if uri then
+					uriMetaData = upnp.decode(xml:match("<DIDL%-Lite%s?[^>]-><item%s?[^>]->.-<r:resMD%s?[^>]->(.*)</r:resMD>.-</item></DIDL%-Lite>") or "")
+				else
+					title, uri = xml:match("<DIDL%-Lite%s?[^>]-><container%s?[^>]->.-<dc:title%s?[^>]->(.-)</dc:title>.-<res%s?[^>]->(.*)</res>.-</container></DIDL%-Lite>")
+					if uri then
+						uriMetaData = upnp.decode(xml:match("<DIDL%-Lite%s?[^>]-><container%s?[^>]->.-<r:resMD%s?[^>]->(.*)</r:resMD>.-</container></DIDL%-Lite>") or "")
+					end
 				end
 			end
 		end
-	end
 
-	if uri ~= nil and
-		   (uri:sub(1, 38) == "file:///jffs/settings/savedqueues.rsq#"
-			   or uri:sub(1, 18) == "x-rincon-playlist:"
-			   or uri:sub(1, 21) == "x-rincon-cpcontainer:") then
-		requireQueueing = true
-	end
+		if uri:sub(1, 38) == "file:///jffs/settings/savedqueues.rsq#" or
+				uri:sub(1, 18) == "x-rincon-playlist:" or
+				uri:sub(1, 21) == "x-rincon-cpcontainer:" then
+			requireQueueing = true
+		end
 
-	if uri ~= nil and uri ~= "" and uriMetaData == "" then
-		_, serviceId = getServiceFromURI(uri, nil)
-		if serviceId ~= nil and metaDataKeys[localUUID][serviceId] ~= nil then
-			if title == nil then
-				uriMetaData = '<DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/">'
-							  .. '<item><desc>' .. metaDataKeys[localUUID][serviceId] .. '</desc>'
-							  .. '</item></DIDL-Lite>'
-			else
+		if uri ~= "" and uriMetaData == "" then
+			-- Metadata still empty. Build it.
+			_, serviceId = getServiceFromURI(uri, nil)
+			D("decodeURI() url %1 serviceId %2 title %3", uri, serviceId, title)
+			if serviceId ~= nil and metaDataKeys[localUUID][serviceId] ~= nil then
+				if title == nil then
+					uriMetaData = '<DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/">'
+								  .. '<item><desc>' .. metaDataKeys[localUUID][serviceId] .. '</desc>'
+								  .. '</item></DIDL-Lite>'
+				else
+					uriMetaData = '<DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/">'
+								  .. '<item><dc:title>' .. title .. '</dc:title>'
+								  .. '<desc>' .. metaDataKeys[localUUID][serviceId] .. '</desc>'
+								  .. '</item></DIDL-Lite>'
+				end
+			elseif title ~= nil then
 				uriMetaData = '<DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/">'
 							  .. '<item><dc:title>' .. title .. '</dc:title>'
-							  .. '<desc>' .. metaDataKeys[localUUID][serviceId] .. '</desc>'
+							  .. '<upnp:class>object.item.audioItem.audioBroadcast</upnp:class>'
 							  .. '</item></DIDL-Lite>'
 			end
-		elseif title ~= nil then
-			uriMetaData = '<DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/">'
-						  .. '<item><dc:title>' .. title .. '</dc:title>'
-						  .. '<upnp:class>object.item.audioItem.audioBroadcast</upnp:class>'
-						  .. '</item></DIDL-Lite>'
 		end
 	end
 
@@ -1581,6 +1604,7 @@ local function playURI(zoneUUID, instanceId, uri, speed, volume, uuids, sameVolu
 	end
 
 	uri, uriMetaData, track, controlByGroup2, requireQueueing = decodeURI(uuid, coordinator, uri)
+	if not uri then return end
 	if (controlByGroup and not controlByGroup2) then
 		-- ??? rigpapa ...and then what are the controlByGroup variables used for???
 		controlByGroup = false -- luacheck: ignore 311
