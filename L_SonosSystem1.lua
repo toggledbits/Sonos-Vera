@@ -2684,7 +2684,7 @@ local function deferredStartup(device)
 		local newZones = {}
 		for uuid in pairs( zoneInfo.zones ) do
 			if not ( childZone[uuid] or newZones[uuid] ) then
-				newZones = getIPFromUUID( uuid ) or ""
+				newZones[uuid] = getIPFromUUID( uuid ) or ""
 			end
 		end
 		if next( newZones ) then
