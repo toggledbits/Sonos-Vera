@@ -8,7 +8,7 @@
 module( "L_SonosSystem1", package.seeall )
 
 PLUGIN_NAME = "Sonos"
-PLUGIN_VERSION = "2.0develop-20071.2100"
+PLUGIN_VERSION = "2.0develop-20072.1145"
 PLUGIN_ID = 4226
 
 local _CONFIGVERSION = 19298
@@ -111,7 +111,6 @@ local sayPlayback = {}
 
 -- Zone group topology (set by updateZoneInfo())
 local zoneInfo = false
-local groupsState = ""
 
 local metaDataKeys = {}
 local dataTable = {}
@@ -782,7 +781,7 @@ function updateZoneInfo( uuid )
 			zi.Group = gr.UUID
 			zoneInfo.zones[v2.attr.UUID] = zi
 			table.insert( gr.members, v2.attr.UUID )
---[[
+
 			for sat in xmlNodesForTag( v2, "Satellite" ) do
 				debug("updateZoneInfo() zone %1 has satellite %2", v2.attr.UUID, sat.attr.UUID)
 				zi = {}
@@ -790,11 +789,10 @@ function updateZoneInfo( uuid )
 					zi[v3] = tonumber( sat.attr[v3] ) or sat.attr[v3]
 				end
 				zi.Group = false
-				zi.Satellite = true
-				zi.Sun = v2.attr.UUID
+				zi.isSatellite = true
+				zi.Base = v2.attr.UUID
 				zoneInfo.zones[sat.attr.UUID] = zi
 			end
---]]
 		end
 	end
 	D("updateZoneInfo() updated zoneInfo: %1", zoneInfo)
@@ -850,6 +848,30 @@ local function getGroupInfos(uuid)
 	return table.concat( groupInfo.members or {}, "," ), groupInfo.Coordinator or "", groupInfo.ID
 end
 
+local function updateZoneGroupTopology(uuid)
+	D("updateZoneGroupTopology(%1)", uuid)
+	local changed = false
+
+	-- Update network and group information
+	local ZoneGroupTopology = upnp.getService(uuid, UPNP_ZONEGROUPTOPOLOGY_SERVICE)
+	if ZoneGroupTopology then
+		D("updateZoneGroupTopology() refreshing zone group topology")
+		local status, tmp = ZoneGroupTopology.GetZoneGroupState({})
+		if not status then
+			commsFailure(device, tmp)
+			return ""
+		end
+		local groupsState = upnp.extractElement("ZoneGroupState", tmp, "")
+		changed = setData("ZoneGroupState", groupsState, uuid, changed)
+		if changed or not zoneInfo then
+			updateZoneInfo( uuid )
+		end
+		local members, coordinator = getGroupInfos( uuid )
+		changed = setData("ZonePlayerUUIDsInGroup", members, uuid, changed)
+		changed = setData("GroupCoordinator", coordinator or "", uuid, changed)
+	end
+end
+
 local function getAllUUIDs()
 	local zones = {}
 	for zid,zone in pairs( zoneInfo.zones ) do
@@ -882,7 +904,7 @@ local function deviceIsOffline(device)
 	local changed = setData("SonosOnline", "0", uuid, false)
 	if changed and uuid then
 		W("Setting device #%1 to off-line state", device)
-		groupsState = "<ZoneGroupState><ZoneGroups></ZoneGroups></ZoneGroupState>"
+		local groupsState = "<ZoneGroupState><ZoneGroups></ZoneGroups></ZoneGroupState>"
 
 		changed = setData("TransportState", "STOPPED", uuid, changed)
 		changed = setData("TransportStatus", "KO", uuid, changed)
@@ -1152,24 +1174,7 @@ local function refreshNow(uuid, force, refreshQueue)
 	end
 --]]
 
-	-- Update network and group information
-	local ZoneGroupTopology = upnp.getService(uuid, UPNP_ZONEGROUPTOPOLOGY_SERVICE)
-	if ZoneGroupTopology then
-		D("refreshNow() refreshing zone group topology")
-		status, tmp = ZoneGroupTopology.GetZoneGroupState({})
-		if not status then
-			commsFailure(device, tmp)
-			return ""
-		end
-		groupsState = upnp.extractElement("ZoneGroupState", tmp, "")
-		changed = setData("ZoneGroupState", groupsState, uuid, changed)
-		if changed or not zoneInfo then
-			updateZoneInfo( uuid )
-		end
-		local members, coordinator = getGroupInfos( uuid )
-		changed = setData("ZonePlayerUUIDsInGroup", members, uuid, changed)
-		changed = setData("GroupCoordinator", coordinator or "", uuid, changed)
-	end
+	updateZoneGroupTopology( uuid )
 
 	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
 	if AVTransport then
@@ -1840,6 +1845,7 @@ local function joinGroup(localUUID, zone)
 	end
 end
 
+-- PHR??? TO-DO: If zone is group coordinator, we should remove all members rather than targeting coordinator directly.
 local function leaveGroup(localUUID)
 	D("leaveGroup(%1)", localUUID)
 	local AVTransport = upnp.getService(localUUID, UPNP_AVTRANSPORT_SERVICE)
@@ -1949,28 +1955,39 @@ local function setupTTSSettings(device)
 	local installPath = getInstallPath()
 	local chd = getVar( "TTSChime", "", device, SONOS_SYS_SID, true )
 	if chd == "" then
-		os.execute( "rm -f /www/sonos/Sonos_chime.mp3" )
-		os.execute( "rm -f /etc/cmh-ludl/Sonos_chime.mp3" )
+		if not isOpenLuup then
+			os.remove( "/www/sonos/Sonos_chime.mp3" )
+			os.remove( "/www/sonos/Sonos_chime.mp3.lzo" )
+		end
+		os.remove( installPath .. "Sonos_chime.mp3" )
+		os.remove( installPath .. "Sonos_chime.mp3.lzo" )
 		if not file_exists( installPath .. "Sonos_chime.mp3" ) then
+			L("Downloading default chime MP3 sound")
 			os.execute("curl -s -m 10 -o " .. Q( installPath, "Sonos_chime.mp3" ) ..
 				" 'https://raw.githubusercontent.com/toggledbits/Sonos-Vera/develop/Sonos_chime.mp3'")
 		end
-		chd = "Sonos_chime.mp3,3"
+		if file_exists( installPath .. "Sonos_chime.mp3" ) then
+			chd = "Sonos_chime.mp3,3"
+		else
+			L("Default chime Sonos_chime.mp3 not found; TTS chime disabled.")
+		end
 	end
 	local chimefile, chimedur, chimevol = unpack( split( chd, "," ) )
 	D("setupTTSSettings() chime file %1 duration %2 from %3", chimefile, chimedur, chd)
-	if chimefile ~= "" and file_exists( installPath .. chimefile ) then
+	if chimefile == "0" or string.lower( chimefile ) == "none" or chimefile == "" then
+		D("setupTTSSettings() chime suppressed by config")
+	elseif file_exists( installPath .. chimefile ) then
 		if TTSBasePath ~= installPath then
 			D("setupTTSSettings() linking %1 to %2", installPath..chimefile, TTSBasePath..chimefile)
 			os.remove( TTSBasePath .. chimefile )
 			file_symlink( installPath .. chimefile, TTSBasePath .. chimefile )
 		end
-		TTSChime = { URI=TTSBaseURL..chimefile }
+		TTSChime = { URI=TTSBaseURL..chimefile, Repeat=1 }
 		TTSChime.URIMetadata = TTS_METADATA:format( "TTS Chime", "http-get:*:audio/mpeg:*", TTSChime.URI )
 		TTSChime.Duration = tonumber( chimedur ) or 5
-		TTSChime.Repeat = 1
-		TTSChime.Volume = tonumber( chimevol )
-		TTSChime.TempFile = nil -- flag no delete in endPlayback
+		TTSChime.Volume = tonumber( chimevol ) -- nil OK
+	else
+		W("The specified TTS chime file %1 does not exist", chimefile)
 	end
 	D("setupTTSSettings() TTSChime=%1", TTSChime)
 end
@@ -2544,6 +2561,8 @@ setup = function(zoneDevice, flag)
 		setVariableValue(HADEVICE_SID, "LastUpdate", os.time(), zoneDevice)
 	end
 
+	updateZoneGroupTopology( uuid )
+
 	local rate = getCheckStateRate(zoneDevice)
 	if rate > 0 then
 		local t = scheduler.getTask("checkState"..zoneDevice) or
@@ -2616,7 +2635,7 @@ local function deferredStartup(device)
 	local childZone = {}
 	for k,v in pairs( luup.devices ) do
 		if v.device_type == SONOS_ZONE_DEVICE_TYPE then
-			local zid = luup.attr_get( "altid", k ) or ""
+			local zid = v.id or ""
 			local ip = luup.attr_get( "ip", k ) or ""
 			D("deferredStartup() found child %1 zoneid %3 parent %2", k, v.device_num_parent, zid)
 			if v.device_num_parent == 0 then
@@ -2651,6 +2670,8 @@ local function deferredStartup(device)
 					luup.set_failure( 1, k )
 					setVar(UPNP_AVTRANSPORT_SID, "CurrentStatus", tostring(success), k)
 				end
+			else
+				W("Sonos zone device %1 (#%2) non-child of %3; skipping.", v.description, k, device)
 			end
 		end
 	end
@@ -2708,6 +2729,20 @@ local function deferredStartup(device)
 					table.concat( cv, "\n" ), false )
 			end
 			luup.chdev.sync( device, ptr )
+		end
+	end
+
+	-- Set visibility of zones; satellites are not visible.
+	if zoneInfo then
+		for uuid,zi in pairs( zoneInfo.zones or {} ) do
+			local dev = childZone[uuid]
+			if dev then
+				D("deferredStartup() setting visibility of %1 (#%2) zone %3 satellite %4", luup.devices[dev].description,
+					dev, uuid, zi.isSatellite or false)
+				luup.attr_set( "invisible", zi.isSatellite and 1 or 0, dev )
+			else
+				W("deferredStartup() zone %1 has no child", uuid)
+			end
 		end
 	end
 
@@ -3580,7 +3615,7 @@ function actionSonosNotifyZoneGroupTopologyChange( lul_device, lul_settings )
 	assert( uuid ~= nil )
 	assert( EventSubscriptions[uuid] ~= nil )
 	if (upnp.isValidNotification("NotifyZoneGroupTopologyChange", lul_settings.sid, EventSubscriptions[uuid])) then
-		groupsState = lul_settings.ZoneGroupState or "<ZoneGroupState/>"
+		local groupsState = lul_settings.ZoneGroupState or "<ZoneGroupState/>"
 
 		local changed = setData("ZoneGroupState", groupsState, uuid, false)
 		if changed or not zoneInfo then
@@ -4790,6 +4825,9 @@ function handleRequest( lul_request, lul_parameters, lul_outputformat )
 			}
 		end
 		return json.encode( resp ), "application/json"
+
+	elseif action == "zoneinfo" then
+		return json.encode( zoneInfo ), "application/json"
 
 	else
 		return "ERROR\nInvalid request action", "text/plain"
