@@ -783,7 +783,7 @@ function updateZoneInfo( uuid )
 			table.insert( gr.members, v2.attr.UUID )
 
 			for sat in xmlNodesForTag( v2, "Satellite" ) do
-				debug("updateZoneInfo() zone %1 has satellite %2", v2.attr.UUID, sat.attr.UUID)
+				D("updateZoneInfo() zone %1 has satellite %2", v2.attr.UUID, sat.attr.UUID)
 				zi = {}
 				for _,v3 in ipairs( sat.attr ) do
 					zi[v3] = tonumber( sat.attr[v3] ) or sat.attr[v3]
@@ -1130,6 +1130,7 @@ local function parseIdTitle(xml)
 end
 
 local function parseQueue(xml)
+	D("parseQueue(%1)", xml)
 	local result = ""
 	for title in xml:gmatch("<item%s?[^>]->.-<dc:title%s?[^>]->(.-)</dc:title>.-</item>") do
 		title = upnp.decode(title)
