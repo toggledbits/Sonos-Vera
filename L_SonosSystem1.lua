@@ -8,7 +8,7 @@
 module( "L_SonosSystem1", package.seeall )
 
 PLUGIN_NAME = "Sonos"
-PLUGIN_VERSION = "2.0develop-20071.1855"
+PLUGIN_VERSION = "2.0develop-20071.2100"
 PLUGIN_ID = 4226
 
 local _CONFIGVERSION = 19298
@@ -2746,6 +2746,7 @@ function startup( lul_device )
 
 	-- See if log file needs to be opened
 	if getVarNumeric("MaxLogSize", 512, lul_device, SONOS_SYS_SID) > 0 then
+		pcall( logToFile, string.rep( "_", 132) )
 		pcall( logToFile, "Log file opened at startup" )
 		pcall( logToFile, PLUGIN_VERSION )
 	end
@@ -3201,7 +3202,7 @@ function actionSonosSay( lul_device, lul_settings )
 	if ( tts.VERSION or 0 ) < MIN_TTS_VERSION then
 		W"The L_SonosTTS module installed may not be compatible with this version of the plugin core."
 	end
-	if ( luup.attr_get( 'UnsafeLua', 0 ) or "0" ) ~= "1" and not isOpenLuup then
+	if ( luup.attr_get( 'UnsafeLua', 0 ) or "1" ) ~= "1" and not isOpenLuup then
 		W"Some engines used with the TTS module require that 'Enable Unsafe Lua' (under 'Users & Account Info > Security') be enabled in your controller settings. If your TTS actions fail, try enabling this setting."
 	end
 	-- ??? Request handler doesn't unescape?
