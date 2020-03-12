@@ -298,7 +298,7 @@ var Sonos = (function(api, $) {
 	{
 		playerShowing = false;
 
-		var html, pos1, pos2;
+		var html, pos1, pos2, pos3;
 		Sonos_defineUIStyle();
 
 		Sonos_initXMLParser();
@@ -345,19 +345,19 @@ var Sonos = (function(api, $) {
 		html += '<table border="1">';
 		html += '<tr align="center" style="background-color: '+ tableTitleBgColor + '; color: white">';
 		html += '<th>Description</td>';
-		html += '<th>Standard URI</td>';
+		html += '<th nowrap>Standard URI</td>';
 		html += '<th>Alternative URI for PlayURI</td>';
 		html += '</tr>';
 
 		html += '<tr>';
 		html += '<td>Sonos queue</td>';
-		html += '<td>x-rincon-queue:' + uuid + '#0</td>';
+		html += '<td nowrap>x-rincon-queue:' + uuid + '#0</td>';
 		html += '<td>Q:</td>';
 		html += '</tr>';
 
 		html += '<tr>';
 		html += '<td>Third item in Sonos queue</td>';
-		html += '<td>x-rincon-queue:' + uuid + '#0 *</td>';
+		html += '<td nowrap>x-rincon-queue:' + uuid + '#0 *</td>';
 		html += '<td>Q:3</td>';
 		html += '</tr>';
 
@@ -372,7 +372,7 @@ var Sonos = (function(api, $) {
 				if (zoneName != zone && channelMapSet === null && isZoneBridge != "1") {
 					html += '<tr>';
 					html += '<td>Group with master zone "' + zoneName + '"</td>';
-					html += '<td>x-rincon:' + zoneUUID + '</td>';
+					html += '<td nowrap>x-rincon:' + zoneUUID + '</td>';
 					html += '<td>GZ:' + zoneName + '</td>';
 					html += '</tr>';
 				}
@@ -381,7 +381,7 @@ var Sonos = (function(api, $) {
 
 		html += '<tr>';
 		html += '<td>Local audio input</td>';
-		html += '<td>x-rincon-stream:' + uuid + '</td>';
+		html += '<td nowrap>x-rincon-stream:' + uuid + '</td>';
 		html += '<td>AI:</td>';
 		html += '</tr>';
 
@@ -394,7 +394,7 @@ var Sonos = (function(api, $) {
 				if (channelMapSet === null && isZoneBridge != "1") {
 					html += '<tr>';
 					html += '<td>Audio input of zone "' + zoneName + '"</td>';
-					html += '<td>x-rincon-stream:' + zoneUUID + '</td>';
+					html += '<td nowrap>x-rincon-stream:' + zoneUUID + '</td>';
 					html += '<td>AI:' + zoneName + '</td>';
 					html += '</tr>';
 				}
@@ -403,34 +403,17 @@ var Sonos = (function(api, $) {
 
 		html += '<tr>';
 		html += '<td>TuneIn radio with sid 50486</td>';
-		html += '<td>x-sonosapi-stream:s50486?sid=254&flags=32 **</td>';
+		html += '<td nowrap>x-sonosapi-stream:s50486?sid=254&flags=32 **</td>';
 		html += '<td>TR:50486</td>';
 		html += '</tr>';
 
 		html += '<tr>';
 		html += '<td>Sirius radio with sid shade45</td>';
-		html += '<td>x-sonosapi-hls:r%3ashade45?sid=37&flags=288 **</td>';
+		html += '<td nowrap>x-sonosapi-hls:r%3ashade45?sid=37&flags=288 **</td>';
 		html += '<td>SR:shade45</td>';
 		html += '</tr>';
 
 		var line, pos, title, value;
-
-		var favRadios = api.getDeviceState(device, CONTENT_DIRECTORY_SID, "FavoritesRadios", 1) || "";
-		if ( ! isEmpty( favRadios ) ) {
-			pos = favRadios.indexOf('\n', 0);
-			if (pos >= 0) {
-				line = favRadios.substring(0, pos);
-				pos2 = line.indexOf('@');
-				if (pos2 >= 0) {
-					title = line.substr(pos2+1);
-					html += '<tr>';
-					html += '<td>Favorite radio "' + title + '"</td>';
-					html += '<td></td>';
-					html += '<td>FR:' + title + '</td>';
-					html += '</tr>';
-				}
-			}
-		}
 
 		var savedQueues = api.getDeviceState(device, CONTENT_DIRECTORY_SID, "SavedQueues", 1) || "";
 		if ( ! isEmpty( savedQueues ) ) {
@@ -438,18 +421,60 @@ var Sonos = (function(api, $) {
 			pos2 = savedQueues.indexOf('\n', pos1);
 			while (pos2 >= 0) {
 				line = savedQueues.substring(pos1, pos2);
-				var pos3 = line.indexOf('@');
+				pos3 = line.indexOf('@');
 				if (pos3 >= 0) {
 					value = line.substring(0, pos3);
 					title = line.substr(pos3+1);
 					html += '<tr>';
 					html += '<td>Sonos playlist "' + title + '"</td>';
-					html += '<td>file:///jffs/settings/savedqueues.rsq#' + value + '</td>';
+					html += '<td nowrap>file:///jffs/settings/savedqueues.rsq#' + value + '</td>';
 					html += '<td>SQ:' + title + '</td>';
 					html += '</tr>';
 				}
 				pos1 = pos2+1;
 				pos2 = savedQueues.indexOf('\n', pos1);
+			}
+		}
+
+		var favRadios = api.getDeviceState(device, CONTENT_DIRECTORY_SID, "FavoritesRadios", 1) || "";
+		if ( ! isEmpty( favRadios ) ) {
+			pos1 = 0;
+			pos2 = favRadios.indexOf('\n', 0);
+			while (pos2 >= 0) {
+				line = favRadios.substring(pos1, pos2);
+				pos3 = line.indexOf('@');
+				if (pos3 > 0) {
+					value = line.substring(0, pos3);
+					title = line.substring(pos3+1);
+					html += '<tr>';
+					html += '<td>Favorite radio "' + title + '"</td>';
+					html += '<td nowrap>' + value + '</td>';
+					html += '<td>FR:' + title + '</td>';
+					html += '</tr>';
+				}
+				pos1 = pos2+1;
+				pos2 = favRadios.indexOf('\n', pos1);
+			}
+		}
+
+		var faves = api.getDeviceState(device, CONTENT_DIRECTORY_SID, "Favorites", 1) || "";
+		if ( ! isEmpty( favRadios ) ) {
+			pos1 = 0;
+			pos2 = faves.indexOf('\n', 0);
+			while (pos2 >= 0) {
+				line = faves.substring(pos1, pos2);
+				pos3 = line.indexOf('@');
+				if (pos3 > 0) {
+					value = line.substring(0, pos3);
+					title = line.substring(pos3+1);
+					html += '<tr>';
+					html += '<td>Favorite "' + title + '"</td>';
+					html += '<td nowrap>' + value + '</td>';
+					html += '<td>SF:' + title + '</td>';
+					html += '</tr>';
+				}
+				pos1 = pos2+1;
+				pos2 = faves.indexOf('\n', pos1);
 			}
 		}
 
