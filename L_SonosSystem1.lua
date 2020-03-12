@@ -8,7 +8,7 @@
 module( "L_SonosSystem1", package.seeall )
 
 PLUGIN_NAME = "Sonos"
-PLUGIN_VERSION = "2.0develop-20072.1145"
+PLUGIN_VERSION = "2.0develop-20072.1345"
 PLUGIN_ID = 4226
 
 local _CONFIGVERSION = 19298
@@ -792,6 +792,8 @@ function updateZoneInfo( uuid )
 				zi.isSatellite = true
 				zi.Base = v2.attr.UUID
 				zoneInfo.zones[sat.attr.UUID] = zi
+				zoneInfo.zones[zi.Base].Satellites = zoneInfo.zones[zi.Base].Satellites or {}
+				table.insert( zoneInfo.zones[zi.Base].Satellites, sat.attr.UUID )
 			end
 		end
 	end
@@ -804,7 +806,7 @@ end
 
 local function getUUIDFromZoneName(name)
 	for _,item in pairs( zoneInfo.zones ) do
-		if item.ZoneName == name then return item.UUID end
+		if item.ZoneName == name and not item.isSatellite then return item.UUID end
 	end
 	return nil
 end
@@ -823,18 +825,18 @@ end
 -- Return zoneInfo group data for group of which zoneUUID is a member
 local function getZoneGroup( zoneUUID )
 	local zi = zoneInfo.zones[zoneUUID]
-	if zi then
-		D("getZoneGroup() group info for %1 is %2", zi.Group, zoneInfo.groups[zi.Group])
-		return zoneInfo.groups[zi.Group]
+	if not zi then
+		W("No zoneInfo for zone %1", zoneUUID)
+		return nil
+	elseif zi.isSatellite then
+		D("getZoneGroup() zone %1 is satellite", zoneUUID)
+		return false
 	end
-	W("No zoneInfo for zone %1", zoneUUID)
-	return nil
+	D("getZoneGroup() group info for %1 is %2", zi.Group, zoneInfo.groups[zi.Group])
+	return zoneInfo.groups[zi.Group]
 end
 
-local function getZoneCoordinator( zoneUUID )
-	local gr = getZoneGroup( zoneUUID ) or {}
-	return (gr or {}).Coordinator or zoneUUID, gr
-end
+-- getZoneCoordinator() removed; handled by controlByCoordinator()
 
 -- Return true if zone is group coordinator
 local function isGroupCoordinator( zoneUUID )
@@ -843,9 +845,9 @@ local function isGroupCoordinator( zoneUUID )
 end
 
 -- Return group info for the group of which `uuid` is a member
-local function getGroupInfos(uuid)
+local function getGroupInfo(uuid)
 	local groupInfo = getZoneGroup( uuid ) or {}
-	return table.concat( groupInfo.members or {}, "," ), groupInfo.Coordinator or "", groupInfo.ID
+	return table.concat( groupInfo.members or {}, "," ), groupInfo.Coordinator or uuid, groupInfo.ID
 end
 
 local function updateZoneGroupTopology(uuid)
@@ -857,25 +859,23 @@ local function updateZoneGroupTopology(uuid)
 	if ZoneGroupTopology then
 		D("updateZoneGroupTopology() refreshing zone group topology")
 		local status, tmp = ZoneGroupTopology.GetZoneGroupState({})
-		if not status then
-			commsFailure(device, tmp)
-			return ""
-		end
+		if not status then return end
 		local groupsState = upnp.extractElement("ZoneGroupState", tmp, "")
 		changed = setData("ZoneGroupState", groupsState, uuid, changed)
 		if changed or not zoneInfo then
 			updateZoneInfo( uuid )
 		end
-		local members, coordinator = getGroupInfos( uuid )
+		local members, coordinator = getGroupInfo( uuid )
 		changed = setData("ZonePlayerUUIDsInGroup", members, uuid, changed)
 		changed = setData("GroupCoordinator", coordinator or "", uuid, changed)
 	end
 end
 
+-- Get UUIDs for all controllable devices (excludes bridges and satellites)
 local function getAllUUIDs()
 	local zones = {}
 	for zid,zone in pairs( zoneInfo.zones ) do
-		if zone.isZoneBridge ~= "1" then
+		if zone.isZoneBridge ~= "1" and not zone.isSatellite then
 			table.insert( zones, zid )
 		end
 	end
@@ -1402,11 +1402,16 @@ end
 -- Return dev,uuid for the group coordinator of the zone (which may be the zone itself).
 local function controlByCoordinator(uuid)
 	D("controlByCoordinator(%1)", uuid)
+	if zoneInfo.zones[uuid].isSatellite then
+		uuid = zoneInfo.zones[uuid].Base
+	end
 	local gr = getZoneGroup( uuid )
 	if gr then
 		uuid = gr.Coordinator or uuid
 	end
-	return findDeviceByUUID( uuid ), uuid
+	local dev = findDeviceByUUID( uuid )
+	D("controlByCoordinator() coordinator %1 dev %2", uuid, dev)
+	return dev, uuid
 end
 
 -- ??? rigpapa: there is brokenness in the handling of the title variable throughout,
@@ -1570,7 +1575,7 @@ local function playURI(zoneUUID, instanceId, uri, speed, volume, uuids, sameVolu
 	end
 
 	local uuid = zoneUUID
-	local coordinator = getZoneCoordinator( zoneUUID )
+	local _,coordinator = controlByCoordinator( zoneUUID )
 	if controlByGroup then
 		uuid = coordinator
 	end
@@ -1832,31 +1837,52 @@ local function restorePlaybackContexts(device, playCxt)
 	end
 end
 
--- The device is added to the same group as zone (UUID or name)
-local function joinGroup(localUUID, zone)
-	D("joinGroup(%1,%2)", localUUID, zone)
-	local uuid = zone:match("RINCON_%x+") and zone or getUUIDFromZoneName(zone)
-	if uuid ~= nil and zoneInfo.zones[uuid] then
+-- The device is added to the same group as target zone (UUID or name)
+local function joinGroup(newMember, target)
+	D("joinGroup(%1,%2)", newMember, target)
+	local uuid = target:match("RINCON_%x+") and target or getUUIDFromZoneName(target)
+	if uuid and zoneInfo.zones[uuid] and not zoneInfo.zones[uuid].isSatellite then
 		local groupInfo = zoneInfo.groups[zoneInfo.zones[uuid].Group]
-		for _,member in ipairs( (groupInfo or {}).members or {} ) do
-			if member.UUID == localUUID then return end -- already in group
+		D("joinGroup() group for %1 is %2", target, groupInfo)
+		if groupInfo then
+			for _,member in ipairs( groupInfo.members or {} ) do
+				if member.UUID == newMember then return end -- already in group
+			end
+			D("joinGroup() adding %1 to group %2 coordinator %3", newMember, groupInfo.ID, groupInfo.Coordinator)
+			playURI(newMember, "0", "x-rincon:" .. groupInfo.Coordinator, "1", nil, nil, false, nil, false, false)
 		end
-		playURI(localUUID, "0", "x-rincon:" .. groupInfo.Coordinator, "1", nil, nil, false, nil, false, false)
 	end
 end
 
--- PHR??? TO-DO: If zone is group coordinator, we should remove all members rather than targeting coordinator directly.
+-- Leave group. If zone is group coordinator, the group is dissolved.
 local function leaveGroup(localUUID)
 	D("leaveGroup(%1)", localUUID)
-	local AVTransport = upnp.getService(localUUID, UPNP_AVTRANSPORT_SERVICE)
-	if AVTransport ~= nil then
-		AVTransport.BecomeCoordinatorOfStandaloneGroup({InstanceID="0"})
+	local uuid = localUUID:match("RINCON_%x+") and localUUID or getUUIDFromZoneName(localUUID)
+	if (zoneInfo.zones[uuid] or {}).isSatellite then return end
+	local groupInfo = zoneInfo.groups[zoneInfo.zones[uuid].Group]
+	if localUUID == groupInfo.Coordinator then
+		D("leaveGroup() zone %1 is group coordinator; dissolving group")
+		for _,member in ipairs( groupInfo.members or {} ) do
+			if member.UUID ~= groupInfo.Coordinator then
+				local AVTransport = upnp.getService(member.UUID, UPNP_AVTRANSPORT_SERVICE)
+				if AVTransport then
+					AVTransport.BecomeCoordinatorOfStandaloneGroup({InstanceID="0"})
+				end
+			end
+		end
+	else
+		local AVTransport = upnp.getService(localUUID, UPNP_AVTRANSPORT_SERVICE)
+		if AVTransport then
+			AVTransport.BecomeCoordinatorOfStandaloneGroup({InstanceID="0"})
+		end
 	end
 end
 
+-- Update group members to be the set provided by "member", adding and removing as needed.
 local function updateGroupMembers(gc, members)
 	D("updateGroupMembers(%1,%2)", gc, members)
-	local prevMembers, coordinator = getGroupInfos(gc)
+	local prevMembers, coordinator, grid = getGroupInfo(gc)
+	D("updateGroupMembers() group coordinator %1 id %2 members %3", coordinator, grid, prevMembers)
 	local targetMap = {}
 	if members:upper() == "ALL" then
 		local _, zones = getAllUUIDs()
@@ -1874,10 +1900,12 @@ local function updateGroupMembers(gc, members)
 			end
 		end
 	end
+	targetMap[coordinator] = true -- GC must always be member of group, can't remove this way.
 
 	-- Make any new members part of the group
 	for uuid in pairs( targetMap ) do
 		if not prevMembers:find(uuid) then
+			D("updateGroupMembers() adding zone %1", uuid)
 			playURI(uuid, "0", "x-rincon:" .. coordinator, "1", nil, nil, false, nil, false, false)
 		end
 	end
@@ -1885,23 +1913,25 @@ local function updateGroupMembers(gc, members)
 	-- Remove previous members that are no longer in group
 	for uuid in prevMembers:gmatch("RINCON_%x+") do
 		if not targetMap[uuid] then
-			if controlAnotherZone(uuid, gc) then
-				leaveGroup(uuid)
-			end
+			D("updateGroupMembers() removing %1", uuid)
+			leaveGroup(uuid)
 		end
 	end
 end
 
+-- To pause all, find all the group coordinators, and tell them to stop.
 local function pauseAll(device)
 	D("pauseAll(%1)", device)
-	local localUUID = findZoneByDevice( device )
 	local _, uuids = getAllUUIDs()
-	for uuid in ipairs( uuids ) do
-		if controlAnotherZone(uuid, localUUID) then
-			local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
-			if AVTransport then
-				AVTransport.Pause({InstanceID="0"})
-			end
+	local coords = {}
+	for _,uuid in ipairs( uuids ) do
+		local dev, gcr = controlByCoordinator( uuid )
+		coords[gcr] = dev
+	end
+	for uuid in pairs( coords ) do
+		local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
+		if AVTransport then
+			AVTransport.Pause({InstanceID="0"})
 		end
 	end
 end
@@ -2944,7 +2974,6 @@ local function sayOrAlert(device, parameters, saveAndRestore)
 			else
 				uuid = getUUIDFromZoneName( zone )
 			end
-			-- ??? FIXME -- here we need to find coordinator, and add it and all group members
 			if (uuid or "") ~= "" then
 				targets[uuid] = true
 			end
@@ -2991,6 +3020,7 @@ local function sayOrAlert(device, parameters, saveAndRestore)
 		end
 	end
 
+	-- zoneUUID, instanceId, uri, speed, volume, uuids, sameVolumeForAll, enqueueMode, newGroup, controlByGroup
 	playURI(localUUID, instanceId, uri, "1", volume, newGroup and keys(targets) or nil, sameVolume, nil, newGroup, true)
 
 	if saveAndRestore then
@@ -3622,7 +3652,7 @@ function actionSonosNotifyZoneGroupTopologyChange( lul_device, lul_settings )
 			updateZoneInfo( uuid )
 		end
 
-		local members, coordinator = getGroupInfos( uuid )
+		local members, coordinator = getGroupInfo( uuid )
 		changed = setData("ZonePlayerUUIDsInGroup", members, uuid, changed)
 		changed = setData("GroupCoordinator", coordinator, uuid, changed)
 
@@ -4827,6 +4857,7 @@ function handleRequest( lul_request, lul_parameters, lul_outputformat )
 		return json.encode( resp ), "application/json"
 
 	elseif action == "zoneinfo" then
+		local json = require "dkjson"
 		return json.encode( zoneInfo ), "application/json"
 
 	else
