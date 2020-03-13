@@ -25,7 +25,7 @@ local defaultEngine = "RV"
 
 local engines = {}
 
-local function debug(m, ...) if DEBUG_MODE then log(string.format("(tts debug) %s", tostring(m)), ...) end end
+local function debug(m, ...) if DEBUG_MODE then log('(tts debug) '..m, ...) end end
 
 -- cut_text: split long text to smaller than cutSize. Some engines have limits on the length
 --            of the text to be converted. This function facilities a multi-request approach
@@ -437,11 +437,10 @@ function AzureTTSEngine:say(text, destFile, engineOptions)
 				local json = require "dkjson"
 				local data = json.decode( s )
 				if not data then
-					debug("AzureTTSEngine:say() invalid response JSON: "..tostring(s))
+					debug("AzureTTSEngine:say() invalid response JSON: %1", s)
 					error("Invalid response JSON")
 				elseif data.error and data.error.code ~= 200 then
-					error(string.format("Can't get token, error %s response, %s", tostring(data.error.code),
-						tostring(data.error.message)))
+					error("Can't get token, error %1 response, %2", data.error.code, data.error.message)
 				end
 				error("Unparseable token response")
 			end
@@ -455,7 +454,7 @@ function AzureTTSEngine:say(text, destFile, engineOptions)
 		local payload = string.format([[<speak version="1.0" xml:lang="%s"><voice name="%s">%s</voice></speak>]],
 			lang, voice,
 			text:gsub("%s+"," "):gsub("^%s+",""):gsub("%s+$",""):gsub("%&","&amp;"):gsub("%>","&gt;"):gsub("%<","&lt;"))
-		debug(string.format("AzureTTSEngine:say() host %q payload %s", host, payload))
+		debug("AzureTTSEngine:say() host %1 payload %2", host, payload)
 		os.remove( destFile )
 		local fp,ferr = io.open(destFile, "wb")
 		if not fp then error("Unable to open "..tostring(destFile)..": "..tostring(ferr)) end
@@ -474,13 +473,14 @@ function AzureTTSEngine:say(text, destFile, engineOptions)
 				source = ltn12.source.string(payload),
 				protocol = ( ssl._VERSION or "0.5" ):find( "^0%.5" ) and "tlsv1_2" or "any"
 			}
-		debug(string.format("AzureTTSEngine:say() LuaSec %s, using protocol %q for request", tostring(ssl._VERSION), req.protocol))
-		local status, statusMsg = https.request( req )
+		debug("AzureTTSEngine:say() LuaSec %1, using protocol %2 for request", ssl._VERSION, req.protocol)
+		local _, statusMsg = https.request( req )
 		if statusMsg == 200 then
 			if io.type(fp) == "file" then fp:close() end
 			fp = io.open( destFile, "rb" )
 			local size = fp:seek("end") or 0
 			fp:close()
+			debug("AzureTTSEngine:say() received %1 byte response", size)
 			if size > 0 then
 				-- Convert bitrate in Kbps to Bps, and from that compute clip duration (aggressive rounding up)
 				return math.ceil( size / ( self.bitrate * 128 ) ) + 1, nil, size
