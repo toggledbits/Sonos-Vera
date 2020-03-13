@@ -8,7 +8,7 @@
 module( "L_SonosSystem1", package.seeall )
 
 PLUGIN_NAME = "Sonos"
-PLUGIN_VERSION = "2.0develop-20072.1815"
+PLUGIN_VERSION = "2.0develop-20072.2045"
 PLUGIN_ID = 4226
 
 local _CONFIGVERSION = 19298
@@ -17,7 +17,7 @@ local _UIVERSION = 20057
 local DEBUG_MODE = false	-- Don't hardcode true--use state variable config
 
 local MIN_UPNP_VERSION = 20071	-- Minimum version of L_SonosUPnP that works
-local MIN_TTS_VERSION = 19360	-- Minimum version of L_SonosTTS that works
+local MIN_TTS_VERSION = 20072	-- Minimum version of L_SonosTTS that works
 
 local MSG_CLASS = "Sonos"
 local isOpenLuup = false
@@ -675,8 +675,10 @@ local function setData(name, value, uuid, default)
 				W("No device for zone %1; reload luup to inventory/discover.", uuid)
 			elseif variableSidTable[name] then
 				setVar( variableSidTable[name], name, value == nil and "" or tostring(value), device )
+--[[
 			else
 				D("No serviceId defined for %1; state variable value not saved", name)
+--]]
 			end
 			return true -- flag something changed
 		end
@@ -761,11 +763,12 @@ end
 -- with UUID (group ID) and Coordinator (UUID of zone that is group coordinator), and a `members`
 -- array of zone UUIDs. The zoneInfo table is meant to provide fast, consistent indexing and
 -- data access for all zones and groups.
+local zoneInfoMemberAttributes = { "UUID", "Location", "ZoneName", "HTSatChanMapSet", "Invisible" }
 function updateZoneInfo( uuid )
 	D("updateZoneInfo(%1)", uuid)
 	zoneInfo = { zones={}, groups={} }
 	local zs = dataTable[uuid].ZoneGroupState
-	D("updateZoneInfo() zone info is \r\n%1", tostring(zs))
+	-- D("updateZoneInfo() zone info is \r\n%1", tostring(zs))
 	local root = lom.parse( zs )
 	assert( root and root.tag == "ZoneGroupState" )
 	local groups = xmlNodesForTag( root, "ZoneGroups" )()
@@ -775,7 +778,7 @@ function updateZoneInfo( uuid )
 		zoneInfo.groups[v.attr.ID] = gr
 		for v2 in xmlNodesForTag( v, "ZoneGroupMember" ) do
 			local zi = {}
-			for _,v3 in ipairs( v2.attr ) do
+			for _,v3 in ipairs( zoneInfoMemberAttributes ) do
 				zi[v3] = tonumber( v2.attr[v3] ) or v2.attr[v3]
 			end
 			zi.Group = gr.UUID
@@ -785,7 +788,7 @@ function updateZoneInfo( uuid )
 			for sat in xmlNodesForTag( v2, "Satellite" ) do
 				D("updateZoneInfo() zone %1 has satellite %2", v2.attr.UUID, sat.attr.UUID)
 				zi = {}
-				for _,v3 in ipairs( sat.attr ) do
+				for _,v3 in ipairs( zoneInfoMemberAttributes ) do
 					zi[v3] = tonumber( sat.attr[v3] ) or sat.attr[v3]
 				end
 				zi.Group = false
@@ -1097,46 +1100,43 @@ local function extractDataFromMetaData(zoneUUID, currentUri, currentUriMetaData,
 end
 
 local function parseSavedQueues(xml)
-	D("parseSavedQueues(%1)", xml)
-	local result = ""
+	local result = {}
 	for id, title in xml:gmatch('<container%s?.-id="([^"]-)"[^>]->.-<dc:title%s?[^>]->(.-)</dc:title>.-</container>') do
 		id = upnp.decode(id)
 		title = upnp.decode(title)
-		result = result .. id .. "@" .. title .. "\n"
-		L("Saved queue %1 %2", id, title)
+		table.insert( result, id .. "@" .. title )
 	end
-	return result
+	return table.concat( result, "\n" )
 end
 
---[[ currentl unused
+--[[ currently unused
 local function parseFavoritesRadios(xml)
-	local result = ""
+	local result = {}
 	for title, res in xml:gmatch("<item%s?[^>]->.-<dc:title%s?[^>]->(.-)</dc:title>.-<res%s?[^>]->(.-)</res>.-</item>") do
 		title = upnp.decode(title)
-		result = result .. res .. "@" .. title .. "\n"
+		table.insert( result, res .. "@" .. title )
 	end
-	return result
+	return table.concat( result, "\n" )
 end
 --]]
 
 local function parseIdTitle(xml)
-	local result = ""
+	local result = {}
 	for id, title in xml:gmatch('<item%s?.-id="([^"]-)"[^>]->.-<dc:title%s?[^>]->(.-)</dc:title>.-</item>') do
 		id = upnp.decode(id)
 		title = upnp.decode(title)
-		result = result .. id .. "@" .. title .. "\n"
+		table.insert( result, id .. "@" .. title )
 	end
-	return result
+	return table.concat( result, "\n" )
 end
 
 local function parseQueue(xml)
-	D("parseQueue(%1)", xml)
-	local result = ""
+	local result = {}
 	for title in xml:gmatch("<item%s?[^>]->.-<dc:title%s?[^>]->(.-)</dc:title>.-</item>") do
 		title = upnp.decode(title)
-		result = result .. title .. "\n"
+		table.insert( result, title )
 	end
-	return result
+	return table.concat( result, "\n" )
 end
 
 local setup -- forward declaration
@@ -2273,7 +2273,8 @@ local function setCheckStateRate(device, rate)
 end
 
 local function handleRenderingChange(uuid, event)
-	D("handleRenderingChange(%1,%2)", uuid, event)
+	-- D("handleRenderingChange(%1,%2)", uuid, event)
+	D("handleRenderingChange(%1, event)", uuid)
 	local changed = false
 	local tmp = event:match("<Event%s?[^>]-><InstanceID%s?[^>]->(.+)</InstanceID></Event>")
 	if tmp ~= nil then
@@ -2294,7 +2295,8 @@ local function handleRenderingChange(uuid, event)
 end
 
 local function handleAVTransportChange(uuid, event)
-	D("handleAVTransportChange(%1,%2)", uuid, event)
+	-- D("handleAVTransportChange(%1,%2)", uuid, event)
+	D("handleAVTransportChange(%1, event)", uuid)
 	local statusString, title, title2, artist, album, details, albumArt, desc
 	local currentUri, currentUriMetaData, trackUri, trackUriMetaData, service, serviceId
 	local changed = false
@@ -3624,7 +3626,8 @@ end
 
 function actionSonosNotifyRenderingChange( lul_device, lul_settings )
 	local uuid = findZoneByDevice( lul_device )
-	D("actionSonosNotifyRenderingChange(%1,%2)", lul_device, lul_settings)
+	-- D("actionSonosNotifyRenderingChange(%1,%2)", lul_device, lul_settings)
+	D("actionSonosNotifyRenderingChange(%1, lul_settings) zone %2", lul_device, uuid)
 	assert(luup.devices[lul_device].device_type == SONOS_ZONE_DEVICE_TYPE)
 	assert( uuid ~= nil )
 	assert( EventSubscriptions[uuid] ~= nil )
@@ -3637,7 +3640,8 @@ end
 
 function actionSonosNotifyAVTransportChange( lul_device, lul_settings )
 	local uuid = findZoneByDevice( lul_device )
-	D("actionSonosNotifyAVTransportChange(%1,%2)", lul_device, lul_settings)
+	-- D("actionSonosNotifyAVTransportChange(%1,%2)", lul_device, lul_settings)
+	D("actionSonosNotifyAVTransportChange(%1, lul_settings) zone %2", lul_device, uuid)
 	assert(luup.devices[lul_device].device_type == SONOS_ZONE_DEVICE_TYPE)
 	assert( uuid ~= nil )
 	assert( EventSubscriptions[uuid] ~= nil )
@@ -3650,7 +3654,8 @@ end
 
 function actionSonosNotifyMusicServicesChange( lul_device, lul_settings ) -- luacheck: ignore 212
 	local uuid = findZoneByDevice( lul_device )
-	D("actionSonosNotifyMusicServicesChange(%1,%2)", lul_device, lul_settings)
+	-- D("actionSonosNotifyMusicServicesChange(%1,%2)", lul_device, lul_settings)
+	D("actionSonosNotifyMusicServicesChange(%1, lul_settings) uuid %2", lul_device, uuid)
 	assert(luup.devices[lul_device].device_type == SONOS_ZONE_DEVICE_TYPE)
 	assert( uuid ~= nil )
 	assert( EventSubscriptions[uuid] ~= nil )
@@ -3665,7 +3670,8 @@ end
 
 function actionSonosNotifyZoneGroupTopologyChange( lul_device, lul_settings )
 	local uuid = findZoneByDevice( lul_device )
-	D("actionSonosNotifyZoneGroupTopologyChange(%1,%2)", lul_device, lul_settings)
+	-- D("actionSonosNotifyZoneGroupTopologyChange(%1,%2)", lul_device, lul_settings)
+	D("actionSonosNotifyZoneGroupTopologyChange(%1, lul_settings) uuid is %2", lul_device, uuid)
 	assert(luup.devices[lul_device].device_type == SONOS_ZONE_DEVICE_TYPE)
 	assert( uuid ~= nil )
 	assert( EventSubscriptions[uuid] ~= nil )
@@ -3691,7 +3697,8 @@ end
 
 function actionSonosNotifyContentDirectoryChange( lul_device, lul_settings )
 	local uuid = findZoneByDevice( lul_device )
-	D("actionSonosNotifyContentDirectoryChange(%1,%2)", lul_device, lul_settings)
+	-- D("actionSonosNotifyContentDirectoryChange(%1,%2)", lul_device, lul_settings)
+	D("actionSonosNotifyContentDirectoryChange(%1, lul_settings) uuid %2", lul_device, uuid)
 	assert(luup.devices[lul_device].device_type == SONOS_ZONE_DEVICE_TYPE)
 	assert( uuid ~= nil )
 	assert( EventSubscriptions[uuid] ~= nil )

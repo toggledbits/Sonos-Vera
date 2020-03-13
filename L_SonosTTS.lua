@@ -6,7 +6,7 @@
 
 module("L_SonosTTS", package.seeall)
 
-VERSION = 19360
+VERSION = 20072
 DEBUG_MODE = false
 
 local urllib = require("socket.url")
