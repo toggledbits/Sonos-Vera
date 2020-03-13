@@ -426,7 +426,7 @@ function AzureTTSEngine:say(text, destFile, engineOptions)
 			debug("AzureTTSEngine:say() token is expired, fetching new")
 			local url = string.format("https://%s.api.cognitive.microsoft.com/sts/v1.0/issueToken",
 				engineOptions.region or self.optionMeta.region.default)
-			local cmd = string.format([[curl -s -o - -X POST %q -H "Content-length: 0" \
+			local cmd = string.format([[curl -s -o - -m 15 -X POST %q -H "Content-length: 0" \
 -H "Content-type: application/x-www-form-urlencoded" -H "Ocp-Apim-Subscription-Key: %s"]],
 				url, engineOptions.subkey or "undefined")
 			local fp = io.popen( cmd )
