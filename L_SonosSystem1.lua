@@ -188,7 +188,7 @@ local TTSChime
 
 local scheduler
 
-local function Q(...) return "'" .. string.gsub(table.concat( arg, "" ), "(')", "\\%1") .. "'" end
+local function Q(...) return "'" .. string.gsub(table.concat( arg, "" ), "(')", "\\%1") .. "'" end -- luacheck: ignore 212
 
 local function dump(t, seen)
 	if t == nil then return "nil" end
@@ -220,7 +220,7 @@ end
 local logToFile
 local function L(msg, ...) -- luacheck: ignore 212
 	local str
-	local level = defaultLogLevel or 50
+	local level = 50
 	if type(msg) == "table" then
 		str = tostring(msg.prefix or MSG_CLASS) .. ": " .. tostring(msg.msg or msg[1])
 		level = msg.level or level
@@ -871,6 +871,9 @@ local function updateZoneGroupTopology(uuid)
 		local members, coordinator = getGroupInfo( uuid )
 		changed = setData("ZonePlayerUUIDsInGroup", members, uuid, changed)
 		changed = setData("GroupCoordinator", coordinator or "", uuid, changed)
+		if changed then
+			setVariableValue(HADEVICE_SID, "LastUpdate", os.time(), findDeviceByUUID(uuid) or -1)
+		end
 	end
 end
 
@@ -1177,7 +1180,10 @@ local function refreshNow(uuid, force, refreshQueue)
 	end
 --]]
 
-	updateZoneGroupTopology( uuid )
+	if getVarNumeric( "MasterRole", 0, device, SONOS_ZONE_SID ) ~= 0 then
+		D("refreshNow() zone is master role, fetching zone topology")
+		updateZoneGroupTopology( uuid )
+	end
 
 	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
 	if AVTransport then
@@ -1423,7 +1429,7 @@ end
 --              to be studied carefully before cleanup.
 local function decodeURI(localUUID, coordinator, uri)
 	D("decodeURI(%1,%2,%3)", localUUID, coordinator, uri)
-	local uuid = nil
+	local uuid
 	local track = nil
 	local uriMetaData = ""
 	local serviceId
@@ -1450,12 +1456,11 @@ local function decodeURI(localUUID, coordinator, uri)
 		-- Saved queue: SQ:Cubano becomes ID:savedqueueid
 		-- Also allows SQ:12 if known
 		local found = false
-		local rest = uri:sub(4)
+		title = uri:sub(4)
 		if dataTable[localUUID].SavedQueues then
-			local id, title
 			for line in dataTable[localUUID].SavedQueues:gmatch("(.-)\n") do
-				id, title = line:match("^(.+)@(.-)$")
-				if (id ~= nil and title == rest) or id == uri then
+				local id, t = line:match("^(.+)@(.-)$")
+				if (id ~= nil and t == title) or id == uri then
 					found = true
 					uri = "ID:" .. id
 					break
@@ -1463,7 +1468,7 @@ local function decodeURI(localUUID, coordinator, uri)
 			end
 		end
 		if not found then
-			W("Unable to resolve URI: saved queue %1 not found", rest)
+			W("Unable to resolve URI: saved queue %1 not found", title)
 			uri = nil
 		end
 
@@ -1472,10 +1477,9 @@ local function decodeURI(localUUID, coordinator, uri)
 		title = uri:sub(4)
 		local found = false
 		if dataTable[localUUID].FavoritesRadios ~= nil then
-			local id, title
 			for line in dataTable[localUUID].FavoritesRadios:gmatch("(.-)\n") do
-				id, title = line:match("^(.+)@(.-)$")
-				if id ~= nil and title == uri:sub(4) then
+				local id, t = line:match("^(.+)@(.-)$")
+				if id ~= nil and t == uri:sub(4) then
 					found = true
 					uri = "ID:" .. id
 					break
@@ -1492,10 +1496,9 @@ local function decodeURI(localUUID, coordinator, uri)
 		title = uri:sub(4)
 		local found = false
 		if dataTable[localUUID].Favorites then
-			local id, title
 			for line in dataTable[localUUID].Favorites:gmatch("(.-)\n") do
-				id, title = line:match("^(.+)@(.-)$")
-				if (id ~= nil and title == uri:sub(4)) then
+				local id, t = line:match("^(.+)@(.-)$")
+				if (id ~= nil and t == uri:sub(4)) then
 					found = true
 					uri = "ID:" .. id
 					break
@@ -2594,31 +2597,34 @@ setup = function(zoneDevice, flag)
 	-- Use pcall so any issue setting up icon does not interfere with initialization and operation
 	pcall( setDeviceIcon, zoneDevice, icon, values.modelNumber, uuid )
 
-	if not sonosServices then
-		sonosServices = getAvailableServices(uuid)
+	if getVarNumeric( "MasterRole", 0, zoneDevice, SONOS_ZONE_SID ) ~= 0 then
+		-- Master role zone. Fetch topology, services and content directories.
+		updateZoneGroupTopology( uuid )
+
+		if not sonosServices then
+			sonosServices = getAvailableServices(uuid)
+		end
+		metaDataKeys[uuid] = loadServicesMetaDataKeys(zoneDevice)
+
+		-- Sonos playlists
+		local info = upnp.browseContent(uuid, UPNP_MR_CONTENT_DIRECTORY_SERVICE, "SQ:", false,
+			"dc:title", parseSavedQueues, BROWSE_TIMEOUT)
+		changed = setData("SavedQueues", info, uuid, changed)
+
+		-- Favorites radio stations
+		info = upnp.browseContent(uuid, UPNP_MR_CONTENT_DIRECTORY_SERVICE, "R:0/0", false,
+			"dc:title", parseIdTitle, BROWSE_TIMEOUT)
+		changed = setData("FavoritesRadios", info, uuid, changed)
+
+		-- Sonos favorites
+		info = upnp.browseContent(uuid, UPNP_MR_CONTENT_DIRECTORY_SERVICE, "FV:2", false,
+			"dc:title", parseIdTitle, BROWSE_TIMEOUT)
+		changed = setData("Favorites", info, uuid, changed)
+
+		if changed then
+			setVariableValue(HADEVICE_SID, "LastUpdate", os.time(), zoneDevice)
+		end
 	end
-	metaDataKeys[uuid] = loadServicesMetaDataKeys(zoneDevice)
-
-	-- Sonos playlists
-	local info = upnp.browseContent(uuid, UPNP_MR_CONTENT_DIRECTORY_SERVICE, "SQ:", false,
-		"dc:title", parseSavedQueues, BROWSE_TIMEOUT)
-	changed = setData("SavedQueues", info, uuid, changed)
-
-	-- Favorites radio stations
-	info = upnp.browseContent(uuid, UPNP_MR_CONTENT_DIRECTORY_SERVICE, "R:0/0", false,
-		"dc:title", parseIdTitle, BROWSE_TIMEOUT)
-	changed = setData("FavoritesRadios", info, uuid, changed)
-
-	-- Sonos favorites
-	info = upnp.browseContent(uuid, UPNP_MR_CONTENT_DIRECTORY_SERVICE, "FV:2", false,
-		"dc:title", parseIdTitle, BROWSE_TIMEOUT)
-	changed = setData("Favorites", info, uuid, changed)
-
-	if changed then
-		setVariableValue(HADEVICE_SID, "LastUpdate", os.time(), zoneDevice)
-	end
-
-	updateZoneGroupTopology( uuid )
 
 	local rate = getCheckStateRate(zoneDevice)
 	if rate > 0 then
@@ -2639,6 +2645,7 @@ local function zoneRunOnce( dev )
 		initVar( "SonosID", "", dev, UPNP_DEVICE_PROPERTIES_SID )
 		initVar( "SonosOnline", "0", dev, SONOS_ZONE_SID )
 		initVar( "PollDelays", "15,60", dev, SONOS_ZONE_SID )
+		initVar( "DesignatedMaster", "", dev, SONOS_ZONE_SID )
 	end
 	setVar( SONOS_SYS_SID, "ConfigVersion", _CONFIGVERSION, dev )
 end
@@ -2684,12 +2691,10 @@ local function deferredStartup(device)
 	end
 
 	-- Start zones
-	UUIDs = {}
 	Zones = {}
 	local reload = false
 	local count, started = 0, 0
 	local children = {}
-	local childZone = {}
 	for k,v in pairs( luup.devices ) do
 		if v.device_type == SONOS_ZONE_DEVICE_TYPE then
 			local zid = v.id or ""
@@ -2710,7 +2715,7 @@ local function deferredStartup(device)
 			elseif v.device_num_parent == device then
 				L("Starting %1 (#%2) zone id %3", v.description, k, zid)
 				children[k] = v
-				childZone[zid] = k
+				Zones[zid] = k
 				count = count + 1
 				setVar(UPNP_AVTRANSPORT_SID, "CurrentStatus", "Starting...", k)
 				if ip ~= "" then
@@ -2718,21 +2723,12 @@ local function deferredStartup(device)
 					luup.attr_set( "mac", "", k )
 					luup.attr_set( "ip", "", k )
 				end
-				local status,success = pcall( startZone, k )
-				if status and success then
-					luup.set_failure( 0, k )
-					started = started + 1
-				else
-					W("Failed to start child %1 (#%2): %3", v.description, k, success)
-					luup.set_failure( 1, k )
-					setVar(UPNP_AVTRANSPORT_SID, "CurrentStatus", tostring(success), k)
-				end
 			else
 				W("Sonos zone device %1 (#%2) non-child of %3; skipping.", v.description, k, device)
 			end
 		end
 	end
-	L("Started %1 children of %2", started, count)
+
 	-- Disable old plugin implementation if present.
 	local ipath = getInstallPath()
 	if file_exists( ipath .. "I_Sonos1.xml.lzo" ) or file_exists( ipath .. "I_Sonos1.xml" ) then
@@ -2761,7 +2757,7 @@ local function deferredStartup(device)
 		D("deferredStartup() taking inventory")
 		local newZones = {}
 		for uuid in pairs( zoneInfo.zones ) do
-			if not ( childZone[uuid] or newZones[uuid] ) then
+			if not ( Zones[uuid] or newZones[uuid] ) then
 				newZones[uuid] = getIPFromUUID( uuid ) or ""
 			end
 		end
@@ -2789,26 +2785,64 @@ local function deferredStartup(device)
 		end
 	end
 
-	-- Set visibility of zones; satellites are not visible.
-	if zoneInfo then
-		for uuid,zi in pairs( zoneInfo.zones or {} ) do
-			local dev = childZone[uuid]
-			if dev then
-				D("deferredStartup() setting visibility of %1 (#%2) zone %3 satellite %4", luup.devices[dev].description,
-					dev, uuid, zi.isSatellite or false)
-				luup.attr_set( "invisible", zi.isSatellite and 1 or 0, dev )
-			else
-				W("deferredStartup() zone %1 has no child", uuid)
-			end
+	-- Identify and mark two lowest-numbered non-satellite zones as network masters for us.
+	-- This means they will be subscribed to topology and content updates; others will not.
+	local chorder = {}
+	local designated = {}
+	for uuid,dev in pairs( Zones ) do
+		if getVarNumeric( "DesignatedMaster", 0, dev, SONOS_ZONE_SID ) ~= 0 then
+			L("Zone %1 %2 (#%3) is designated master", uuid, luup.devices[dev].description, dev)
+			table.insert( designated, dev )
 		end
+		setVar( SONOS_ZONE_SID, "MasterRole", 0, dev )
+		table.insert( chorder, dev )
+	end
+	table.sort( chorder )
+	-- Push designated master(s) to the front of the list
+	for _,dev in ipairs( designated ) do table.insert( chorder, 1, dev ) end
+	-- Trim the tail of the list to the number of masters
+	while #chorder > 1 do table.remove( chorder ) end -- ??? Fix number of masters
+	for _,dev in ipairs( chorder ) do
+		L("Choosing %1 (#%2) for master role", luup.devices[dev].description, dev)
+		setVar( SONOS_ZONE_SID, "MasterRole", 1, dev )
 	end
 
-	D("deferredStartup() done. We're up and running!")
+	-- Start zones
+	-- ??? Do we even need to bother to start satellites?
+	for uuid,dev in pairs( Zones ) do
+		L("Starting zone %1: %2 (#%3)", uuid, luup.devices[dev].description, dev)
+		local status,success = pcall( startZone, dev, uuid )
+		if status and success then
+			luup.set_failure( 0, dev )
+			started = started + 1
+		else
+			W("Failed to start child %1 (#%2): %3", luup.devices[dev].description, dev, success)
+			luup.set_failure( 1, dev )
+			setVar(UPNP_AVTRANSPORT_SID, "CurrentStatus", tostring(success), dev)
+		end
+	end
+	L("Started %1 children of %2", started, count)
 	setVar( SONOS_SYS_SID, "Message", string.format("Running %d zones", started), device )
 
 	-- Start a new master task
 	local t = scheduler.Task:new( "master", device, runMasterTick, { device } )
 	t:delay( 60 )
+
+	-- Set visibility of zones; satellites are not visible.
+	if zoneInfo then
+		for uuid,zi in pairs( zoneInfo.zones or {} ) do
+			local dev = Zones[uuid]
+			if dev then
+				D("deferredStartup() setting visibility of %1 (#%2) zone %3 satellite %4", luup.devices[dev].description,
+					dev, uuid, zi.isSatellite or false)
+				luup.attr_set( "invisible", zi.isSatellite and 1 or 0, dev )
+			else
+				W("Zone %1 has no child device--please re-run discovery.", uuid)
+			end
+		end
+	end
+
+	D("deferredStartup() done. We're up and running!")
 end
 
 local function waitForProxy( task, device, tries )
@@ -3675,8 +3709,14 @@ function actionSonosNotifyZoneGroupTopologyChange( lul_device, lul_settings )
 	assert(luup.devices[lul_device].device_type == SONOS_ZONE_DEVICE_TYPE)
 	assert( uuid ~= nil )
 	assert( EventSubscriptions[uuid] ~= nil )
+	if getVarNumeric( "MasterRole", 0, lul_device, SONOS_ZONE_SID ) == 0 then
+		W("actionSonosNotifyZoneGroupTopologyChange() ignoring zone topology update for %1 (#%2): zone is not master role",
+			luup.devices[lul_device].description, lul_device)
+		setData("ZoneGroupState", "", uuid, false)
+		return 4,0
+	end
 	if (upnp.isValidNotification("NotifyZoneGroupTopologyChange", lul_settings.sid, EventSubscriptions[uuid])) then
-		local groupsState = lul_settings.ZoneGroupState or "<ZoneGroupState/>"
+		local groupsState = lul_settings.ZoneGroupState or error("Missing ZoneGroupState")
 
 		local changed = setData("ZoneGroupState", groupsState, uuid, false)
 		if changed or not zoneInfo then
