@@ -15,7 +15,7 @@ var Sonos = (function(api, $) {
 	/* unique identifier for this plugin... */
 	var uuid = '79bf9374-f989-11e9-884c-dbb32f3fa64a'; /* SonosSystem 2019-12-11 19345 */
 
-	var pluginVersion = '2.0develop-20072.2045';
+	var pluginVersion = '2.0develop-20073.1430';
 
 	var _UIVERSION = 19301;     /* must coincide with Lua core */
 
@@ -322,7 +322,7 @@ var Sonos = (function(api, $) {
 		html += '<table cellspacing="10">';
 		html += '<tr>';
 		html += '<td>Plugin version:</td>';
-		html += '<td>' + version + '</td>';
+		html += '<td>Core ' + version + '; JSUI ' + pluginVersion + ' / ' + _UIVERSION + '</td>';
 		html += '</tr>';
 		html += '<tr>';
 		html += '<td>Github/Wiki:</td>';
@@ -415,7 +415,7 @@ var Sonos = (function(api, $) {
 
 		var line, pos, title, value;
 
-		var savedQueues = api.getDeviceState(device, CONTENT_DIRECTORY_SID, "SavedQueues", 1) || "";
+		var savedQueues = getParentState( "SavedQueues", device);
 		if ( ! isEmpty( savedQueues ) ) {
 			pos1 = 0;
 			pos2 = savedQueues.indexOf('\n', pos1);
@@ -436,7 +436,7 @@ var Sonos = (function(api, $) {
 			}
 		}
 
-		var favRadios = api.getDeviceState(device, CONTENT_DIRECTORY_SID, "FavoritesRadios", 1) || "";
+		var favRadios = getParentState( "FavoritesRadios", device );
 		if ( ! isEmpty( favRadios ) ) {
 			pos1 = 0;
 			pos2 = favRadios.indexOf('\n', 0);
@@ -457,7 +457,7 @@ var Sonos = (function(api, $) {
 			}
 		}
 
-		var faves = api.getDeviceState(device, CONTENT_DIRECTORY_SID, "Favorites", 1) || "";
+		var faves = getParentState( "Favorites", device);
 		if ( ! isEmpty( favRadios ) ) {
 			pos1 = 0;
 			pos2 = faves.indexOf('\n', 0);
