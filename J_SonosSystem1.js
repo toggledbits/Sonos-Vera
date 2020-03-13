@@ -17,7 +17,7 @@ var SonosSystem = (function(api, $) {
 
 	var pluginVersion = '2.0develop-20073.1430';
 
-	var _UIVERSION = 20057;     /* must coincide with Lua core */
+	var _UIVERSION = 20073;     /* must coincide with Lua core */
 
 	var myModule = {};
 
