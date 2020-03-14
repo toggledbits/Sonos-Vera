@@ -8,7 +8,7 @@
 module( "L_SonosSystem1", package.seeall )
 
 PLUGIN_NAME = "Sonos"
-PLUGIN_VERSION = "2.0develop-20074.1525"
+PLUGIN_VERSION = "2.0develop-20074.1715"
 PLUGIN_ID = 4226
 
 local _CONFIGVERSION = 19298
@@ -114,6 +114,7 @@ local sayPlayback = {}
 
 -- Zone group topology (set by updateZoneInfo())
 local zoneInfo = false
+local masterZones = {}
 
 local metaDataKeys = {}
 local dataTable = {}
@@ -886,10 +887,13 @@ local function updateZoneGroupTopology(uuid)
 	if ZoneGroupTopology then
 		D("updateZoneGroupTopology() refreshing zone group topology")
 		local status, tmp = ZoneGroupTopology.GetZoneGroupState({})
-		if not status then return end
-		local groupsState = upnp.extractElement("ZoneGroupState", tmp, "")
-		updateZoneInfo( groupsState )
+		if status then
+			local groupsState = upnp.extractElement("ZoneGroupState", tmp, "")
+			updateZoneInfo( groupsState )
+			return true
+		end
 	end
+	return false
 end
 
 -- Get UUIDs for all controllable devices (excludes bridges and satellites)
@@ -1384,11 +1388,13 @@ local function updateWithoutProxy(task, device)
 			task = scheduler.Task:new( "update"..device, device, updateWithoutProxy, { device } )
 		end
 		-- If player is stopped or is not group coordinator, use long delay.
-		task:delay( (ts == "STOPPED" or not isGroupCoordinator(uuid)) and rs or rp )
-		D("Scheduled update for no proxy, state %1", ts)
+		local dly = (ts == "STOPPED" or not isGroupCoordinator(uuid)) and rs or rp
+		task:delay( dly )
+		D("updateWithoutProxy() scheduled update for no proxy in state %1 delay %2", ts, dly)
 		return
 	else
 		-- Not reschedulling, but leave task
+		D("updateWithoutProxy() not rescheduling update, proxy running")
 	end
 	D("Proxy found, skipping poll reschedule")
 end
@@ -1734,6 +1740,10 @@ end
 local function savePlaybackContexts(device, uuids)
 	D("savePlaybackContexts(%1,%2)", device, uuids)
 	local cxt = {}
+	for _,mz in ipairs( masterZones ) do
+		local success,status = pcall( updateZoneGroupTopology, mz.uuid )
+		if success and status then break end
+	end
 	for _,uuid in ipairs( uuids ) do
 		if controlAnotherZone(uuid, findZoneByDevice( device ) ) then
 			refreshNow(uuid, true, false)
@@ -2869,12 +2879,14 @@ local function deferredStartup(device)
 	for _,dev in ipairs( designated ) do table.insert( chorder, 1, dev ) end
 	local nummaster = getVarNumeric( "NumMasters", 2, device, SONOS_SYS_SID )
 	if nummaster > #chorder then nummaster = #chorder end
+	masterZones = {}
 	for k = 1, nummaster do
 		local dev = chorder[k]
 		L("Selected %1 (#%2) for master role", luup.devices[dev].description, dev)
 		setVar( SONOS_ZONE_SID, "MasterRole", 1, dev )
+		table.insert( masterZones, { device=dev, uuid=luup.devices[dev].id } )
 	end
-	L("%1 zones selected for master role", nummaster)
+	L("Zones selected for master role: %1", masterZones)
 
 	-- Start zones
 	-- ??? Do we even need to bother to start satellites?
@@ -2891,7 +2903,8 @@ local function deferredStartup(device)
 		end
 	end
 	L("Started %1 children of %2", started, count)
-	setVar( SONOS_SYS_SID, "Message", string.format("Running %d zones", started), device )
+	local proxmsg = upnp.proxyVersionAtLeast(1) and "proxy detected" or "no proxy"
+	setVar( SONOS_SYS_SID, "Message", string.format("Running %d zones; %s", started, proxmsg), device )
 
 	-- Start a new master task
 	local t = scheduler.Task:new( "master", device, runMasterTick, { device } )
@@ -2951,9 +2964,38 @@ function startup( lul_device )
 	setVar( SONOS_SYS_SID, "PluginVersion", PLUGIN_VERSION, lul_device )
 	setVar( SONOS_SYS_SID, "_UIV", _UIVERSION, lul_device )
 	setVar( SONOS_SYS_SID, "Message", "Starting...", lul_device )
+	setVar( SONOS_SYS_SID, "DiscoveryMessage", "", lul_device )
 
 	if file_exists( getInstallPath() .. "L_SonosSystem1.lua" ) and file_exists( getInstallPath() .. "L_SonosSystem1.lua.lzo" ) then
 		return false, "Invalid install files", MSG_CLASS
+	end
+
+	local enabled = initVar( "Enabled", "1", lul_device, SONOS_SYS_SID )
+	if "0" == enabled then
+		W("%1 (#%2) disabled by configuration; startup aborting.", luup.devices[lul_device].description,
+			lul_device)
+		allOffline( lul_device )
+		setVar( SONOS_SYS_SID, "Message", "Disabled", lul_device )
+		return true, "Disabled", MSG_CLASS
+	end
+
+	-- Find existing child zones
+	Zones = {}
+	for k,v in pairs( luup.devices ) do
+		if v.device_type == SONOS_ZONE_DEVICE_TYPE then
+			local zid = v.id or ""
+			local ip = luup.attr_get( "ip", k ) or ""
+			D("deferredStartup() found child %1 zoneid %3 parent %2", k, v.device_num_parent, zid)
+			if v.device_num_parent == lul_device then
+				setVar(UPNP_AVTRANSPORT_SID, "CurrentStatus", "Offline; waiting for startup...", k)
+				Zones[zid] = k
+				if ip ~= "" then
+					setVar( SONOS_ZONE_SID, "SonosIP", ip, k )
+					luup.attr_set( "mac", "", k )
+					luup.attr_set( "ip", "", k )
+				end
+			end
+		end
 	end
 
 	scheduler = TaskManager( 'sonosTick' )
@@ -2978,21 +3020,8 @@ function startup( lul_device )
 		end
 	end
 
-	local enabled = initVar( "Enabled", "1", lul_device, SONOS_SYS_SID )
-	if "0" == enabled then
-		W("%1 (#%2) disabled by configuration; startup aborting.", luup.devices[lul_device].description,
-			lul_device)
-		allOffline( lul_device )
-		setVar( SONOS_SYS_SID, "Message", "Disabled", lul_device )
-		return true, "Disabled", MSG_CLASS
-	end
-
-	setVar( SONOS_SYS_SID, "DiscoveryMessage", "", lul_device )
-
 	local routerIp = getVar("RouterIp", "", lul_device, SONOS_SYS_SID, true)
 	local routerPort = getVar("RouterPort", "", lul_device, SONOS_SYS_SID, true)
-
-	initVar("CheckStateRate", "", lul_device, SONOS_SYS_SID)
 
 	local fetch = getVarNumeric("FetchQueue", -1, lul_device, SONOS_SYS_SID)
 	if fetch < 0 then
@@ -3008,10 +3037,14 @@ function startup( lul_device )
 	-- Note: We're assuming Vera is connected via it's WAN Port to the Sonos devices
 	--
 	VERA_LOCAL_IP = getVar("LocalIP", "", lul_device, SONOS_SYS_SID, true)
-	if VERA_LOCAL_IP == "" then
-		local stdout = io.popen("GetNetworkState.sh ip_wan")
-		VERA_LOCAL_IP = stdout:read("*a")
-		stdout:close()
+	if not isOpenLuup then
+		if VERA_LOCAL_IP == "" then
+			local stdout = io.popen("GetNetworkState.sh ip_wan")
+			VERA_LOCAL_IP = stdout:read("*a")
+			stdout:close()
+		else
+			W("Warning: LocalIP should not be set except on openLuup!")
+		end
 	end
 	D("startup(): controller IP address is %1", VERA_LOCAL_IP)
 	if VERA_LOCAL_IP == "" then
@@ -3033,12 +3066,12 @@ function startup( lul_device )
 
 	if tts then
 		tts.initialize(L, W, E)
+		setupTTSSettings(lul_device)
 	end
-	setupTTSSettings(lul_device)
 
 	port = 1400
 
-	luup.variable_set(SONOS_SYS_SID, "DiscoveryPatchInstalled",
+	setVar(SONOS_SYS_SID, "DiscoveryPatchInstalled",
 		upnp.isDiscoveryPatchInstalled(VERA_LOCAL_IP) and "1" or "0", lul_device)
 
 	-- Reload zoneInfo from last known
@@ -3050,12 +3083,15 @@ function startup( lul_device )
 		if s then
 			zoneInfo = s
 			D("deferredStartup() reloaded zoneInfo %1", zoneInfo)
+		else
+			W("Saved GroupZoneTopology invalid! Ignoring.")
+			luup.log(s,2)
 		end
 	end
 
 	-- Deferred startup, on the master tick task.
 	local t = scheduler.Task:new( "master", lul_device, waitForProxy, { lul_device } )
-	t:delay( 3 )
+	t:delay( 5 )
 
 	luup.set_failure( 0, lul_device )
 	return true, "", MSG_CLASS
