@@ -8,7 +8,7 @@
 module( "L_SonosSystem1", package.seeall )
 
 PLUGIN_NAME = "Sonos"
-PLUGIN_VERSION = "2.0develop-20073.2230"
+PLUGIN_VERSION = "2.0develop-20074.1525"
 PLUGIN_ID = 4226
 
 local _CONFIGVERSION = 19298
@@ -16,7 +16,7 @@ local _UIVERSION = 20073
 
 local DEBUG_MODE = false	-- Don't hardcode true--use state variable config
 
-local MIN_UPNP_VERSION = 20071	-- Minimum version of L_SonosUPnP that works
+local MIN_UPNP_VERSION = 20074	-- Minimum version of L_SonosUPnP that works
 local MIN_TTS_VERSION = 20072	-- Minimum version of L_SonosTTS that works
 
 local MSG_CLASS = "Sonos"
@@ -557,6 +557,8 @@ TaskManager = function( luupCallbackName )
 		self.when = 0
 		return self
 	end
+
+	function Task:suspended() return self.when == 0 end
 
 	function Task:run()
 		assert(self.id, "Can't run() a closed task")
@@ -2403,6 +2405,25 @@ function renewSubscriptions(data)
 		else
 			-- Attempt renewal.
 			upnp.subscribeToEvents(device, VERA_IP, EventSubscriptions[uuid], SONOS_ZONE_SID, uuid)
+			local retry = false
+			for _,sub in ipairs(EventSubscriptions[uuid]) do
+				D("renewSubscriptions() %1 event service %2 subscription sid %3 expiry %4 error %5", 
+					uuid, sub.service, sub.id, sub.expiry, sub.error)
+				if ( sub.id or "" ) == "" or sub.error then
+					retry = true
+				end
+			end
+			if retry then
+				D("renewSubscriptions() one or more renewals failed; retrying")
+				local _,nsub = upnp.subscribeToEvents(device, VERA_IP, EventSubscriptions[uuid], SONOS_ZONE_SID, uuid)
+				if nsub == 0 then
+					-- Worst-case scenario--maybe proxy went away?
+					W("All event renewals failed for #%1; did proxy go away? Checking...", device)
+					EventSubscriptions[uuid] = nil
+					local t = scheduler.getTask( "checkProxy" )
+					t:delay( 0 )
+				end
+			end
 		end
 	end
 end
@@ -2436,7 +2457,7 @@ local function setReadQueueContent(device, enable)
 		return
 	end
 
-	luup.variable_set(SONOS_SYS_SID, "FetchQueue", enable, pluginDevice)
+	setVar(SONOS_SYS_SID, "FetchQueue", enable, pluginDevice)
 	if (enable == "1")
 	then
 		fetchQueue = true
@@ -2451,13 +2472,19 @@ function checkProxy( task, device )
 	D("checkProxy(%1,%2)", tostring(task), device)
 	local version = upnp.getProxyApiVersion()
 	local proxy = version ~= nil and version
-	if version then
+	if proxy then
 		L("UPnP Event Proxy identified - API version %1", version)
 	else
 		W("UPnP Event Proxy plugin could not be contacted; polling for status will be used. This is inefficient; please consider installing the plugin from the marketplace.")
-	end
-	if not proxy then
 		upnp.unuseProxy()
+		-- Kick update threads on all zone devices if they are not currently scheduled.
+		for _,zdev in pairs( Zones ) do
+			local t = scheduler.getTask( "update"..zdev ) or 
+				scheduler.Task:new( "update"..zdev, zdev, updateWithoutProxy, { zdev } )
+			if t:suspended() then t:delay( 0 ) end -- run immediately
+		end
+		-- Fall through to check again, in case it starts up. We only get to here if the proxy was
+		-- working at startup, so it could theoretically be restored (and that's better than polling).
 	end
 	task:delay(300)
 end

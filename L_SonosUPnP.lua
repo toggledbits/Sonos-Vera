@@ -6,7 +6,7 @@
 
 module("L_SonosUPnP", package.seeall)
 
-VERSION = 20071
+VERSION = 20074
 DEBUG_MODE = false
 
 local url = require("socket.url")
@@ -1171,7 +1171,11 @@ end
             sid = nil
             if (subscription.id or "") ~= "" then
                 sid = subscription.id
+                debug("subscribeToEvents() sid present; attempting renewal (%1)", sid)
             end
+            subscription.id = ""
+            subscription.expiry = ""
+			subscription.error = nil
             sid, expiry, duration = subscribeToUPnPEvent(device,
                                                          veraIP,
                                                          Services[uuid][subscription.service].eventSubURL,
@@ -1192,8 +1196,7 @@ end
                 warning("Event subscription failed for %1 service %2: %3 error %4", uuid,
                     subscription.service, Services[uuid][subscription.service].eventSubURL,
                     duration)
-                subscription.id = ""
-                subscription.expiry = ""
+                subscription.error = duration
                 --[[ Not getting a subscription should not be a fatal error.
                 cancelProxySubscriptions(subscriptions)
                 nbSubscriptions = 0
@@ -1204,30 +1207,21 @@ end
         else
             warning("Event subscription for %2 service %1 ignored, unregistered service",
                 subscription.service, uuid)
-			subscription.id = ""
-			subscription.expiry = ""
+            subscription.error = "unregistered"
         end
     end
-
---[[
-    if (nbSubscriptions > 0) then
-        if (minDuration >= 600) then
-            minDuration = minDuration - 300
-        end
-    else
-        minDuration = 60
-    end
---]]
 
     if result and nbSubscriptions > 0 and minDuration > 0 then
-        debug("subscribeToEvents() renew delay %1 for %2:%3", minDuration, device, uuid)
-        luup.call_delay("renewSubscriptions", minDuration, device .. ":" .. uuid)
+        -- Renew at larger of 80% time or time-60. Otherwise, we're in a race condition for renewal.
+        local delay = math.max( math.floor( minDuration * 0.80 ), minDuration - 60 )
+        debug("subscribeToEvents() renew delay %1 for %2:%3 minDuration %4", delay, device, uuid, minDuration)
+        luup.call_delay("renewSubscriptions", delay, device .. ":" .. uuid)
     else
         debug("subscribeToEvents() no subscription renewal, result=%1, num=%2, dur=%3",
             result, nbSubscriptions, minDuration)
     end
 
-    return result
+    return result, nbSubscriptions
   end
 
 
