@@ -198,6 +198,11 @@
 					<direction>in</direction>
 					<relatedStateVariable>A_ARG_TYPE_repeat</relatedStateVariable>
 				</argument>
+				<argument>
+					<name>Chime</name>
+					<direction>in</direction>
+					<relatedStateVariable>A_ARG_TYPE_boolean</relatedStateVariable>
+				</argument>
 			</argumentList>
 		</action>
 		<action>
@@ -239,12 +244,17 @@
 					<relatedStateVariable>A_ARG_TYPE_Zones</relatedStateVariable>
 				</argument>
 				<argument>
+					<name>Chime</name>
+					<direction>in</direction>
+					<relatedStateVariable>A_ARG_TYPE_boolean</relatedStateVariable>
+				</argument>
+				<argument>
 					<name>Repeat</name>
 					<direction>in</direction>
 					<relatedStateVariable>A_ARG_TYPE_repeat</relatedStateVariable>
 				</argument>
 				<argument>
-					<name>Chime</name>
+					<name>UnMute</name>
 					<direction>in</direction>
 					<relatedStateVariable>A_ARG_TYPE_boolean</relatedStateVariable>
 				</argument>

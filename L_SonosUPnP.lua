@@ -426,8 +426,9 @@ function scanUPnPDevices(deviceType, infos)
         debug("scanUPnPDevices() fetching %1", dev.descriptionURL)
         local descrXML = UPnP_getDeviceDescription(dev.descriptionURL)
         if descrXML then
-            log("scanUPnPDevices() returned device description for %1", dev.descriptionURL)
-            log(descrXML)
+-- ??? debug
+log("scanUPnPDevices() returned device description for %1", dev.descriptionURL)
+log(descrXML)
             local values, found = getInfosFromDescription(descrXML, deviceType, infos)
             debug("scanUPnPDevices() getInfos response for %1 is %2 infos %3", descrXML, values, infos)
             -- ??? rigpapa 2020-02-24: This built-up XML isn't used anywhere and seems wasteful

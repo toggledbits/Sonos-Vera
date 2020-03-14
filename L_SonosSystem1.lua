@@ -8,7 +8,7 @@
 module( "L_SonosSystem1", package.seeall )
 
 PLUGIN_NAME = "Sonos"
-PLUGIN_VERSION = "2.0develop-20073.1430"
+PLUGIN_VERSION = "2.0develop-20073.2000"
 PLUGIN_ID = 4226
 
 local _CONFIGVERSION = 19298
@@ -69,7 +69,7 @@ local lfs = require "lfs"
 -- Table of Sonos IP addresses indexed by Vera devices
 local port = 1400
 local descriptionURL = "http://%s:%s/xml/device_description.xml"
-local iconURL = "/cmh/skins/default/icons/Sonos.png"
+local iconURL = "../../../icons/Sonos.png"
 
 local HADEVICE_SID = "urn:micasaverde-com:serviceId:HaDevice1"
 local SONOS_ZONE_SID = "urn:micasaverde-com:serviceId:Sonos1"
@@ -156,7 +156,6 @@ local variableSidTable = {
 
 	GroupCoordinator = SONOS_ZONE_SID,
 	ZonePlayerUUIDsInGroup = UPNP_ZONEGROUPTOPOLOGY_SID,
-	ZoneGroupState = UPNP_ZONEGROUPTOPOLOGY_SID,
 
 	SonosOnline = SONOS_ZONE_SID,
 	ZoneName = UPNP_DEVICE_PROPERTIES_SID,
@@ -771,11 +770,11 @@ end
 -- array of zone UUIDs. The zoneInfo table is meant to provide fast, consistent indexing and
 -- data access for all zones and groups.
 local zoneInfoMemberAttributes = { "UUID", "Location", "ZoneName", "HTSatChanMapSet", "Invisible" }
-function updateZoneInfo( uuid )
-	D("updateZoneInfo(%1)", uuid)
+function updateZoneInfo( zs )
+	-- D("updateZoneInfo(%1)", zs)
+	D("updateZoneInfo(<xml>)")
 	zoneInfo = { zones={}, groups={} }
-	local zs = dataTable[uuid].ZoneGroupState
-	-- D("updateZoneInfo() zone info is \r\n%1", tostring(zs))
+	-- D("updateZoneInfo() zone info is \r\n%1", zs)
 	local root = lom.parse( zs )
 	assert( root and root.tag == "ZoneGroupState" )
 	local groups = xmlNodesForTag( root, "ZoneGroups" )()
@@ -806,8 +805,25 @@ function updateZoneInfo( uuid )
 				table.insert( zoneInfo.zones[zi.Base].Satellites, sat.attr.UUID )
 			end
 		end
+		table.sort( gr.members ) -- sort for deterministic variable handling
 	end
 	D("updateZoneInfo() updated zoneInfo: %1", zoneInfo)
+	local json = require "dkjson"
+	setVar( SONOS_SYS_SID, "zoneInfo", json.encode( zoneInfo ), pluginDevice )
+
+	-- Update data fields
+	for uuid,zd in pairs( zoneInfo.zones ) do
+		local changed = false
+		if zd.Group then
+			local gr = zoneInfo.groups[ zd.Group ] or {}
+			changed = setData("ZonePlayerUUIDsInGroup", table.concat( gr.members or {}, "," ), uuid, changed)
+			changed = setData("GroupCoordinator", gr.Coordinator or "", uuid, changed)
+		end
+		if changed then
+			D("updateZoneInfo() modified zone group for %1 #%2", uuid, Zones[uuid])
+			setVariableValue(HADEVICE_SID, "LastUpdate", os.time(), Zones[uuid] or -1)
+		end
+	end
 end
 
 local function getZoneNameFromUUID(uuid)
@@ -862,7 +878,6 @@ end
 
 local function updateZoneGroupTopology(uuid)
 	D("updateZoneGroupTopology(%1)", uuid)
-	local changed = false
 
 	-- Update network and group information
 	local ZoneGroupTopology = upnp.getService(uuid, UPNP_ZONEGROUPTOPOLOGY_SERVICE)
@@ -871,16 +886,7 @@ local function updateZoneGroupTopology(uuid)
 		local status, tmp = ZoneGroupTopology.GetZoneGroupState({})
 		if not status then return end
 		local groupsState = upnp.extractElement("ZoneGroupState", tmp, "")
-		changed = setData("ZoneGroupState", groupsState, uuid, changed)
-		if changed or not zoneInfo then
-			updateZoneInfo( uuid )
-		end
-		local members, coordinator = getGroupInfo( uuid )
-		changed = setData("ZonePlayerUUIDsInGroup", members, uuid, changed)
-		changed = setData("GroupCoordinator", coordinator or "", uuid, changed)
-		if changed then
-			setVariableValue(HADEVICE_SID, "LastUpdate", os.time(), findDeviceByUUID(uuid) or -1)
-		end
+		updateZoneInfo( groupsState )
 	end
 end
 
@@ -917,7 +923,6 @@ local function deviceIsOffline(device)
 	local changed = setData("SonosOnline", "0", uuid, false)
 	if changed and uuid then
 		W("Setting device #%1 to off-line state", device)
-		local groupsState = "<ZoneGroupState><ZoneGroups></ZoneGroups></ZoneGroupState>"
 
 		changed = setData("TransportState", "STOPPED", uuid, changed)
 		changed = setData("TransportStatus", "KO", uuid, changed)
@@ -947,8 +952,6 @@ local function deviceIsOffline(device)
 		changed = setData("Queue", "", uuid, changed)
 		changed = setData("GroupCoordinator", "", uuid, changed)
 		changed = setData("ZonePlayerUUIDsInGroup", "", uuid, changed)
-		changed = setData("ZoneGroupState", groupsState, uuid, changed)
-		updateZoneInfo( uuid )
 
 		if EventSubscriptions[uuid] then
 			upnp.cancelProxySubscriptions(EventSubscriptions[uuid])
@@ -1416,10 +1419,7 @@ local function controlByCoordinator(uuid)
 	return dev, uuid
 end
 
--- ??? rigpapa: there is brokenness in the handling of the title variable throughout,
---              with interior local redeclarations shadowing the exterior declaration, it's unclear
---              if the inner values attained are needed in the outer scopes. This needs
---              to be studied carefully before cleanup.
+-- Decode special form URIs to Sonos' URIs with metadata.
 local function decodeURI(localUUID, coordinator, uri)
 	D("decodeURI(%1,%2,%3)", localUUID, coordinator, uri)
 	local uuid
@@ -1600,7 +1600,7 @@ local function playURI(zoneUUID, instanceId, uri, speed, volume, uuids, sameVolu
 	uri, uriMetaData, track, controlByGroup2, requireQueueing = decodeURI(uuid, coordinator, uri)
 	if not uri then return end
 	if (controlByGroup and not controlByGroup2) then
-		-- ??? rigpapa ...and then what are the controlByGroup variables used for???
+		-- decodeURI override!
 		controlByGroup = false -- luacheck: ignore 311
 		uuid = zoneUUID
 	end
@@ -2005,10 +2005,12 @@ local function setupTTSSettings(device)
 	if chd == "" then
 		if not isOpenLuup then
 			os.remove( "/www/sonos/Sonos_chime.mp3" )
+			os.remove( "/www/sonos/Sonos_chime.wav" )
 			os.remove( "/www/sonos/Sonos_chime.mp3.lzo" )
 		end
-		os.remove( installPath .. "Sonos_chime.mp3" )
 		os.remove( installPath .. "Sonos_chime.mp3.lzo" )
+		os.remove( installPath .. "Sonos_chime.wav" )
+		os.remove( installPath .. "Sonos_chime.wav.lzo" )
 		if not file_exists( installPath .. "Sonos_chime.mp3" ) then
 			L("Downloading default chime MP3 sound")
 			os.execute("curl -s -m 10 -o " .. Q( installPath, "Sonos_chime.mp3" ) ..
@@ -2382,7 +2384,7 @@ end
 
 -- N.B. called via call_delay from L_SonosUPnP
 function processProxySubscriptions(info)
-	D("Processing UPnP Event Proxy subscriptions: %1", info)
+	D("processProxySubscriptions() processing UPnP Event Proxy subscriptions: %1 (pass-thru)", info)
 	upnp.processProxySubscriptions()
 end
 
@@ -2393,9 +2395,13 @@ function renewSubscriptions(data)
 	device = tonumber(device)
 	if device and uuid then
 		if uuid ~= findZoneByDevice( device )  then
-			D("Renewal ignored for uuid %1 (device %2/UUID mismatch, got %3)", uuid, device, findZoneByDevice( device ))
+			D("renewSubscriptions() ignored for uuid %1 (device %2/UUID mismatch, got %3)", uuid, device, findZoneByDevice( device ))
+			EventSubscriptions[uuid] = nil
+		elseif (zoneInfo.zones[uuid] or {}).isSatellite then
+			D("renewSubscriptions() skipped for %1, now identified as Satellite", uuid)
+			EventSubscriptions[uuid] = nil
 		else
-			-- Attempt renewal
+			-- Attempt renewal.
 			upnp.subscribeToEvents(device, VERA_IP, EventSubscriptions[uuid], SONOS_ZONE_SID, uuid)
 		end
 	end
@@ -2403,6 +2409,7 @@ end
 
 -- N.B. called via call_delay from L_SonosUPnP
 function cancelProxySubscription(sid)
+	D("cancelProxySubscription(%1) pass-thru", sid)
 	upnp.cancelProxySubscription(sid)
 end
 
@@ -2512,16 +2519,26 @@ setup = function(zoneDevice, flag)
 		end
 	end
 
-	if status then
+	-- Subscribe to service notifications from proxy. If we know ourselves to be a satellite at 
+	-- this point, don't.
+	local isSatellite = (((zoneInfo or {}).zones or {})[uuid] or {}).isSatellite
+	if status and not isSatellite then
 		if upnp.proxyVersionAtLeast(1) then
-			EventSubscriptions[uuid] = deepCopy( ZoneSubscriptionsTemplate )
+			-- Create subscription lists from templates. Deep copies because the subscriber modifies
+			-- them per zone/uuid. Non-master don't subscribe to topology or content updates.
+			EventSubscriptions[uuid] = {}
+			for _,v in ipairs( ZoneSubscriptionsTemplate ) do
+				table.insert( EventSubscriptions[uuid], deepCopy( v ) )
+			end
 			if getVarNumeric( "MasterRole", 0, zoneDevice, SONOS_ZONE_SID ) ~= 0 then
-				deepCopy( MasterSubscriptionsTemplate, EventSubscriptions[uuid] )
+				for _,v in ipairs( MasterSubscriptionsTemplate ) do
+					table.insert( EventSubscriptions[uuid], deepCopy( v ) )
+				end
 			end
 			upnp.subscribeToEvents(zoneDevice, VERA_IP, EventSubscriptions[uuid], SONOS_ZONE_SID, uuid)
 			if DEBUG_MODE then
 				for _,sub in ipairs(EventSubscriptions[uuid]) do
-					D("%1 event service %2 sid %3 expiry %4", uuid, sub.service, sub.id, sub.expiry)
+					D("setup() %1 event service %2 subscription sid %3 expiry %4", uuid, sub.service, sub.id, sub.expiry)
 				end
 			end
 
@@ -2648,6 +2665,17 @@ local function zoneRunOnce( dev )
 	deleteVar( UPNP_MR_CONTENT_DIRECTORY_SID, "SavedQueues", dev )
 	deleteVar( UPNP_MR_CONTENT_DIRECTORY_SID, "Favorites", dev )
 	deleteVar( UPNP_MR_CONTENT_DIRECTORY_SID, "FavoritesRadios", dev )
+	deleteVar( UPNP_ZONEGROUPTOPOLOGY_SID, "ZoneGroupState", dev )
+	deleteVar( SONOS_ZONE_SID, "DefaultLanguageTTS", dev )
+	deleteVar( SONOS_ZONE_SID, "DefaultEngineTTS", dev )
+	deleteVar( SONOS_ZONE_SID, "GoogleTTSServerURL", dev )
+	deleteVar( SONOS_ZONE_SID, "OSXTTSServerURL", dev )
+	deleteVar( SONOS_ZONE_SID, "ResponsiveVoiceTTSServerURL", dev )
+	deleteVar( SONOS_ZONE_SID, "TTSBasePath", dev )
+	deleteVar( SONOS_ZONE_SID, "TTSBaseURL", dev )
+	deleteVar( SONOS_ZONE_SID, "TTSRate", dev )
+	deleteVar( SONOS_ZONE_SID, "TTSPitch", dev )
+	deleteVar( SONOS_ZONE_SID, "TTSChimeDuration", dev )
 
 	if s < _CONFIGVERSION then
 		setVar( SONOS_SYS_SID, "ConfigVersion", _CONFIGVERSION, dev )
@@ -2794,6 +2822,7 @@ local function deferredStartup(device)
 
 	-- Identify and mark two lowest-numbered non-satellite zones as network masters for us.
 	-- This means they will be subscribed to topology and content updates; others will not.
+	L("Identifying zones for master role...")
 	local chorder = {}
 	local designated = {}
 	for uuid,dev in pairs( Zones ) do
@@ -2802,7 +2831,11 @@ local function deferredStartup(device)
 			table.insert( designated, dev )
 		end
 		setVar( SONOS_ZONE_SID, "MasterRole", 0, dev )
-		table.insert( chorder, dev )
+		if not (zoneInfo.zones[uuid] or {}).isSatellite then
+			table.insert( chorder, dev )
+		else
+			L("Zone %1 %2 (#%3) is satellite; cannot take master role", uuid, luup.devices[dev], dev)
+		end
 	end
 	table.sort( chorder )
 	-- Push designated master(s) to the front of the list
@@ -2814,6 +2847,7 @@ local function deferredStartup(device)
 		L("Selected %1 (#%2) for master role", luup.devices[dev].description, dev)
 		setVar( SONOS_ZONE_SID, "MasterRole", 1, dev )
 	end
+	L("%1 zones selected for master role", nummaster)
 
 	-- Start zones
 	-- ??? Do we even need to bother to start satellites?
@@ -2980,6 +3014,18 @@ function startup( lul_device )
 	luup.variable_set(SONOS_SYS_SID, "DiscoveryPatchInstalled",
 		upnp.isDiscoveryPatchInstalled(VERA_LOCAL_IP) and "1" or "0", lul_device)
 
+	-- Reload zoneInfo from last known
+	zoneInfo = { zones={}, groups={} }
+	local s = getVar( "zoneInfo", "", lul_device, SONOS_SYS_SID )
+	if s ~= "" then
+		local json = require "dkjson"
+		s = json.decode( s )
+		if s then
+			zoneInfo = s
+			D("deferredStartup() reloaded zoneInfo %1", zoneInfo)
+		end
+	end
+
 	-- Deferred startup, on the master tick task.
 	local t = scheduler.Task:new( "master", lul_device, waitForProxy, { lul_device } )
 	t:delay( 3 )
@@ -2999,14 +3045,15 @@ endSayAlert = false-- Forward declaration, non-local
 local function sayOrAlert(device, parameters, saveAndRestore)
 	D("sayOrAlert(%1,%2,%3)", device, parameters, saveAndRestore)
 	local instanceId = defaultValue(parameters, "InstanceID", "0")
-	-- local channel = defaultValue(parameters, "Channel", "Master")
+	local channel = defaultValue(parameters, "Channel", "Master")
 	local volume = defaultValue(parameters, "Volume", nil)
+	local forceUnmute = defaultValue(parameters, "UnMute", "1") == "1"
 	local devices = defaultValue(parameters, "GroupDevices", "")
 	local zones = defaultValue(parameters, "GroupZones", "")
 	local uri = defaultValue(parameters, "URI", nil)
 	local duration = tonumber( defaultValue( parameters, "Duration", "10" ) ) or 10
 	if duration <= 0 then duration = 10 end
-	local sameVolume = string.find( "|1|true|TRUE", parameters.SameVolumeForAll or "0" )
+	local sameVolume = string.find( "|1|true|TRUE|", parameters.SameVolumeForAll or "0" )
 
 	local targets = {}
 	local newGroup = true
@@ -3084,6 +3131,17 @@ local function sayOrAlert(device, parameters, saveAndRestore)
 				if newGroup and uuid ~= gr.Coordinator then
 					D("sayOrAlert() removing group association for affected zone %1", uuid)
 					AVTransport.BecomeCoordinatorOfStandaloneGroup({InstanceID=instanceId})
+				end
+			end
+
+			-- Maybe unmute
+			if forceUnmute and dataTable[uuid].Mute == "1" then
+				local Rendering = upnp.getService(uuid, UPNP_RENDERING_CONTROL_SERVICE)
+				if Rendering then
+					Rendering.SetMute(
+						{OrderedArgs={"InstanceID=" .. instanceId,
+										"Channel=" .. channel,
+										"DesiredMute=0"}})
 				end
 			end
 		end
@@ -3270,7 +3328,7 @@ local function cleanTTSCache( task )
 						modified = true
 					elseif md.lastused <= maxAge and not md.protected then
 						D("cleanTTSCache() expired %1 file %2", str, md.url)
-						push( dels, str )
+						table.insert( dels, str )
 					end
 				end
 				for _,str in ipairs( dels ) do
@@ -3440,6 +3498,7 @@ function actionSonosSay( lul_device, lul_settings )
 			ch.GroupZones = alert_settings.GroupZones
 			ch.Volume = (ch.Volume or 0) > 0 and ch.Volume or alert_settings.Volume
 			ch.SameVolumeForAll = alert_settings.SameVolumeForAll
+			ch.UnMute = alert_settings.UnMute
 			ch.Repeat = 1
 			queueAlert( lul_device, ch )
 
@@ -3816,18 +3875,7 @@ function actionSonosNotifyZoneGroupTopologyChange( lul_device, lul_settings )
 	if (upnp.isValidNotification("NotifyZoneGroupTopologyChange", lul_settings.sid, EventSubscriptions[uuid])) then
 		local groupsState = lul_settings.ZoneGroupState or error("Missing ZoneGroupState")
 
-		local changed = setData("ZoneGroupState", groupsState, uuid, false)
-		if changed or not zoneInfo then
-			updateZoneInfo( uuid )
-		end
-
-		local members, coordinator = getGroupInfo( uuid )
-		changed = setData("ZonePlayerUUIDsInGroup", members, uuid, changed)
-		changed = setData("GroupCoordinator", coordinator, uuid, changed)
-
-		if changed then
-			setVariableValue(HADEVICE_SID, "LastUpdate", os.time(), lul_device)
-		end
+		updateZoneInfo( groupsState )
 		return 4,0
 	end
 	return 2,0
@@ -3944,13 +3992,6 @@ function actionMediaNavigationSkipDown( lul_device, lul_settings )
 
 	AVTransport.Next({InstanceID=instanceId})
 
-	-- Force a refresh when current service is Pandora due to a bug (missing notification)
-	local force = false
-	local currentUri = dataTable[uuid].AVTransportURI
-	if (currentUri ~= nil and currentUri:find("pndrradio:") == 1) then
-		force = true
-	end
-
 	updateNow( device )
 end
 
@@ -3990,13 +4031,6 @@ function actionAVTransportPlayMedia( lul_device, lul_settings )
 		{OrderedArgs={"InstanceID=" .. instanceId,
 						"Speed=" ..speed}})
 
-	-- Force a refresh when current service is Pandora due to a bug (missing notification)
-	local force = false
-	local currentUri = dataTable[uuid].AVTransportURI
-	if (currentUri ~= nil and currentUri:find("pndrradio:") == 1) then
-		force = true
-	end
-
 	updateNow( device )
 end
 
@@ -4029,13 +4063,6 @@ function actionAVTransportPause( lul_device, lul_settings )
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
 
 	AVTransport.Pause({InstanceID=instanceId})
-
-	-- Force a refresh when current service is Pandora due to a bug (missing notification)
-	local force = false
-	local currentUri = dataTable[uuid].AVTransportURI
-	if (currentUri ~= nil and currentUri:find("pndrradio:") == 1) then
-		force = true
-	end
 
 	updateNow( device )
 end
@@ -4968,50 +4995,14 @@ end
 
 --]]
 
--- A "safer" JSON encode for Lua structures that may contain recursive refereance.
-local stringify
-local function alt_json_encode( st, seen )
-	seen = seen or {}
-	str = "{"
-	local comma = false
-	for k,v in pairs(st) do
-		str = str .. ( comma and "," or "" )
-		comma = true
-		str = str .. '"' .. k .. '":'
-		if type(v) == "table" then
-			if seen[v] then str = str .. '"(recursion)"'
-			else
-				seen[v] = k
-				str = str .. alt_json_encode( v, seen )
-			end
-		elseif type(v) ~= "function" and type(v) ~= "userdata" then
-			str = str .. stringify( v, seen )
-		end
-	end
-	str = str .. "}"
-	return str
-end
-
--- Stringify a primitive type
-stringify = function( v, seen )
-	if v == nil then
-		return "(nil)"
-	elseif type(v) == "number" or type(v) == "boolean" then
-		return tostring(v)
-	elseif type(v) == "table" then
-		return alt_json_encode( v, seen )
-	end
-	return string.format( "%q", tostring(v) )
-end
-
 function handleRequest( lul_request, lul_parameters, lul_outputformat )
 	D("request(%1,%2,%3) luup.device=%4", lul_request, lul_parameters, lul_outputformat, luup.device)
 	local action = lul_parameters['action'] or lul_parameters['command'] or ""
-	local deviceNum = tonumber( lul_parameters['device'] )
+	-- local deviceNum = tonumber( lul_parameters['device'] )
 	if action == "debug" then
-		DEBUG_MODE = tonumber(lul_parameters.debug) or 0
-		D("debug set %1 by request", DEBUG_MODE)
-		return "Debug is now " .. DEBUG_MODE, "text/plain"
+		local mode = tonumber(lul_parameters.debug) or 0
+		setDebugLogs( mode )
+		return string.format("OK\nDebug is now 0x%x", mode), "text/plain"
 
 	elseif action == "ttsengines" then
 		local json = require "dkjson"
