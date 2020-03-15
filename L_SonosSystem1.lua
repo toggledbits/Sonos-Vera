@@ -8,7 +8,7 @@
 module( "L_SonosSystem1", package.seeall )
 
 PLUGIN_NAME = "Sonos"
-PLUGIN_VERSION = "2.0develop-20074.1715"
+PLUGIN_VERSION = "2.0develop-20075.1230"
 PLUGIN_ID = 4226
 
 local _CONFIGVERSION = 19298
@@ -1028,25 +1028,26 @@ local function getServiceFromURI(transportUri, trackUri)
 	return serviceName, serviceId
 end
 
-local function updateServicesMetaDataKeys(uuid, id, key)
-	local dev = findDeviceByUUID( uuid )
-	if id ~= nil and key ~= "" and metaDataKeys[uuid][id] ~= key and dev then
-		metaDataKeys[uuid][id] = key
-		local data = ""
-		for k, v in pairs(metaDataKeys[uuid]) do
-			data = data .. string.format('%s=%s\n', k, v)
+local function updateServicesMetaDataKeys(id, key)
+	if (id or "" ) ~= "" and ( key or "" ) ~= "" and metaDataKeys[id] ~= key then
+		metaDataKeys[id] = key
+		local data = {}
+		for k, v in pairs(metaDataKeys) do
+			table.insert( data, string.format('%s=%s', k, v) )
 		end
-		setVariableValue(SONOS_ZONE_SID, "SonosServicesKeys", data, dev)
-		setVariableValue(HADEVICE_SID, "LastUpdate", os.time(), dev)
+		setVar(SONOS_SYS_SID, "SonosServicesKeys", table.concat( data, "\n" ), pluginDevice)
 	end
 end
 
-local function loadServicesMetaDataKeys(device)
+local function loadServicesMetaDataKeys()
 	local k = {}
-	local elts = getVar("SonosServicesKeys", "", device, SONOS_ZONE_SID)
-	for token, value in elts:gmatch("([^=]+)=([^\n]+)\n") do
-		k[token] = value
+	local elts = getVar("SonosServicesKeys", "", pluginDevice, SONOS_SYS_SID)
+	for line in elts:gmatch( "[^\n]+" ) do
+		for token, value in line:gmatch("^([^=]+)=(.*)") do
+			k[token] = value
+		end
 	end
+	D("loadServicesMetaDataKeys() result %1", k)
 	return k
 end
 
@@ -1056,7 +1057,7 @@ local function extractDataFromMetaData(zoneUUID, currentUri, currentUriMetaData,
 	_, title, _, _, _, _, desc = getSimpleDIDLStatus(currentUriMetaData)
 	info, title2, artist, album, details, albumArt, _ = getSimpleDIDLStatus(trackUriMetaData)
 	local service, serviceId = getServiceFromURI(currentUri, trackUri)
-	updateServicesMetaDataKeys(zoneUUID, serviceId, desc)
+	updateServicesMetaDataKeys(serviceId, desc)
 	statusString = ""
 	if (service ~= "") then
 		statusString = statusString .. service
@@ -1563,15 +1564,15 @@ local function decodeURI(localUUID, coordinator, uri)
 			-- Metadata still empty. Build it.
 			_, serviceId = getServiceFromURI(uri, nil)
 			D("decodeURI() url %1 serviceId %2 title %3", uri, serviceId, title)
-			if serviceId ~= nil and metaDataKeys[localUUID][serviceId] ~= nil then
+			if serviceId and metaDataKeys[serviceId] ~= nil then
 				if title == nil then
 					uriMetaData = '<DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/">'
-								  .. '<item><desc>' .. metaDataKeys[localUUID][serviceId] .. '</desc>'
+								  .. '<item><desc>' .. metaDataKeys[serviceId] .. '</desc>'
 								  .. '</item></DIDL-Lite>'
 				else
 					uriMetaData = '<DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/">'
 								  .. '<item><dc:title>' .. title .. '</dc:title>'
-								  .. '<desc>' .. metaDataKeys[localUUID][serviceId] .. '</desc>'
+								  .. '<desc>' .. metaDataKeys[serviceId] .. '</desc>'
 								  .. '</item></DIDL-Lite>'
 				end
 			elseif title ~= nil then
@@ -2355,7 +2356,7 @@ local function handleAVTransportChange(uuid, event)
 			_, title, artist, album, details, albumArt, desc = -- luacheck: ignore 311
 				getSimpleDIDLStatus(dataTable[uuid]["r:EnqueuedTransportURIMetaData"])
 			_, serviceId = getServiceFromURI(currentUri, trackUri)
-			updateServicesMetaDataKeys(uuid, serviceId, desc)
+			updateServicesMetaDataKeys(serviceId, desc)
 		end
 	end
 	if changed and findDeviceByUUID( uuid ) then
@@ -2651,7 +2652,6 @@ setup = function(zoneDevice, flag)
 		if not sonosServices then
 			sonosServices = getAvailableServices(uuid)
 		end
-		metaDataKeys[uuid] = loadServicesMetaDataKeys(zoneDevice)
 
 		-- Sonos playlists
 		local info = upnp.browseContent(uuid, UPNP_MR_CONTENT_DIRECTORY_SERVICE, "SQ:", false,
@@ -2703,6 +2703,7 @@ local function zoneRunOnce( dev )
 	deleteVar( UPNP_MR_CONTENT_DIRECTORY_SID, "Favorites", dev )
 	deleteVar( UPNP_MR_CONTENT_DIRECTORY_SID, "FavoritesRadios", dev )
 	deleteVar( UPNP_ZONEGROUPTOPOLOGY_SID, "ZoneGroupState", dev )
+	deleteVar( SONOS_ZONE_SID, "SonosServicesKeys", dev )
 	deleteVar( SONOS_ZONE_SID, "DefaultLanguageTTS", dev )
 	deleteVar( SONOS_ZONE_SID, "DefaultEngineTTS", dev )
 	deleteVar( SONOS_ZONE_SID, "GoogleTTSServerURL", dev )
@@ -2997,6 +2998,8 @@ function startup( lul_device )
 			end
 		end
 	end
+
+	metaDataKeys = loadServicesMetaDataKeys()
 
 	scheduler = TaskManager( 'sonosTick' )
 
@@ -3916,7 +3919,7 @@ function actionSonosNotifyMusicServicesChange( lul_device, lul_settings ) -- lua
 	if (upnp.isValidNotification("NotifyMusicServicesChange", lul_settings.sid, EventSubscriptions[uuid])) then
 		-- log("NotifyMusicServicesChange for device " .. lul_device .. " SID " .. lul_settings.sid .. " with value " .. (lul_settings.LastChange or "nil"))
 		sonosServices = getAvailableServices(uuid)
-		metaDataKeys[uuid] = loadServicesMetaDataKeys(lul_device)
+		metaDataKeys = loadServicesMetaDataKeys()
 		return 4,0
 	end
 	return 2,0
