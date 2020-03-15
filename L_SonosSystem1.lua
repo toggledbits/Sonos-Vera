@@ -8,7 +8,7 @@
 module( "L_SonosSystem1", package.seeall )
 
 PLUGIN_NAME = "Sonos"
-PLUGIN_VERSION = "2.0develop-20075.1445"
+PLUGIN_VERSION = "2.0develop-20075.1700"
 PLUGIN_ID = 4226
 
 local _CONFIGVERSION = 19298
@@ -343,6 +343,7 @@ end
 
 -- Set variable, only if value has changed.
 local function setVar( sid, name, val, dev )
+	if dev <= 1 then E("Invalid device number %1", dev) end
 	assert( dev ~= nil and type(dev) == "number", "Invalid set device for "..dump({sid=sid,name=name,val=val,dev=dev}) )
 	assert( dev > 0, "Invalid device number "..tostring(dev) )
 	assert( sid ~= nil, "SID required for "..tostring(name) )
@@ -822,9 +823,9 @@ function updateZoneInfo( zs )
 			changed = setData("ZonePlayerUUIDsInGroup", table.concat( gr.members or {}, "," ), uuid, changed)
 			changed = setData("GroupCoordinator", gr.Coordinator or "", uuid, changed)
 		end
-		if changed then
+		if changed and ( Zones[uuid] or -1 ) > 0 then
 			D("updateZoneInfo() modified zone group for %1 #%2", uuid, Zones[uuid])
-			setVariableValue(HADEVICE_SID, "LastUpdate", os.time(), Zones[uuid] or -1)
+			setVar(HADEVICE_SID, "LastUpdate", os.time(), Zones[uuid])
 		end
 	end
 end
@@ -965,8 +966,11 @@ local function deviceIsOffline(device)
 		end
 	end
 
-	if changed and device ~= 0 then
-		setVariableValue(HADEVICE_SID, "LastUpdate", os.time(), device)
+	if device > 0 then
+		luup.attr_set( 'invisible', 0, device )
+		if changed then
+			setVar(HADEVICE_SID, "LastUpdate", os.time(), device)
+		end
 	end
 end
 
@@ -2829,38 +2833,40 @@ local function deferredStartup(device)
 
 	-- If there are no children, launch discovery and see if we can find some.
 	-- Otherwise, check the zone topology to see if there are zones we don't have.
-	if count == 0 then
-		L"No children; launching discovery to see who I can find."
-		luup.call_action( SONOS_SYS_SID, "StartSonosDiscovery", {}, device )
-	elseif zoneInfo and getVarNumeric( "StartupInventory", 1, device, SONOS_SYS_SID ) ~= 0 then
-		D("deferredStartup() taking inventory")
-		local newZones = {}
-		for uuid in pairs( zoneInfo.zones ) do
-			if not ( Zones[uuid] or newZones[uuid] ) then
-				newZones[uuid] = getIPFromUUID( uuid ) or ""
+	if getVarNumeric( "StartupInventory", 1, device, SONOS_SYS_SID ) ~= 0 then
+		if count == 0 then
+			L"No children; launching discovery to see who I can find."
+			luup.call_action( SONOS_SYS_SID, "StartSonosDiscovery", {}, device )
+		elseif zoneInfo then
+			D("deferredStartup() taking inventory")
+			local newZones = {}
+			for uuid in pairs( zoneInfo.zones ) do
+				if not ( Zones[uuid] or newZones[uuid] ) then
+					newZones[uuid] = getIPFromUUID( uuid ) or ""
+				end
 			end
-		end
-		if next( newZones ) then
-			setVar( SONOS_SYS_SID, "Message", "New device(s) found... please wait", pluginDevice )
-			D("deferredStartup() rebuilding family")
-			local ptr = luup.chdev.start( device )
-			for k,v in pairs( children ) do
-				local df = luup.attr_get('device_file', k)
-				D("deferredStartup() appending existing child dev #%1 %2 uuid %3 device_file %4", k, v.description, v.id, df)
-				luup.chdev.append( device, ptr, v.id, v.description, "", df, "", "", false )
+			if next( newZones ) then
+				setVar( SONOS_SYS_SID, "Message", "New device(s) found... please wait", pluginDevice )
+				D("deferredStartup() rebuilding family")
+				local ptr = luup.chdev.start( device )
+				for k,v in pairs( children ) do
+					local df = luup.attr_get('device_file', k)
+					D("deferredStartup() appending existing child dev #%1 %2 uuid %3 device_file %4", k, v.description, v.id, df)
+					luup.chdev.append( device, ptr, v.id, v.description, "", df, "", "", false )
+				end
+				for uuid,ip in pairs( newZones ) do
+					D("deferredStartup() appending new zone %1 ip %2", uuid, ip)
+					local cv = {
+						string.format( "%s,SonosID=%s", UPNP_DEVICE_PROPERTIES_SID, uuid ),
+						string.format( "%s,SonosIP=%s", SONOS_ZONE_SID, ip ),
+						",invisible=0"
+					}
+					local name = zoneInfo.zones[uuid].ZoneName or uuid:gsub("RINCON_", "")
+					luup.chdev.append( device, ptr, uuid, name, "", "D_Sonos1.xml", "",
+						table.concat( cv, "\n" ), false )
+				end
+				luup.chdev.sync( device, ptr )
 			end
-			for uuid,ip in pairs( newZones ) do
-				D("deferredStartup() appending new zone %1 ip %2", uuid, ip)
-				local cv = {
-					string.format( "%s,SonosID=%s", UPNP_DEVICE_PROPERTIES_SID, uuid ),
-					string.format( "%s,SonosIP=%s", SONOS_ZONE_SID, ip ),
-					",invisible=0"
-				}
-				local name = zoneInfo.zones[uuid].ZoneName or uuid:gsub("RINCON_", "")
-				luup.chdev.append( device, ptr, uuid, name, "", "D_Sonos1.xml", "",
-					table.concat( cv, "\n" ), false )
-			end
-			luup.chdev.sync( device, ptr )
 		end
 	end
 
@@ -2912,6 +2918,7 @@ local function deferredStartup(device)
 	L("Started %1 children of %2", started, count)
 	local proxmsg = upnp.proxyVersionAtLeast(1) and "proxy detected" or "no proxy"
 	setVar( SONOS_SYS_SID, "Message", string.format("Running %d zones; %s", started, proxmsg), device )
+	setVar( SONOS_SYS_SID, "DiscoveryMessage", "", device)
 
 	-- Start a new master task
 	local t = scheduler.Task:new( "master", device, runMasterTick, { device } )
@@ -2970,7 +2977,7 @@ function startup( lul_device )
 	setVar( SONOS_SYS_SID, "PluginVersion", PLUGIN_VERSION, lul_device )
 	setVar( SONOS_SYS_SID, "_UIV", _UIVERSION, lul_device )
 	setVar( SONOS_SYS_SID, "Message", "Starting...", lul_device )
-	setVar( SONOS_SYS_SID, "DiscoveryMessage", "", lul_device )
+	setVar( SONOS_SYS_SID, "DiscoveryMessage", "Starting, please wait.", lul_device )
 
 	if file_exists( getInstallPath() .. "L_SonosSystem1.lua" ) and file_exists( getInstallPath() .. "L_SonosSystem1.lua.lzo" ) then
 		return false, "Invalid install files", MSG_CLASS
@@ -2991,7 +2998,7 @@ function startup( lul_device )
 		if v.device_type == SONOS_ZONE_DEVICE_TYPE then
 			local zid = v.id or ""
 			local ip = luup.attr_get( "ip", k ) or ""
-			D("deferredStartup() found child %1 zoneid %3 parent %2", k, v.device_num_parent, zid)
+			D("startup() found child %1 zoneid %3 parent %2", k, v.device_num_parent, zid)
 			if v.device_num_parent == lul_device then
 				setVar(UPNP_AVTRANSPORT_SID, "CurrentStatus", "Offline; waiting for startup...", k)
 				Zones[zid] = k
@@ -3022,7 +3029,7 @@ function startup( lul_device )
 	if not tts then
 		L("TTS module is not installed (it's optional)")
 	else
-		D("TTS module version is %1", tts.VERSION)
+		D("startup() TTS module version is %1", tts.VERSION)
 		if ( tts.VERSION or 0 ) < MIN_TTS_VERSION then
 			W("The L_SonosTTS module installed may not be compatible with this version of the plugin core.")
 		end
@@ -3090,7 +3097,7 @@ function startup( lul_device )
 		s = json.decode( s )
 		if s then
 			zoneInfo = s
-			D("deferredStartup() reloaded zoneInfo %1", zoneInfo)
+			D("startup() reloaded zoneInfo %1", zoneInfo)
 		else
 			W("Saved GroupZoneTopology invalid! Ignoring.")
 			luup.log(s,2)
@@ -3550,7 +3557,7 @@ function actionSonosSay( lul_device, lul_settings )
 	L("Say action on device %1 text %2", lul_device, lul_settings.Text)
 	if not tts then
 		W"The Sonos TTS module is not installed or could not be loaded."
-		return
+		return false
 	end
 	if ( tts.VERSION or 0 ) < MIN_TTS_VERSION then
 		W"The L_SonosTTS module installed may not be compatible with this version of the plugin core."
@@ -3579,16 +3586,18 @@ function actionSonosSay( lul_device, lul_settings )
 		end
 		queueAlert( lul_device, alert_settings )
 	end
+	return true
 end
 
 function actionSonosSetupTTS( lul_device, lul_settings )
 	D("actionSonosSetupTTS(%1,%2)", lul_device, lul_settings )
-	os.execute( "rm -rf -- " .. Q(TTSBasePath, "ttscache") )
+	return true
 end
 
 function actionSonosResetTTS( lul_device )
 	assert(luup.devices[lul_device].device_type == SONOS_SYS_DEVICE_TYPE)
 	os.execute( "rm -rf -- " .. Q(TTSBasePath, "ttscache") )
+	return true
 end
 
 function actionSonosSetURIToPlay( lul_device, lul_settings )
@@ -3609,6 +3618,7 @@ function actionSonosSetURIToPlay( lul_device, lul_settings )
 	-- x-rincon-queue:
 	-- x-rincon-stream:
 	-- example is DR Jazz Radio: x-rincon-mp3radio://live-icy.gss.dr.dk:8000/Channel22_HQ.mp3
+	return true
 end
 
 function actionSonosPlayURI( lul_device, lul_settings )
@@ -3642,6 +3652,7 @@ function actionSonosEnqueueURI( lul_device, lul_settings )
 	playURI(findZoneByDevice( lul_device ), instanceId, uri, "1", nil, nil, false, enqueueMode, false, true)
 
 	updateNow( lul_device )
+	return true
 end
 
 function actionSonosAlert( lul_device, lul_settings )
@@ -3661,17 +3672,20 @@ function actionSonosJoinGroup( lul_device, lul_settings )
 	assert(luup.devices[lul_device].device_type == SONOS_ZONE_DEVICE_TYPE)
 	local zone = defaultValue(lul_settings, "Zone", "")
 	joinGroup(findZoneByDevice( lul_device ), zone)
+	return true
 end
 
 function actionSonoLeaveGroup( lul_device, lul_settings ) -- luacheck: ignore 212
 	assert(luup.devices[lul_device].device_type == SONOS_ZONE_DEVICE_TYPE)
 	leaveGroup(findZoneByDevice( lul_device ))
+	return true
 end
 
 function actionSonosUpdateGroupMembers( lul_device, lul_settings )
 	assert(luup.devices[lul_device].device_type == SONOS_ZONE_DEVICE_TYPE)
 	local zones = url.unescape(defaultValue(lul_settings, "Zones", ""))
 	updateGroupMembers(findZoneByDevice( lul_device ), zones)
+	return true
 end
 
 function actionSonosSavePlaybackContext( lul_device, lul_settings )
@@ -3804,6 +3818,84 @@ function actionSonosStartDiscovery( lul_device, lul_settings ) -- luacheck: igno
 	return 4,0
 end
 
+function actionSonosSystemIncludeIP( lul_device, lul_settings )
+	local ipaddr,rest = string.match( lul_settings.IPAddress or "", "^(%d+%.%d+%.%d+%.%d+)(.*)" )
+	if not ipaddr then
+		E("IncludeIP action: invalid IP address %1", lul_settings.IPAddress)
+		setVar(SONOS_SYS_SID, "DiscoveryMessage", "Aborted; invalid address", lul_device)
+		return 2,0
+	end
+	local port = 1400
+	if rest then
+		port = tonumber( rest:sub(2) ) or 1400
+	end
+
+	-- Fetch DD
+	setVariableValue(SONOS_SYS_SID, "DiscoveryMessage", string.format("Querying %s", ipaddr), lul_device)
+	D("Fetching zone description from %1:%2", ipaddr, port)
+	local descr = upnp.UPnP_getDeviceDescription( string.format("http://%s:%s/xml/device_description.xml", ipaddr, port) )
+	if not descr then
+		E("Failed to read zone data from %1 -- is a Sonos Zone Player? Is it up and rinning?", ipaddr)
+		setVar(SONOS_SYS_SID, "DiscoveryMessage", "Aborted; no/invalid response from "..ipaddr, lul_device)
+		return 2,0
+	end
+
+	local zone = upnp.getInfosFromDescription( descr, "urn:schemas-upnp-org:device:ZonePlayer:1", { "UDN", "modelName", "roomName", "displayName" } )
+	D("actionSonosSystemIncludeIP() zone info %1", zone)
+	local uuid = string.gsub( zone.UDN or "", "^uuid:", "" )
+
+	local children = {}
+	for k,v in pairs(luup.devices) do
+		if v.device_num_parent == lul_device then
+			children[v.id] = k
+			if v.device_type == SONOS_ZONE_DEVICE_TYPE then
+				local ipr = getVar( "SonosIP", "", k, SONOS_ZONE_SID )
+				if v.id == uuid or ipr == ipaddr then
+					E("Zone at IP %1 already known as child %2 (#%3) %4", ipaddr,
+						v.description, k, v.id)
+					setVar(SONOS_SYS_SID, "DiscoveryMessage", "Aborted; zone already known", lul_device)
+					return 2,0
+				end
+			end
+		end
+	end
+
+	L("Including new zone %1 ip %2:%3", uuid, ipaddr, zone.port or 1400)
+	setVariableValue(SONOS_SYS_SID, "DiscoveryMessage", string.format("Including %s", ipaddr), lul_device)
+
+	local ptr = luup.chdev.start( lul_device )
+	for uc,k in pairs( children ) do
+		local df = luup.attr_get('device_file', k)
+		D("actionSonosSystemIncludeIP() appending existing child dev #%1 %2 uuid %3 device_file %4",
+			k, luup.devices[k].description, uc, df)
+		luup.chdev.append( lul_device, ptr, uc, luup.devices[k].description, "", df, "", "", false )
+	end
+	local cv = {}
+	table.insert( cv, ",manufacturer=Sonos" )
+	table.insert( cv, string.format( ",model=%s", zone.modelName or "" ) )
+	table.insert( cv, ",invisible=0" )
+	table.insert( cv, string.format( "%s,SonosID=%s", UPNP_DEVICE_PROPERTIES_SID, uuid ) )
+	table.insert( cv, string.format( "%s,SonosIP=%s", SONOS_ZONE_SID, ipaddr ) )
+	table.insert( cv, string.format( "%s,Port=%s", SONOS_ZONE_SID, zone.port or 1400 ) )
+	local w = {}
+	if (zone.roomName or "") ~= "" then table.insert( w, zone.roomName ) end
+	if (zone.displayName or "") ~= "" then table.insert( w, zone.displayName ) end
+	if #w == 0 then
+		if (zone.modelName or "") ~= "" then
+			table.insert( w, zone.modelName )
+		else
+			table.insert( w, ( uuid:upper():gsub("^RINCON_","" ) ) ) -- N.B. gsub returns 2 values
+		end
+	end
+	local name = table.concat( w, " " )
+	luup.chdev.append( lul_device, ptr, uuid, name, "", "D_Sonos1.xml", "",
+		table.concat( cv, "\n" ), false )
+
+	L("Include complete. New device: %1", name)
+	luup.chdev.sync( lul_device, ptr )
+	return 4,0
+end
+
 function actionSonosSelectDevice( lul_device, lul_settings )
 	assert(luup.devices[lul_device].device_type == SONOS_ZONE_DEVICE_TYPE)
 	local newDescrURL = url.unescape( lul_settings.URL or "" )
@@ -3814,6 +3906,7 @@ function actionSonosSelectDevice( lul_device, lul_settings )
 		setVar( SONOS_ZONE_SID, "SonosIP", newIP, lul_device )
 		setup(lul_device, false)
 	end
+	return true
 end
 
 function actionSonosSearchAndSelect( lul_device, lul_settings )
@@ -3839,6 +3932,7 @@ end
 
 function actionSonosSetCheckStateRate( lul_device, lul_settings )
 	setCheckStateRate(lul_device, lul_settings.rate)
+	return true
 end
 
 function actionSonosSetDebugLogs( lul_device, lul_settings )
@@ -3854,6 +3948,7 @@ end
 
 function actionSonosSetReadQueueContent( lul_device, lul_settings )
 	setReadQueueContent(lul_device, lul_settings.enable)
+	return true
 end
 
 function actionSonosInstallDiscoveryPatch( lul_device, lul_settings ) -- luacheck: ignore 212
@@ -3870,6 +3965,7 @@ function actionSonosInstallDiscoveryPatch( lul_device, lul_settings ) -- luachec
 	if reload then
 		scheduler.delay( SonosReload, 2 )
 	end
+	return true
 end
 
 function actionSonosUninstallDiscoveryPatch( lul_device, lul_settings ) -- luacheck: ignore 212
@@ -3886,6 +3982,7 @@ function actionSonosUninstallDiscoveryPatch( lul_device, lul_settings ) -- luach
 	if reload then
 		scheduler.delay( SonosReload, 2 )
 	end
+	return true
 end
 
 function actionSonosNotifyRenderingChange( lul_device, lul_settings )
@@ -3995,6 +4092,7 @@ function actionVolumeMute( lul_device, lul_settings )
 					 "DesiredMute=" .. desiredMute}})
 
 	refreshMuteNow(uuid)
+	return true
 end
 
 function actionVolumeUp( lul_device, lul_settings )
@@ -4002,13 +4100,13 @@ function actionVolumeUp( lul_device, lul_settings )
 	-- Volume up
 	local uuid = findZoneByDevice( lul_device )
 	if tostring(dataTable[uuid].OutputFixed or 0) ~= "0" then
-		W("Can't change volume on fixed output zone %1 (#%2)", luup.devices[lul_device].description, lul_device)
-		return
+		L("Can't change volume on fixed output zone %1 (#%2)", luup.devices[lul_device].description, lul_device)
+		return true
 	end
 
 	local Rendering = upnp.getService(uuid, UPNP_RENDERING_CONTROL_SERVICE)
 	if not Rendering then
-		return
+		return false
 	end
 
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
@@ -4020,6 +4118,7 @@ function actionVolumeUp( lul_device, lul_settings )
 					 "Adjustment=3"}})
 
 	refreshVolumeNow(uuid)
+	return true
 end
 
 function actionVolumeDown( lul_device, lul_settings )
@@ -4028,7 +4127,7 @@ function actionVolumeDown( lul_device, lul_settings )
 	local uuid = findZoneByDevice( lul_device )
 	if tostring(dataTable[uuid].OutputFixed or 0) ~= "0" then
 		W("Can't change volume on fixed output zone %1 (#%2)", luup.devices[lul_device].description, lul_device)
-		return
+		return true -- OK
 	end
 
 	local Rendering = upnp.getService(uuid, UPNP_RENDERING_CONTROL_SERVICE)
@@ -4045,6 +4144,7 @@ function actionVolumeDown( lul_device, lul_settings )
 					 "Adjustment=-3"}})
 
 	refreshVolumeNow(uuid)
+	return true
 end
 
 --[[
@@ -4058,7 +4158,7 @@ function actionMediaNavigationSkipDown( lul_device, lul_settings )
 	local device, uuid = controlByCoordinator( findZoneByDevice( lul_device ) )
 	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
 	if not AVTransport then
-		return
+		return false
 	end
 
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
@@ -4066,6 +4166,7 @@ function actionMediaNavigationSkipDown( lul_device, lul_settings )
 	AVTransport.Next({InstanceID=instanceId})
 
 	updateNow( device )
+	return true
 end
 
 function actionMediaNavigationSkipUp( lul_device, lul_settings )
@@ -4073,7 +4174,7 @@ function actionMediaNavigationSkipUp( lul_device, lul_settings )
 	local device, uuid = controlByCoordinator(findZoneByDevice( lul_device ))
 	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
 	if not AVTransport then
-		return
+		return false
 	end
 
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
@@ -4081,6 +4182,7 @@ function actionMediaNavigationSkipUp( lul_device, lul_settings )
 	AVTransport.Previous({InstanceID=instanceId})
 
 	updateNow( device )
+	return true
 end
 
 --[[
@@ -4094,7 +4196,7 @@ function actionAVTransportPlayMedia( lul_device, lul_settings )
 	local device, uuid = controlByCoordinator(findZoneByDevice( lul_device ))
 	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
 	if not AVTransport then
-		return
+		return false
 	end
 
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
@@ -4105,6 +4207,7 @@ function actionAVTransportPlayMedia( lul_device, lul_settings )
 						"Speed=" ..speed}})
 
 	updateNow( device )
+	return true
 end
 
 function actionAVTransportSeek( lul_device, lul_settings )
@@ -4112,7 +4215,7 @@ function actionAVTransportSeek( lul_device, lul_settings )
 	local _, uuid = controlByCoordinator(findZoneByDevice( lul_device ))
 	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
 	if not AVTransport then
-		return
+		return false
 	end
 
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
@@ -4123,6 +4226,7 @@ function actionAVTransportSeek( lul_device, lul_settings )
 		{OrderedArgs={"InstanceID=" ..instanceId,
 					"Unit=" .. unit,
 					"Target=" .. target}})
+	return true
 end
 
 function actionAVTransportPause( lul_device, lul_settings )
@@ -4130,7 +4234,7 @@ function actionAVTransportPause( lul_device, lul_settings )
 	local device, uuid = controlByCoordinator(findZoneByDevice( lul_device ))
 	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
 	if not AVTransport then
-		return
+		return false
 	end
 
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
@@ -4138,6 +4242,7 @@ function actionAVTransportPause( lul_device, lul_settings )
 	AVTransport.Pause({InstanceID=instanceId})
 
 	updateNow( device )
+	return true
 end
 
 function actionAVTransportStop( lul_device, lul_settings )
@@ -4147,13 +4252,13 @@ function actionAVTransportStop( lul_device, lul_settings )
 	uuid = findZoneByDevice( lul_device )
 	if not ( isOnline(uuid) or setup(lul_device, true) ) then
 		W("%1 (#%2) is offline and cannot be started", luup.devices[lul_device].description, lul_device)
-		return
+		return false
 	end
 
 	device, uuid = controlByCoordinator(uuid)
 	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
 	if not AVTransport then
-		return
+		return false
 	end
 
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
@@ -4161,6 +4266,7 @@ function actionAVTransportStop( lul_device, lul_settings )
 	AVTransport.Stop({InstanceID=instanceId})
 
 	updateNow( device )
+	return true
 end
 
 function actionAVTransportNext( lul_device, lul_settings )
@@ -4168,7 +4274,7 @@ function actionAVTransportNext( lul_device, lul_settings )
 	local device, uuid = controlByCoordinator(findZoneByDevice( lul_device ))
 	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
 	if not AVTransport then
-		return
+		return false
 	end
 
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
@@ -4176,6 +4282,7 @@ function actionAVTransportNext( lul_device, lul_settings )
 	AVTransport.Next({InstanceID=instanceId})
 
 	updateNow( device )
+	return true
 end
 
 function actionAVTransportPrevious( lul_device, lul_settings )
@@ -4183,7 +4290,7 @@ function actionAVTransportPrevious( lul_device, lul_settings )
 	local device, uuid = controlByCoordinator(findZoneByDevice( lul_device ))
 	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
 	if not AVTransport then
-		return
+		return false
 	end
 
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
@@ -4191,6 +4298,7 @@ function actionAVTransportPrevious( lul_device, lul_settings )
 	AVTransport.Previous({InstanceID=instanceId})
 
 	updateNow( device )
+	return true
 end
 
 function actionAVTransportNextSection( lul_device, lul_settings )
@@ -4198,7 +4306,7 @@ function actionAVTransportNextSection( lul_device, lul_settings )
 	local device, uuid = controlByCoordinator(findZoneByDevice( lul_device ))
 	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
 	if not AVTransport then
-		return
+		return false
 	end
 
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
@@ -4206,6 +4314,7 @@ function actionAVTransportNextSection( lul_device, lul_settings )
 	AVTransport.NextSection({InstanceID=instanceId})
 
 	updateNow( device )
+	return true
 end
 
 function actionAVTransportPreviousSection( lul_device, lul_settings )
@@ -4213,7 +4322,7 @@ function actionAVTransportPreviousSection( lul_device, lul_settings )
 	local device, uuid = controlByCoordinator(findZoneByDevice( lul_device ))
 	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
 	if not AVTransport then
-		return
+		return false
 	end
 
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
@@ -4221,6 +4330,7 @@ function actionAVTransportPreviousSection( lul_device, lul_settings )
 	AVTransport.PreviousSection({InstanceID=instanceId})
 
 	updateNow( device )
+	return true
 end
 
 function actionAVTransportNextProgrammedRadioTracks( lul_device, lul_settings )
@@ -4228,7 +4338,7 @@ function actionAVTransportNextProgrammedRadioTracks( lul_device, lul_settings )
 	local device, uuid = controlByCoordinator(findZoneByDevice( lul_device ))
 	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
 	if not AVTransport then
-		return
+		return false
 	end
 
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
@@ -4236,6 +4346,7 @@ function actionAVTransportNextProgrammedRadioTracks( lul_device, lul_settings )
 	AVTransport.NextProgrammedRadioTracks{InstanceID=instanceId}
 
 	updateNow( device )
+	return true
 end
 
 function actionAVTransportGetPositionInfo( lul_device, lul_settings )
@@ -4243,13 +4354,14 @@ function actionAVTransportGetPositionInfo( lul_device, lul_settings )
 	local _, uuid = controlByCoordinator(findZoneByDevice( lul_device ))
 	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
 	if not AVTransport then
-		return
+		return false
 	end
 
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
 
 	local _, tmp = AVTransport.GetPositionInfo{InstanceID=instanceId}
 	setData("RelativeTimePosition", upnp.extractElement("RelTime", tmp, "NOT_IMPLEMENTED"), uuid, false)
+	return true
 end
 
 function actionAVTransportSetPlayMode( lul_device, lul_settings )
@@ -4257,7 +4369,7 @@ function actionAVTransportSetPlayMode( lul_device, lul_settings )
 	local _, uuid = controlByCoordinator(findZoneByDevice( lul_device ))
 	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
 	if not AVTransport then
-		return
+		return false
 	end
 
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
@@ -4267,13 +4379,14 @@ function actionAVTransportSetPlayMode( lul_device, lul_settings )
 	AVTransport.SetPlayMode(
 		{OrderedArgs={"InstanceID=" .. instanceId,
 						"NewPlayMode=" .. newPlayMode}})
+	return true
 end
 
 function actionAVTransportSetURI( lul_device, lul_settings )
 	assert(luup.devices[lul_device].device_type == SONOS_ZONE_DEVICE_TYPE)
 	local AVTransport = upnp.getService(findZoneByDevice( lul_device ), UPNP_AVTRANSPORT_SERVICE)
 	if not AVTransport then
-		return
+		return false
 	end
 
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
@@ -4286,13 +4399,14 @@ function actionAVTransportSetURI( lul_device, lul_settings )
 						"CurrentURIMetaData=" .. currentURIMetaData}})
 
 	updateNow( lul_device )
+	return true
 end
 
 function actionAVTransportSetNextURI( lul_device, lul_settings )
 	assert(luup.devices[lul_device].device_type == SONOS_ZONE_DEVICE_TYPE)
 	local AVTransport = upnp.getService(findZoneByDevice( lul_device ), UPNP_AVTRANSPORT_SERVICE)
 	if not AVTransport then
-		return
+		return false
 	end
 
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
@@ -4303,6 +4417,7 @@ function actionAVTransportSetNextURI( lul_device, lul_settings )
 		{OrderedArgs={"InstanceID=" .. instanceId,
 						"NextURI=" .. nextURI,
 						"NextURIMetaData=" .. nextURIMetaData}})
+	return true
 end
 
 function actionAVTransportAddMultipleURIs( lul_device, lul_settings )
@@ -4310,7 +4425,7 @@ function actionAVTransportAddMultipleURIs( lul_device, lul_settings )
 	local _, uuid = controlByCoordinator(findZoneByDevice( lul_device ))
 	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
 	if not AVTransport then
-		return
+		return false
 	end
 
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
@@ -4331,8 +4446,9 @@ function actionAVTransportAddMultipleURIs( lul_device, lul_settings )
 						"EnqueuedURIsMetaData=" .. enqueuedURIsMetaData,
 						"ContainerURI=" .. containerURI,
 						"ContainerMetaData=" .. containerMetaData,
-					 "DesiredFirstTrackNumberEnqueued=" .. desiredFirstTrackNumberEnqueued,
+						"DesiredFirstTrackNumberEnqueued=" .. desiredFirstTrackNumberEnqueued,
 						"EnqueueAsNext=" .. enqueueAsNext}})
+	return true
 end
 
 function actionAVTransportAddURI( lul_device, lul_settings )
@@ -4340,7 +4456,7 @@ function actionAVTransportAddURI( lul_device, lul_settings )
 	local _, uuid = controlByCoordinator(findZoneByDevice( lul_device ))
 	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
 	if not AVTransport then
-		return
+		return false
 	end
 
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
@@ -4355,6 +4471,7 @@ function actionAVTransportAddURI( lul_device, lul_settings )
 						"EnqueuedURIMetaData=" .. enqueuedURIMetaData,
 						"DesiredFirstTrackNumberEnqueued=" .. desiredFirstTrackNumberEnqueued,
 						"EnqueueAsNext=" .. enqueueAsNext}})
+	return true
 end
 
 function actionAVTransportCreateSavedQueue( lul_device, lul_settings )
@@ -4362,7 +4479,7 @@ function actionAVTransportCreateSavedQueue( lul_device, lul_settings )
 	local _, uuid = controlByCoordinator(findZoneByDevice( lul_device ))
 	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
 	if not AVTransport then
-		return
+		return false
 	end
 
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
@@ -4375,6 +4492,7 @@ function actionAVTransportCreateSavedQueue( lul_device, lul_settings )
 						"Title=" .. title,
 						"EnqueuedURI=" .. enqueuedURI,
 						"EnqueuedURIMetaData=" .. enqueuedURIMetaData}})
+	return true
 end
 
 function actionAVTransportAddURItoSaved( lul_device, lul_settings )
@@ -4382,7 +4500,7 @@ function actionAVTransportAddURItoSaved( lul_device, lul_settings )
 	local _, uuid = controlByCoordinator(findZoneByDevice( lul_device ))
 	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
 	if not AVTransport then
-		return
+		return false
 	end
 
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
@@ -4399,6 +4517,7 @@ function actionAVTransportAddURItoSaved( lul_device, lul_settings )
 						"EnqueuedURI=" .. enqueuedURI,
 						"EnqueuedURIMetaData=" .. enqueuedURIMetaData,
 						"AddAtIndex=" .. addAtIndex}})
+	return true
 end
 
 function actionAVTransportReorderQueue( lul_device, lul_settings )
@@ -4406,7 +4525,7 @@ function actionAVTransportReorderQueue( lul_device, lul_settings )
 	local _, uuid = controlByCoordinator(findZoneByDevice( lul_device ))
 	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
 	if not AVTransport then
-		return
+		return false
 	end
 
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
@@ -4417,6 +4536,7 @@ function actionAVTransportReorderQueue( lul_device, lul_settings )
 						"NumberOfTracks=" .. lul_settings.NumberOfTracks,
 						"InsertBefore=" .. lul_settings.InsertBefore,
 						"UpdateID=" .. lul_settings.UpdateID}})
+	return true
 end
 
 function actionAVTransportReorderSaved( lul_device, lul_settings )
@@ -4424,7 +4544,7 @@ function actionAVTransportReorderSaved( lul_device, lul_settings )
 	local _, uuid = controlByCoordinator(findZoneByDevice( lul_device ))
 	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
 	if not AVTransport then
-		return
+		return false
 	end
 
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
@@ -4435,6 +4555,7 @@ function actionAVTransportReorderSaved( lul_device, lul_settings )
 						"UpdateID=" .. lul_settings.UpdateID,
 						"TrackList=" .. lul_settings.TrackList,
 						"NewPositionList=" .. lul_settings.NewPositionList}})
+	return true
 end
 
 function actionAVTransportRemoveTrackFromQueue( lul_device, lul_settings )
@@ -4442,7 +4563,7 @@ function actionAVTransportRemoveTrackFromQueue( lul_device, lul_settings )
 	local _, uuid = controlByCoordinator(findZoneByDevice( lul_device ))
 	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
 	if not AVTransport then
-		return
+		return false
 	end
 
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
@@ -4451,6 +4572,7 @@ function actionAVTransportRemoveTrackFromQueue( lul_device, lul_settings )
 		{OrderedArgs={"InstanceID=" .. instanceId,
 						"ObjectID=" .. lul_settings.ObjectID,
 						"UpdateID=" .. lul_settings.UpdateID}})
+	return true
 end
 
 function actionAVTransportRemoveTrackRangeFromQueue( lul_device, lul_settings )
@@ -4458,7 +4580,7 @@ function actionAVTransportRemoveTrackRangeFromQueue( lul_device, lul_settings )
 	local _, uuid = controlByCoordinator(findZoneByDevice( lul_device ))
 	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
 	if not AVTransport then
-		return
+		return false
 	end
 
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
@@ -4468,6 +4590,7 @@ function actionAVTransportRemoveTrackRangeFromQueue( lul_device, lul_settings )
 						"UpdateID=" .. lul_settings.UpdateID,
 						"StartingIndex=" .. lul_settings.StartingIndex,
 						"NumberOfTracks=" .. lul_settings.NumberOfTracks}})
+	return true
 end
 
 function actionAVTransportRemoveAllTracksFromQueue( lul_device, lul_settings )
@@ -4475,12 +4598,13 @@ function actionAVTransportRemoveAllTracksFromQueue( lul_device, lul_settings )
 	local _, uuid = controlByCoordinator(findZoneByDevice( lul_device ))
 	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
 	if not AVTransport then
-		return
+		return false
 	end
 
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
 
 	AVTransport.RemoveAllTracksFromQueue({InstanceID=instanceId})
+	return true
 end
 
 function actionAVTransportSaveQueue( lul_device, lul_settings )
@@ -4488,7 +4612,7 @@ function actionAVTransportSaveQueue( lul_device, lul_settings )
 	local _, uuid = controlByCoordinator(findZoneByDevice( lul_device ))
 	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
 	if not AVTransport then
-		return
+		return false
 	end
 
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
@@ -4497,6 +4621,7 @@ function actionAVTransportSaveQueue( lul_device, lul_settings )
 		{OrderedArgs={"InstanceID=" .. instanceId,
 						"Title=" .. lul_settings.Title,
 						"ObjectID=" .. lul_settings.ObjectID}})
+	return true
 end
 
 function actionAVTransportBackupQueue( lul_device, lul_settings )
@@ -4504,12 +4629,13 @@ function actionAVTransportBackupQueue( lul_device, lul_settings )
 	local _, uuid = controlByCoordinator(findZoneByDevice( lul_device ))
 	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
 	if not AVTransport then
-		return
+		return false
 	end
 
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
 
 	AVTransport.BackupQueue({InstanceID=instanceId})
+	return true
 end
 
 function actionAVTransportChangeTransportSettings( lul_device, lul_settings )
@@ -4517,7 +4643,7 @@ function actionAVTransportChangeTransportSettings( lul_device, lul_settings )
 	local _, uuid = controlByCoordinator(findZoneByDevice( lul_device ))
 	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
 	if not AVTransport then
-		return
+		return false
 	end
 
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
@@ -4526,13 +4652,14 @@ function actionAVTransportChangeTransportSettings( lul_device, lul_settings )
 		{OrderedArgs={"InstanceID=" .. instanceId,
 						"NewTransportSettings=" .. lul_settings.NewTransportSettings,
 						"CurrentAVTransportURI=" .. lul_settings.CurrentAVTransportURI}})
+	return true
 end
 
 function actionAVTransportConfigureSleepTimer( lul_device, lul_settings )
 	assert(luup.devices[lul_device].device_type == SONOS_ZONE_DEVICE_TYPE)
 	local AVTransport = upnp.getService(findZoneByDevice( lul_device ), UPNP_AVTRANSPORT_SERVICE)
 	if not AVTransport then
-		return
+		return false
 	end
 
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
@@ -4540,13 +4667,14 @@ function actionAVTransportConfigureSleepTimer( lul_device, lul_settings )
 	AVTransport.ConfigureSleepTimer(
 		{OrderedArgs={"InstanceID=" .. instanceId,
 						"NewSleepTimerDuration=" .. lul_settings.NewSleepTimerDuration}})
+	return true
 end
 
 function actionAVTransportRunAlarm( lul_device, lul_settings )
 	assert(luup.devices[lul_device].device_type == SONOS_ZONE_DEVICE_TYPE)
 	local AVTransport = upnp.getService(findZoneByDevice( lul_device ), UPNP_AVTRANSPORT_SERVICE)
 	if not AVTransport then
-		return
+		return false
 	end
 
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
@@ -4561,6 +4689,7 @@ function actionAVTransportRunAlarm( lul_device, lul_settings )
 						"PlayMode=" .. lul_settings.PlayMode,
 						"Volume=" .. lul_settings.Volume,
 						"IncludeLinkedZones=" .. lul_settings.IncludeLinkedZones}})
+	return true
 end
 
 function actionAVTransportStartAutoplay( lul_device, lul_settings )
@@ -4568,7 +4697,7 @@ function actionAVTransportStartAutoplay( lul_device, lul_settings )
 	local _, uuid = controlByCoordinator(findZoneByDevice( lul_device ))
 	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
 	if not AVTransport then
-		return
+		return false
 	end
 
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
@@ -4580,13 +4709,14 @@ function actionAVTransportStartAutoplay( lul_device, lul_settings )
 						"Volume=" .. lul_settings.Volume,
 						"IncludeLinkedZones=" .. lul_settings.IncludeLinkedZones,
 						"ResetVolumeAfter=" .. lul_settings.ResetVolumeAfter}})
+	return true
 end
 
 function actionAVTransportSnoozeAlarm( lul_device, lul_settings )
 	assert(luup.devices[lul_device].device_type == SONOS_ZONE_DEVICE_TYPE)
 	local AVTransport = upnp.getService(findZoneByDevice( lul_device ), UPNP_AVTRANSPORT_SERVICE)
 	if not AVTransport then
-		return
+		return false
 	end
 
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
@@ -4594,6 +4724,7 @@ function actionAVTransportSnoozeAlarm( lul_device, lul_settings )
 	AVTransport.SnoozeAlarm(
 		{OrderedArgs={"InstanceID=" .. instanceId,
 						"Duration=" .. lul_settings.Duration}})
+	return true
 end
 
 function actionAVTransportSetCrossfadeMode( lul_device, lul_settings )
@@ -4601,7 +4732,7 @@ function actionAVTransportSetCrossfadeMode( lul_device, lul_settings )
 	local device, uuid = controlByCoordinator(findZoneByDevice( lul_device ))
 	local AVTransport = upnp.getService(uuid, UPNP_AVTRANSPORT_SERVICE)
 	if not AVTransport then
-		return
+		return false
 	end
 
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
@@ -4618,13 +4749,14 @@ function actionAVTransportSetCrossfadeMode( lul_device, lul_settings )
 						"CrossfadeMode=" .. desiredMode}})
 
 	updateNow( device )
+	return true
 end
 
 function actionAVTransportNotifyDeletedURI( lul_device, lul_settings )
 	assert(luup.devices[lul_device].device_type == SONOS_ZONE_DEVICE_TYPE)
 	local AVTransport = upnp.getService(findZoneByDevice( lul_device ), UPNP_AVTRANSPORT_SERVICE)
 	if not AVTransport then
-		return
+		return false
 	end
 
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
@@ -4632,25 +4764,27 @@ function actionAVTransportNotifyDeletedURI( lul_device, lul_settings )
 	AVTransport.NotifyDeletedURI(
 		{OrderedArgs={"InstanceID=" .. instanceId,
 						"DeletedURI=" .. lul_settings.DeletedURI}})
+	return true
 end
 
 function actionAVTransportBecomeCoordinatorSG( lul_device, lul_settings )
 	assert(luup.devices[lul_device].device_type == SONOS_ZONE_DEVICE_TYPE)
 	local AVTransport = upnp.getService(findZoneByDevice( lul_device ), UPNP_AVTRANSPORT_SERVICE)
 	if not AVTransport then
-		return
+		return false
 	end
 
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
 
 	AVTransport.BecomeCoordinatorOfStandaloneGroup({InstanceID=instanceId})
+	return true
 end
 
 function actionAVTransportBecomeGroupCoordinator( lul_device, lul_settings )
 	assert(luup.devices[lul_device].device_type == SONOS_ZONE_DEVICE_TYPE)
 	local AVTransport = upnp.getService(findZoneByDevice( lul_device ), UPNP_AVTRANSPORT_SERVICE)
 	if not AVTransport then
-		return
+		return false
 	end
 
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
@@ -4667,13 +4801,14 @@ function actionAVTransportBecomeGroupCoordinator( lul_device, lul_settings )
 						"AlarmState=" .. lul_settings.AlarmState,
 						"StreamRestartState=" .. lul_settings.StreamRestartState,
 						"CurrentQueueTrackList=" .. lul_settings.CurrentQueueTrackList}})
+	return true
 end
 
 function actionAVTransportBecomeGCAndSource( lul_device, lul_settings )
 	assert(luup.devices[lul_device].device_type == SONOS_ZONE_DEVICE_TYPE)
 	local AVTransport = upnp.getService(findZoneByDevice( lul_device ), UPNP_AVTRANSPORT_SERVICE)
 	if not AVTransport then
-		return
+		return false
 	end
 
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
@@ -4692,13 +4827,14 @@ function actionAVTransportBecomeGCAndSource( lul_device, lul_settings )
 						"CurrentQueueTrackList=" .. lul_settings.CurrentAVTTrackList,
 						"CurrentSourceState=" .. lul_settings.CurrentSourceState,
 						"ResumePlayback=" .. lul_settings.ResumePlayback}})
+	return true
 end
 
 function actionAVTransportChangeCoordinator( lul_device, lul_settings )
 	assert(luup.devices[lul_device].device_type == SONOS_ZONE_DEVICE_TYPE)
 	local AVTransport = upnp.getService(findZoneByDevice( lul_device ), UPNP_AVTRANSPORT_SERVICE)
 	if not AVTransport then
-		return
+		return false
 	end
 
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
@@ -4708,13 +4844,14 @@ function actionAVTransportChangeCoordinator( lul_device, lul_settings )
 						"CurrentCoordinator=" .. lul_settings.CurrentCoordinator,
 						"NewCoordinator=" .. lul_settings.NewCoordinator,
 						"NewTransportSettings=" .. lul_settings.NewTransportSettings}})
+	return true
 end
 
 function actionAVTransportDelegateGCTo( lul_device, lul_settings )
 	assert(luup.devices[lul_device].device_type == SONOS_ZONE_DEVICE_TYPE)
 	local AVTransport = upnp.getService(findZoneByDevice( lul_device ), UPNP_AVTRANSPORT_SERVICE)
 	if not AVTransport then
-		return
+		return false
 	end
 
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
@@ -4723,6 +4860,7 @@ function actionAVTransportDelegateGCTo( lul_device, lul_settings )
 		{OrderedArgs={"InstanceID=" .. instanceId,
 						"NewCoordinator=" .. lul_settings.NewCoordinator,
 						"RejoinGroup=" .. lul_settings.RejoinGroup}})
+	return true
 end
 
 --[[
@@ -4736,7 +4874,7 @@ function actionRCSetMute( lul_device, lul_settings )
 	local uuid = findZoneByDevice( lul_device )
 	if not ( isOnline(uuid) or setup(lul_device, true) ) then
 		W("%1 (#%2) is offline and cannot be started", luup.devices[lul_device].description, lul_device)
-		return
+		return false
 	end
 
 	local Rendering = upnp.getService(uuid, UPNP_RENDERING_CONTROL_SERVICE)
@@ -4760,25 +4898,27 @@ function actionRCSetMute( lul_device, lul_settings )
 					 "DesiredMute=" .. desiredMute}})
 
 	refreshMuteNow(uuid)
+	return true
 end
 
 function actionRCResetBasicEQ( lul_device, lul_settings )
 	assert(luup.devices[lul_device].device_type == SONOS_ZONE_DEVICE_TYPE)
 	local Rendering = upnp.getService(findZoneByDevice( lul_device ), UPNP_RENDERING_CONTROL_SERVICE)
 	if not Rendering then
-		return
+		return false
 	end
 
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
 
 	Rendering.ResetBasicEQ({InstanceID=instanceId})
+	return true
 end
 
 function actionRCResetExtEQ( lul_device, lul_settings )
 	assert(luup.devices[lul_device].device_type == SONOS_ZONE_DEVICE_TYPE)
 	local Rendering = upnp.getService(findZoneByDevice( lul_device ), UPNP_RENDERING_CONTROL_SERVICE)
 	if not Rendering then
-		return
+		return false
 	end
 
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
@@ -4786,6 +4926,7 @@ function actionRCResetExtEQ( lul_device, lul_settings )
 	Rendering.ResetExtEQ(
 		 {OrderedArgs={"InstanceID=" .. instanceId,
 					 "EQType=" .. lul_settings.EQType}})
+	return true
 end
 
 function actionRCSetVolume( lul_device, lul_settings )
@@ -4794,7 +4935,7 @@ function actionRCSetVolume( lul_device, lul_settings )
 	if tostring(dataTable[uuid].OutputFixed or 0) ~= "0" then
 		W("SetVolume on %1 (#%2) not possible, configured for fixed output volume (action ignored)",
 			luup.devices[lul_device].description, lul_device)
-		return
+		return true -- OK
 	end
 
 	local Rendering = upnp.getService(uuid, UPNP_RENDERING_CONTROL_SERVICE)
@@ -4812,6 +4953,7 @@ function actionRCSetVolume( lul_device, lul_settings )
 					 "DesiredVolume=" .. desiredVolume}})
 
 	refreshVolumeNow(uuid)
+	return true
 end
 
 function actionRCSetRelativeVolume( lul_device, lul_settings )
@@ -4820,7 +4962,7 @@ function actionRCSetRelativeVolume( lul_device, lul_settings )
 	if tostring(dataTable[uuid].OutputFixed or 0) ~= "0" then
 		W("SetRelativeVolume on %1 (#%2) not possible, configured for fixed output volume (action ignored)",
 			luup.devices[lul_device].description, lul_device)
-		return
+		return true -- OK
 	end
 
 	local Rendering = upnp.getService(uuid, UPNP_RENDERING_CONTROL_SERVICE)
@@ -4837,6 +4979,7 @@ function actionRCSetRelativeVolume( lul_device, lul_settings )
 					 "Adjustment=" .. lul_settings.Adjustment}})
 
 	refreshVolumeNow(uuid)
+	return true
 end
 
 function actionRCSetVolumeDB( lul_device, lul_settings )
@@ -4845,7 +4988,7 @@ function actionRCSetVolumeDB( lul_device, lul_settings )
 	if tostring(dataTable[uuid].OutputFixed or 0) ~= "0" then
 		W("SetVolumeDB on %1 (#%2) not possible, configured for fixed output volume (action ignored)",
 			luup.devices[lul_device].description, lul_device)
-		return
+		return true -- OK
 	end
 
 	local Rendering = upnp.getService(uuid, UPNP_RENDERING_CONTROL_SERVICE)
@@ -4869,7 +5012,7 @@ function actionRCSetBass( lul_device, lul_settings )
 	assert(luup.devices[lul_device].device_type == SONOS_ZONE_DEVICE_TYPE)
 	local Rendering = upnp.getService(findZoneByDevice( lul_device ), UPNP_RENDERING_CONTROL_SERVICE)
 	if not Rendering then
-		return
+		return false
 	end
 
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
@@ -4877,13 +5020,14 @@ function actionRCSetBass( lul_device, lul_settings )
 	Rendering.SetBass(
 		 {OrderedArgs={"InstanceID=" .. instanceId,
 					 "DesiredBass=" .. lul_settings.DesiredBass}})
+	return true
 end
 
 function actionRCSetTreble( lul_device, lul_settings )
 	assert(luup.devices[lul_device].device_type == SONOS_ZONE_DEVICE_TYPE)
 	local Rendering = upnp.getService(findZoneByDevice( lul_device ), UPNP_RENDERING_CONTROL_SERVICE)
 	if not Rendering then
-		return
+		return false
 	end
 
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
@@ -4891,13 +5035,14 @@ function actionRCSetTreble( lul_device, lul_settings )
 	Rendering.SetTreble(
 		 {OrderedArgs={"InstanceID=" .. instanceId,
 					 "DesiredTreble=" .. lul_settings.DesiredTreble}})
+	return true
 end
 
 function actionRCSetEQ( lul_device, lul_settings )
 	assert(luup.devices[lul_device].device_type == SONOS_ZONE_DEVICE_TYPE)
 	local Rendering = upnp.getService(findZoneByDevice( lul_device ), UPNP_RENDERING_CONTROL_SERVICE)
 	if not Rendering then
-		return
+		return false
 	end
 
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
@@ -4906,13 +5051,14 @@ function actionRCSetEQ( lul_device, lul_settings )
 		 {OrderedArgs={"InstanceID=" .. instanceId,
 					 "EQType=" .. lul_settings.EQType,
 					 "DesiredValue=" .. lul_settings.DesiredValue}})
+	return true
 end
 
 function actionRCSetLoudness( lul_device, lul_settings )
 	assert(luup.devices[lul_device].device_type == SONOS_ZONE_DEVICE_TYPE)
 	local Rendering = upnp.getService(findZoneByDevice( lul_device ), UPNP_RENDERING_CONTROL_SERVICE)
 	if not Rendering then
-		return
+		return false
 	end
 
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
@@ -4921,13 +5067,14 @@ function actionRCSetLoudness( lul_device, lul_settings )
 		 {OrderedArgs={"InstanceID=" .. instanceId,
 					 "Channel=" .. lul_settings.Channel,
 					 "DesiredLoudness=" .. lul_settings.DesiredLoudness}})
+	return true
 end
 
 function actionRCSetOutputFixed( lul_device, lul_settings )
 	assert(luup.devices[lul_device].device_type == SONOS_ZONE_DEVICE_TYPE)
 	local Rendering = upnp.getService(findZoneByDevice( lul_device ), UPNP_RENDERING_CONTROL_SERVICE)
 	if not Rendering then
-		return
+		return false
 	end
 
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
@@ -4935,13 +5082,14 @@ function actionRCSetOutputFixed( lul_device, lul_settings )
 	Rendering.SetOutputFixed(
 		 {OrderedArgs={"InstanceID=" .. instanceId,
 					 "DesiredFixed=" .. lul_settings.DesiredFixed}})
+	return true
 end
 
 function actionRCRampToVolume( lul_device, lul_settings )
 	assert(luup.devices[lul_device].device_type == SONOS_ZONE_DEVICE_TYPE)
 	local Rendering = upnp.getService(findZoneByDevice( lul_device ), UPNP_RENDERING_CONTROL_SERVICE)
 	if not Rendering then
-		return
+		return false
 	end
 
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
@@ -4953,13 +5101,14 @@ function actionRCRampToVolume( lul_device, lul_settings )
 					 "DesiredVolume=" .. lul_settings.DesiredVolume,
 					 "ResetVolumeAfter=" .. lul_settings.ResetVolumeAfter,
 					 "ProgramURI=" .. lul_settings.ProgramURI}})
+	return true
 end
 
 function actionRCRestoreVolumePriorToRamp( lul_device, lul_settings )
 	assert(luup.devices[lul_device].device_type == SONOS_ZONE_DEVICE_TYPE)
 	local Rendering = upnp.getService(findZoneByDevice( lul_device ), UPNP_RENDERING_CONTROL_SERVICE)
 	if not Rendering then
-		return
+		return false
 	end
 
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
@@ -4967,13 +5116,15 @@ function actionRCRestoreVolumePriorToRamp( lul_device, lul_settings )
 	Rendering.RestoreVolumePriorToRamp(
 		 {OrderedArgs={"InstanceID=" .. instanceId,
 					 "Channel=" .. lul_settings.Channel}})
+
+	return true
 end
 
 function actionRCSetChannelMap( lul_device, lul_settings )
 	assert(luup.devices[lul_device].device_type == SONOS_ZONE_DEVICE_TYPE)
 	local Rendering = upnp.getService(findZoneByDevice( lul_device ), UPNP_RENDERING_CONTROL_SERVICE)
 	if not Rendering then
-		return
+		return false
 	end
 
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
@@ -4981,6 +5132,7 @@ function actionRCSetChannelMap( lul_device, lul_settings )
 	Rendering.SetChannelMap(
 		 {OrderedArgs={"InstanceID=" .. instanceId,
 					 "ChannelMap=" .. lul_settings.ChannelMap}})
+	return true
 end
 
 --[[
@@ -4993,8 +5145,8 @@ function actionGRCSetGroupMute( lul_device, lul_settings )
 	assert(luup.devices[lul_device].device_type == SONOS_ZONE_DEVICE_TYPE)
 	local _, uuid = controlByCoordinator(findZoneByDevice( lul_device ))
 	local GroupRendering = upnp.getService(uuid, UPNP_GROUP_RENDERING_CONTROL_SERVICE)
-	if (GroupRendering == nil) then
-		return
+	if not GroupRendering then
+		return false
 	end
 
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
@@ -5003,14 +5155,15 @@ function actionGRCSetGroupMute( lul_device, lul_settings )
 	GroupRendering.SetGroupMute(
 		 {OrderedArgs={"InstanceID=" .. instanceId,
 					 "DesiredMute=" .. desiredMute}})
+	return true
 end
 
 function actionGRCSetGroupVolume( lul_device, lul_settings )
 	assert(luup.devices[lul_device].device_type == SONOS_ZONE_DEVICE_TYPE)
 	local _, uuid = controlByCoordinator(findZoneByDevice( lul_device ))
 	local GroupRendering = upnp.getService(uuid, UPNP_GROUP_RENDERING_CONTROL_SERVICE)
-	if (GroupRendering == nil) then
-		return
+	if not GroupRendering then
+		return false
 	end
 
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
@@ -5019,14 +5172,15 @@ function actionGRCSetGroupVolume( lul_device, lul_settings )
 	GroupRendering.SetGroupVolume(
 		 {OrderedArgs={"InstanceID=" .. instanceId,
 					 "DesiredVolume=" .. desiredVolume}})
+	return true
 end
 
 function actionGRCSetRelativeGroupVolume( lul_device, lul_settings )
 	assert(luup.devices[lul_device].device_type == SONOS_ZONE_DEVICE_TYPE)
 	local _, uuid = controlByCoordinator(findZoneByDevice( lul_device ))
 	local GroupRendering = upnp.getService(uuid, UPNP_GROUP_RENDERING_CONTROL_SERVICE)
-	if (GroupRendering == nil) then
-		return
+	if not GroupRendering then
+		return false
 	end
 
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
@@ -5034,20 +5188,22 @@ function actionGRCSetRelativeGroupVolume( lul_device, lul_settings )
 	GroupRendering.SetRelativeGroupVolume(
 		 {OrderedArgs={"InstanceID=" .. instanceId,
 					 "Adjustment=" .. lul_settings.Adjustment}})
+	return true
 end
 
 function actionGRCSnapshotGroupVolume( lul_device, lul_settings )
 	assert(luup.devices[lul_device].device_type == SONOS_ZONE_DEVICE_TYPE)
 	local _, uuid = controlByCoordinator(findZoneByDevice( lul_device ))
 	local GroupRendering = upnp.getService(uuid, UPNP_GROUP_RENDERING_CONTROL_SERVICE)
-	if (GroupRendering == nil) then
-		return
+	if not GroupRendering then
+		return false
 	end
 
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
 
 	GroupRendering.SnapshotGroupVolume(
 		 {InstanceID=instanceId})
+	return true
 end
 
 --[[

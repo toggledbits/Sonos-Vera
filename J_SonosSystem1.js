@@ -15,7 +15,7 @@ var SonosSystem = (function(api, $) {
 	/* unique identifier for this plugin... */
 	var uuid = '79bf9374-f989-11e9-884c-dbb32f3fa64a'; /* SonosSystem 2019-12-11 19345 */
 
-	var pluginVersion = '2.0develop-20075.1445';
+	var pluginVersion = '2.0develop-20075.1700';
 
 	var _UIVERSION = 20073;     /* must coincide with Lua core */
 
@@ -479,6 +479,26 @@ div.sonos-footer { margin: 16px 0px; } \
 			.appendTo( $col );
 		val = api.getDeviceState(device, Sonos.SONOS_SYS_SID, "DiscoveryMessage");
 		$( '<span id="discovery-status"/>' ).text(val || "").appendTo( $col );
+
+		$col = makeSettingsRow( "Manual Include:", $container );
+		$( '<label>IP Address:&nbsp;<input type="text" id="manip" class="form-control"></label>' ).appendTo( $col );
+		$( '<button id="manincl" class="btn btn-sm btn-default">Include</button>' )
+			.on( 'click.sonos', function() {
+				var ipaddr = $( 'input#manip' ).val() || "";
+				api.performActionOnDevice( device, Sonos.SONOS_SYS_SID, "IncludeIP",
+					{
+						actionArguments: { IPAddress: ipaddr },
+						onSuccess: function() {
+							$("span#discovery-status").text("Querying...");
+							setTimeout( function() { updateDiscoveryStatus(device); }, 1000 );
+						},
+						onFailure: function() {
+							alert("Something went wrong. Luup may be restarting. Try again in a moment.");
+						}
+					}
+				);
+			})
+			.appendTo( $col );
 
 		$row = $('<div class="row"/>').appendTo( $container );
 		$col = $( '<div class="col-xs-12 col-sm-12">Text-to-Speech (TTS)</div>' )

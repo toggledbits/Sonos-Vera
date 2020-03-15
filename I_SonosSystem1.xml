@@ -92,6 +92,13 @@
 				return L_SonosSystem1.actionSonosUninstallDiscoveryPatch( lul_device, lul_settings )
 			</run>
 		</action>
+		<action>
+			<serviceId>urn:toggledbits-com:serviceId:SonosSystem1</serviceId>
+			<name>IncludeIP</name>
+			<job>
+				return L_SonosSystem1.actionSonosSystemIncludeIP( lul_device, lul_settings )
+			</job>
+		</action>
 		<!--
 
 		ACTIONS IN SERVICE urn:micasaverde-com:serviceId:Sonos1

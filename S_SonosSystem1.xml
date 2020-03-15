@@ -46,6 +46,10 @@
 			</allowedValueList>
 		</stateVariable>
 		<stateVariable sendEvents="no">
+			<name>A_ARG_TYPE_ipaddr</name>
+			<dataType>string</dataType>
+		</stateVariable>
+		<stateVariable sendEvents="no">
 			<name>A_ARG_TYPE_enable</name>
 			<dataType>boolean</dataType>
 		</stateVariable>
@@ -132,6 +136,16 @@
 		<action>
 			<name>StartSonosDiscovery</name>
 			<argumentList/>
+		</action>
+		<action>
+			<name>IncludeIP</name>
+			<argumentList>
+				<argument>
+					<name>IPAddress</name>
+					<direction>in</direction>
+					<relatedStateVariable>A_ARG_TYPE_ipaddr</relatedStateVariable>
+				</argument>
+			</argumentList>
 		</action>
 		<action>
 			<name>SetDebugLogs</name>

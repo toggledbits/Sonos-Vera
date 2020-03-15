@@ -362,7 +362,9 @@ function UPnP_discover(target)
     local devices = {}
     local udp = socket.udp()
     if udp then
-        udp:setsockname('*', 1900)
+		-- udp:setoption('broadcast', true)
+		-- udp:setoption('dontroute', true)
+        -- udp:setsockname('*', 1900)
         local result = udp:sendto(UPNP_DISCOVERY:format(target), "239.255.255.250", 1900)
         if result ~= nil then
             udp:settimeout(5)
