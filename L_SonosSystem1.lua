@@ -8,7 +8,7 @@
 module( "L_SonosSystem1", package.seeall )
 
 PLUGIN_NAME = "Sonos"
-PLUGIN_VERSION = "2.0develop-20075.1230"
+PLUGIN_VERSION = "2.0develop-20075.1445"
 PLUGIN_ID = 4226
 
 local _CONFIGVERSION = 19298
@@ -440,7 +440,7 @@ logToFile = function(str, level)
 			os.execute("pluto-lzo c '" .. lfn .. "' '" .. lfn .. "-prev.lzo'")
 			logFile = io.open(lfn, "w")
 			if not logFile then return end
-			logFile:write(string.format("Log rotated; %s\n", PLUGIN_VERSION))
+			logFile:write(string.format("Log rotated; plugin %s; luup %2\n", PLUGIN_VERSION, luup.version))
 		end
 		level = level or 50
 		logFile:write(string.format("%02d %s %s\n", level, os.date("%x.%X"), str))
@@ -772,7 +772,7 @@ end
 -- with UUID (group ID) and Coordinator (UUID of zone that is group coordinator), and a `members`
 -- array of zone UUIDs. The zoneInfo table is meant to provide fast, consistent indexing and
 -- data access for all zones and groups.
-local zoneInfoMemberAttributes = { "UUID", "Location", "ZoneName", "HTSatChanMapSet", "Invisible" }
+local zoneInfoMemberAttributes = { "UUID", "Location", "ZoneName", "HTSatChanMapSet", "IsZoneBridge", "Invisible" }
 function updateZoneInfo( zs )
 	-- D("updateZoneInfo(%1)", zs)
 	D("updateZoneInfo(<xml>)")
@@ -900,7 +900,7 @@ end
 local function getAllUUIDs()
 	local zones = {}
 	for zid,zone in pairs( zoneInfo.zones ) do
-		if zone.isZoneBridge ~= "1" and not zone.isSatellite then
+		if zone.IsZoneBridge ~= "1" and not zone.isSatellite then
 			table.insert( zones, zid )
 		end
 	end
@@ -1150,16 +1150,18 @@ local setup -- forward declaration
 -- directly. To get proper scheduling of refreshing, including on-demand refreshes, always
 -- use updateNow()
 local function refreshNow(uuid, force, refreshQueue)
-	D("refreshNow(%1)", uuid, force, refreshQueue)
+	D("refreshNow(%1,%2,%3)", uuid, force, refreshQueue)
 	if (uuid or "") == "" then
 		return
 	end
 	local device = findDeviceByUUID( uuid )
 	if not device then
 		W("Can't refresh unknown zone %1; reload Luup to add this device.", uuid)
+		return
 	end
 
 	if upnp.proxyVersionAtLeast(1) and not force then
+		D("refreshNow() proxy running, not forced; no update")
 		return
 	end
 
@@ -1607,7 +1609,9 @@ local function playURI(zoneUUID, instanceId, uri, speed, volume, uuids, sameVolu
 	end
 
 	uri, uriMetaData, track, controlByGroup2, requireQueueing = decodeURI(uuid, coordinator, uri)
-	if not uri then return end
+	if not uri then
+		return false
+	end
 	if (controlByGroup and not controlByGroup2) then
 		-- decodeURI override!
 		controlByGroup = false -- luacheck: ignore 311
@@ -1727,6 +1731,8 @@ local function playURI(zoneUUID, instanceId, uri, speed, volume, uuids, sameVolu
 			 {OrderedArgs={"InstanceID=" .. instanceId,
 						 "Speed=" .. speed}})
 	end
+
+	return true
 end
 
 groupDevices = function(coordinator, instanceId, uuids, volume)
@@ -2418,7 +2424,7 @@ function renewSubscriptions(data)
 			upnp.subscribeToEvents(device, VERA_IP, EventSubscriptions[uuid], SONOS_ZONE_SID, uuid)
 			local retry = false
 			for _,sub in ipairs(EventSubscriptions[uuid]) do
-				D("renewSubscriptions() %1 event service %2 subscription sid %3 expiry %4 error %5", 
+				D("renewSubscriptions() %1 event service %2 subscription sid %3 expiry %4 error %5",
 					uuid, sub.service, sub.id, sub.expiry, sub.error)
 				if ( sub.id or "" ) == "" or sub.error then
 					retry = true
@@ -2490,7 +2496,7 @@ function checkProxy( task, device )
 		upnp.unuseProxy()
 		-- Kick update threads on all zone devices if they are not currently scheduled.
 		for _,zdev in pairs( Zones ) do
-			local t = scheduler.getTask( "update"..zdev ) or 
+			local t = scheduler.getTask( "update"..zdev ) or
 				scheduler.Task:new( "update"..zdev, zdev, updateWithoutProxy, { zdev } )
 			if t:suspended() then t:delay( 0 ) end -- run immediately
 		end
@@ -2557,7 +2563,7 @@ setup = function(zoneDevice, flag)
 		end
 	end
 
-	-- Subscribe to service notifications from proxy. If we know ourselves to be a satellite at 
+	-- Subscribe to service notifications from proxy. If we know ourselves to be a satellite at
 	-- this point, don't.
 	local isSatellite = (((zoneInfo or {}).zones or {})[uuid] or {}).isSatellite
 	if status and not isSatellite then
@@ -2956,8 +2962,7 @@ function startup( lul_device )
 	-- See if log file needs to be opened
 	if getVarNumeric("MaxLogSize", 512, lul_device, SONOS_SYS_SID) > 0 then
 		pcall( logToFile, string.rep( "_", 132) )
-		pcall( logToFile, "Log file opened at startup" )
-		pcall( logToFile, PLUGIN_VERSION )
+		pcall( logToFile, string.format( "Log file opened at startup; plugin %s; luup %s", PLUGIN_VERSION, luup.version) )
 	end
 
 	systemRunOnce( lul_device )
@@ -3460,7 +3465,7 @@ local function makeTTSAlert( device, settings )
 	else
 		voice = tts.DEFAULT_LANGUAGE
 	end
-	cacheTTS = not file_exists( TTSBasePath .. "no-tts-cache" ) and 
+	cacheTTS = not file_exists( TTSBasePath .. "no-tts-cache" ) and
 		getVarNumeric( "UseTTSCache", 1, pluginDevice, SONOS_SYS_SID ) ~= 0
 	if cacheTTS and settings.UseCache ~= "0" then
 		local fmeta = loadTTSCache( eid, voice, hash(text) )
@@ -3513,7 +3518,7 @@ local function makeTTSAlert( device, settings )
 		if os.execute( "cp -f -- " .. Q( destFile ) .. " " .. Q( cachefile ) ) ~= 0 then
 			W("(TTS) Cache failed to copy %1 to %2", destFile, cachefile)
 		else
-			fmeta.strings[text] = { duration=settings.Duration, url=curl .. fmeta.nextfile .. ft, 
+			fmeta.strings[text] = { duration=settings.Duration, url=curl .. fmeta.nextfile .. ft,
 				created=os.time(), lastused=os.time() }
 			fmeta.nextfile = fmeta.nextfile + 1
 			if not saveTTSCache( eid, voice, hash(text), fmeta ) then
@@ -3644,10 +3649,12 @@ function actionSonosAlert( lul_device, lul_settings )
 	assert(luup.devices[lul_device].device_type == SONOS_ZONE_DEVICE_TYPE)
 	L("Alert action on device %1 URI %2 duration %3", lul_device, lul_settings.URI, lul_settings.Duration)
 	queueAlert(lul_device, lul_settings)
+	return true
 end
 
 function actionSonosPauseAll( lul_device, lul_settings ) -- luacheck: ignore 212
 	pauseAll(lul_device)
+	return true
 end
 
 function actionSonosJoinGroup( lul_device, lul_settings )

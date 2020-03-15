@@ -15,7 +15,7 @@ var Sonos = (function(api, $) {
 	/* unique identifier for this plugin... */
 	var uuid = '79bf9374-f989-11e9-884c-dbb32f3fa64a'; /* SonosSystem 2019-12-11 19345 */
 
-	var pluginVersion = '2.0develop-20075.1230';
+	var pluginVersion = '2.0develop-20075.1445';
 
 	var _UIVERSION = 20073;     /* must coincide with Lua core */
 
@@ -305,14 +305,21 @@ var Sonos = (function(api, $) {
 
 		var uuid = api.getDeviceState(device, DEVICE_PROPERTIES_SID, "SonosID", 1) || "";
 		var zone = api.getDeviceState(device, DEVICE_PROPERTIES_SID, "ZoneName", 1) || "";
-		var groups = api.getDeviceState(device, ZONEGROUPTOPOLOGY_SID, "ZoneGroupState", 1) || "";
 
-		var members;
-		if ( ! isEmpty( groups ) ) {
-			var xmlgroups = parseXml(groups);
-			if ( ! isEmpty( xmlgroups ) ) {
-				members = xmlgroups.getElementsByTagName("ZoneGroupMember");
+		var groups = getParentState( "zoneInfo", device ) || "";
+		var members = [];
+		try {
+			groups = JSON.parse( groups );
+			for ( var zid in groups.zones ) {
+				if ( groups.zones.hasOwnProperty( zid ) ) {
+					var m = groups.zones[zid];
+					if ( ! ( m.IsZoneBridge || m.Invisible || m.isSatellite ) ) {
+						members.push( m );
+					}
+				}
 			}
+		} catch( e ) {
+			console.log(e);
 		}
 
 		var version = getParentState("PluginVersion", device) || "";
@@ -363,19 +370,13 @@ var Sonos = (function(api, $) {
 
 		var zoneUUID, zoneName, channelMapSet, isZoneBridge;
 
-		if ( ! isEmpty( members ) ) {
-			for (var i=0; i<members.length; i++) {
-				zoneUUID = Sonos_extractXmlAttribute(members[i], 'UUID');
-				zoneName = Sonos_extractXmlAttribute(members[i], 'ZoneName');
-				channelMapSet = Sonos_extractXmlAttribute(members[i], 'ChannelMapSet');
-				isZoneBridge = Sonos_extractXmlAttribute(members[i], 'IsZoneBridge');
-				if (zoneName != zone && channelMapSet === null && isZoneBridge != "1") {
-					html += '<tr>';
-					html += '<td>Group with master zone "' + zoneName + '"</td>';
-					html += '<td nowrap>x-rincon:' + zoneUUID + '</td>';
-					html += '<td>GZ:' + zoneName + '</td>';
-					html += '</tr>';
-				}
+		for (var i=0; i<members.length; i++) {
+			if ( members[i].UUID !== uuid ) {
+				html += '<tr>';
+				html += '<td>Group with coordinator "' + String(members[i].ZoneName) + '"</td>';
+				html += '<td nowrap>x-rincon:' + String(members[i].UUID) + '</td>';
+				html += '<td>GZ:' + String(members[i].ZoneName) + '</td>';
+				html += '</tr>';
 			}
 		}
 
@@ -385,20 +386,12 @@ var Sonos = (function(api, $) {
 		html += '<td>AI:</td>';
 		html += '</tr>';
 
-		if ( ! isEmpty( members ) ) {
-			for (var i=0; i<members.length; i++) {
-				zoneUUID = Sonos_extractXmlAttribute(members[i], 'UUID');
-				zoneName = Sonos_extractXmlAttribute(members[i], 'ZoneName');
-				channelMapSet = Sonos_extractXmlAttribute(members[i], 'ChannelMapSet');
-				isZoneBridge = Sonos_extractXmlAttribute(members[i], 'IsZoneBridge');
-				if (channelMapSet === null && isZoneBridge != "1") {
-					html += '<tr>';
-					html += '<td>Audio input of zone "' + zoneName + '"</td>';
-					html += '<td nowrap>x-rincon-stream:' + zoneUUID + '</td>';
-					html += '<td>AI:' + zoneName + '</td>';
-					html += '</tr>';
-				}
-			}
+		for (var i=0; i<members.length; i++) {
+			html += '<tr>';
+			html += '<td>Audio input of zone "' + String(members[i].ZoneName) + '"</td>';
+			html += '<td nowrap>x-rincon-stream:' + String(members[i].UUID) + '</td>';
+			html += '<td>AI:' + String(members[i].ZoneName) + '</td>';
+			html += '</tr>';
 		}
 
 		html += '<tr>';
@@ -485,9 +478,8 @@ var Sonos = (function(api, $) {
 		var variables = [	[ AVTRANSPORT_SID, "AVTransportURI" ],
 							[ AVTRANSPORT_SID, "AVTransportURIMetaData" ],
 							[ AVTRANSPORT_SID, "CurrentTrackURI" ],
-							[ AVTRANSPORT_SID, "CurrentTrackMetaData" ],
-							[ ZONEGROUPTOPOLOGY_SID, "ZoneGroupState" ],
-							[ SONOS_SID, 'SonosServicesKeys' ] ];
+							[ AVTRANSPORT_SID, "CurrentTrackMetaData" ]
+						];
 		html += '<table border="1">';
 		html += '<tr align="center" style="background-color: '+ tableTitleBgColor + '; color: white">';
 		html += '<th>Variable</td>';
@@ -519,6 +511,7 @@ var Sonos = (function(api, $) {
 		var html = '<div id="groupSelection"/>';
 
 		html += "<div>Select group members to be added or removed from this zone's group. Press 'Apply Changes' to save.</div>";
+		html += "<div><strong>Note:</strong>It takes a couple of seconds for changes to take effect; you may need to refresh several times.</div>";
 
 		html += '<button id="refreshGroup" type="button" class="btn btn-sm sonosbtn">Refresh</button>';
 		html += '<button id="applyGroup" type="button" class="btn btn-sm sonosbtn">Apply Changes</button>';
@@ -538,40 +531,37 @@ var Sonos = (function(api, $) {
 		var html = '';
 		var disabled = true;
 
-		var groupMembers = api.getDeviceState(device, ZONEGROUPTOPOLOGY_SID, "ZonePlayerUUIDsInGroup", 1) || "";
-		var groups = api.getDeviceState(device, ZONEGROUPTOPOLOGY_SID, "ZoneGroupState", 1) || "";
-		if ( ! isEmpty( groups ) ) {
-			var xmlgroups = parseXml(groups);
-			if ( xmlgroups ) {
-				var nb = 0;
-				var members = xmlgroups.getElementsByTagName("ZoneGroupMember") || [];
-				var coord = "???";
-				for (var i=0; i<members.length; ++i) {
-					var member = members.item(i);
-					var name = Sonos_extractXmlAttribute(member, 'ZoneName');
-					var uuid = Sonos_extractXmlAttribute(member, 'UUID');
-					var invisible = Sonos_extractXmlAttribute(member, 'Invisible');
-					var channelMapSet = Sonos_extractXmlAttribute(member, 'ChannelMapSet');
-					var isZoneBridge = Sonos_extractXmlAttribute(member, 'IsZoneBridge');
-					if (isZoneBridge != "1" && (channelMapSet == null || invisible == '1')) {
-						html += '<label>';
-						html += '<input id="' + uuid +'" class="zonemem" type="checkbox"';
-						if (groupMembers.search(uuid) >= 0) {
-							html += ' checked';
-							disabled = false;
+		var uuid = api.getDeviceState(device, DEVICE_PROPERTIES_SID, "SonosID", 1) || "";
+
+		var $container = jQuery('#groupSelection').empty();
+
+		var groupMembers = api.getDeviceState(device, ZONEGROUPTOPOLOGY_SID, "ZonePlayerUUIDsInGroup", 1, { dynamic: false }) || "";
+		var groups = getParentState( "zoneInfo", device ) || "";
+		try {
+			groups = JSON.parse( groups );
+			var mg = groups.groups[groups.zones[uuid].Group];
+			for ( var zid in groups.zones ) {
+				if ( groups.zones.hasOwnProperty( zid ) ) {
+					var m = groups.zones[zid];
+					if ( ! ( m.IsZoneBridge || m.Invisible || m.isSatellite ) ) {
+						var isCoord = m.UUID === mg.Coordinator;
+						var $lb = $( '<label/>' ).text( m.ZoneName + ( isCoord ? " (coordinator)" : "" ) );
+						$( '<input type="checkbox" class="zonemem"/>' )
+							.attr( 'id', zid )
+							.prop( 'disabled', isCoord )
+							.prependTo( $lb );
+						if ( groupMembers.search( zid ) >= 0 ) {
+							$( 'input', $lb ).prop( 'checked', true );
 						}
-						html += ' value="' + name + '">' +
-							(uuid==coord ? "&nbsp;(group coordinator)" : "") +
-							name + '</label><br/>';
-						nb++;
+						$lb = $('<div/>').append( $lb );
+						$lb.appendTo( $container );
 					}
 				}
-				html += "<hr/>\n";
 			}
+		} catch( e ) {
+			console.log(e);
 		}
-
-		jQuery('#groupSelection').html( html );
-		jQuery('input.zonemem').on( 'change.sonos', function() { Sonos_updateGroupSelection(); } );
+		jQuery('input.zonemem', $container).on( 'change.sonos', function() { Sonos_updateGroupSelection(); } );
 		Sonos_updateGroupSelection();
 	}
 
@@ -762,30 +752,26 @@ input#language { width: 6em; } \
 		var html, pos1, pos2;
 		var uuid = api.getDeviceState(device, DEVICE_PROPERTIES_SID, "SonosID", 1) || "";
 
-		var groups = api.getDeviceState(device, ZONEGROUPTOPOLOGY_SID, "ZoneGroupState", 1) || "";
+		var groups = getParentState( "zoneInfo", device ) || "";
 		if ( ! isEmpty(groups) && prevGroups != groups) {
-			var xmlgroups = parseXml(groups);
-			if (typeof xmlgroups !== 'undefined') {
-				html = "";
-				var members = xmlgroups.getElementsByTagName("ZoneGroupMember");
-				for (var i=0; i<members.length; i++) {
-					var name = Sonos_extractXmlAttribute(members[i], 'ZoneName');
-					var channelMapSet = Sonos_extractXmlAttribute(members[i], 'ChannelMapSet');
-					var isZoneBridge = Sonos_extractXmlAttribute(members[i], 'IsZoneBridge');
-					if ( name !== null && channelMapSet === null && isZoneBridge != "1" ) {
-						var title = name;
-						if (title.length > 60) {
-							title = title.substr(0, 60) + '...';
+			try {
+				var xg = JSON.parse( groups );
+				var ctrl = $( 'select#audioInputs' ).empty();
+				for ( var zid in xg.zones ) {
+					if ( xg.zones.hasOwnProperty( zid ) ) {
+						var zone = xg.zones[zid];
+						if ( ! ( zone.IsZoneBridge || zone.Invisible || zone.isSatellite ) ) {
+							$( '<option/>' ).val( "AI:" + zone.ZoneName ).text( zone.ZoneName )
+								.appendTo( ctrl );
 						}
-						html += '<option value="AI:' + name + '">' + title + '</option>';
 					}
 				}
-				jQuery('#audioInputs').html(html);
+			} catch( e ) {
+				console.log(e);
 			}
-			prevGroups = groups;
 		}
 
-		var savedQueues = api.getDeviceState(device, CONTENT_DIRECTORY_SID, "SavedQueues", 1) || "";
+		var savedQueues = getParentState( "SavedQueues", device ) || "";
 		if ( ! isEmpty( savedQueues ) && savedQueues != prevSavedQueues) {
 			html = "";
 			pos1 = 0;
@@ -826,7 +812,7 @@ input#language { width: 6em; } \
 			prevQueue = queue;
 		}
 
-		var favRadios = api.getDeviceState(device, CONTENT_DIRECTORY_SID, "FavoritesRadios", 1) || "";
+		var favRadios = getParentState( "FavoritesRadios", device ) || "";
 		if ( ! isEmpty( favRadios ) && favRadios != prevFavRadios) {
 			html = "";
 			pos1 = 0;
@@ -849,7 +835,7 @@ input#language { width: 6em; } \
 			prevFavRadios = favRadios;
 		}
 
-		var favorites = api.getDeviceState(device, CONTENT_DIRECTORY_SID, "Favorites", 1) || "";
+		var favorites = getParentState( "Favorites", device ) || "";
 		if ( ! isEmpty( favorites ) && favorites != prevFavorites) {
 			html = "";
 			pos1 = 0;
