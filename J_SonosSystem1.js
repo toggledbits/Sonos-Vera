@@ -449,6 +449,7 @@ var SonosSystem = (function(api, $) {
 div#sonos-settings div.row { margin-top: 12px; } \
 div.inp-default { color: #666; font-size: 0.80em; } \
 .inp-required { font-weight: bold } \
+div.sonos-footer { margin: 16px 0px; } \
 </style>' ).appendTo( $('head') );
 		}
 
@@ -576,7 +577,9 @@ div.inp-default { color: #666; font-size: 0.80em; } \
 		$el = $('<button id="save-settings" class="btn btn-sm btn-primary">Save Changes</button>');
 		$el.on( 'click.sonos', handleSaveSettingsClick ).appendTo( $col );
 
-		$( '<div class="sonos-footer">Sonos Plugin version ' + pluginVersion + '</div>' )
+		var cv = api.getDeviceState(device, Sonos.SONOS_SYS_SID, "PluginVersion", { dynamic:false }) || "";
+
+		$( '<div class="sonos-footer">Sonos Plugin version ' + cv + "; JSUI " + pluginVersion + '</div>' )
 			.appendTo( $container );
 	}
 
