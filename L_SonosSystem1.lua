@@ -2514,6 +2514,14 @@ setup = function(zoneDevice, flag)
 	D("setup(%1,%2)", zoneDevice, flag)
 	local changed = false
 
+	if getVarNumeric( "Enabled", 1, pluginDevice, SONOS_SYS_SID ) == 0 then
+		setVar(SONOS_ZONE_SID, "SonosOnline", "0", zoneDevice)
+		setVar(UPNP_AVTRANSPORT_SID, "CurrentStatus", "Offline", zoneDevice)
+		setVar(SONOS_ZONE_SID, "ProxyUsed", "", zoneDevice) -- plugin variable??? different per zone?
+		E("Can't start #%1; plugin is disabled", zoneDevice)
+		return false
+	end
+
 	local uuid = luup.attr_get( "altid", zoneDevice ) or error("Invalid UUID on device "..zoneDevice) -- "shouldn't happen"
 	D("setup() uuid %1 device %2", uuid, luup.devices[zoneDevice])
 	upnp.resetServices( uuid )
