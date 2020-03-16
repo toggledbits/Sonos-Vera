@@ -8,7 +8,7 @@
 module( "L_SonosSystem1", package.seeall )
 
 PLUGIN_NAME = "Sonos"
-PLUGIN_VERSION = "2.0develop-20075.1700"
+PLUGIN_VERSION = "2.0develop-20075.2100"
 PLUGIN_ID = 4226
 
 local _CONFIGVERSION = 19298
@@ -113,6 +113,7 @@ local playbackCxt = {}
 local sayPlayback = {}
 
 -- Zone group topology (set by updateZoneInfo())
+local systemReady = false
 local zoneInfo = false
 local masterZones = {}
 
@@ -2781,55 +2782,57 @@ local function deferredStartup(device)
 		scheduler.Task:new("checkProxy", device, checkProxy, { device }):delay(300)
 	end
 
-	-- Start zones
+	-- Find 2.x zone children
 	Zones = {}
-	local reload = false
 	local count, started = 0, 0
 	local children = {}
 	for k,v in pairs( luup.devices ) do
-		if v.device_type == SONOS_ZONE_DEVICE_TYPE then
+		if v.device_type == SONOS_ZONE_DEVICE_TYPE and v.device_num_parent == device then
 			local zid = v.id or ""
+			D("deferredStartup() child %1 (#%2) zone %3", v.description, k, zid)
+			children[k] = v
+			Zones[zid] = k
+			count = count + 1
+			setVar(UPNP_AVTRANSPORT_SID, "CurrentStatus", "Starting...", k)
 			local ip = luup.attr_get( "ip", k ) or ""
-			D("deferredStartup() found child %1 zoneid %3 parent %2", k, v.device_num_parent, zid)
-			if v.device_num_parent == 0 then
-				-- Old-style standalone; convert to child
-				W("Adopting standalone (old) Sonos device by new parent %1", device)
-				luup.attr_set( "impl_file", "", k )
-				luup.attr_set( "id_parent", device, k )
-				luup.attr_set( "invisible", 0, k )
-				luup.attr_set( "altid", getVar( "SonosID", tostring(k), k, UPNP_DEVICE_PROPERTIES_SID ), k )
+			if ip ~= "" then
 				setVar( SONOS_ZONE_SID, "SonosIP", ip, k )
 				luup.attr_set( "mac", "", k )
 				luup.attr_set( "ip", "", k )
-				luup.set_failure( 1, k )
-				reload = true
-			elseif v.device_num_parent == device then
-				D("deferredStartup() child %1 (#%2) zone %3", v.description, k, zid)
-				children[k] = v
-				Zones[zid] = k
-				count = count + 1
-				setVar(UPNP_AVTRANSPORT_SID, "CurrentStatus", "Starting...", k)
-				if ip ~= "" then
-					setVar( SONOS_ZONE_SID, "SonosIP", ip, k )
-					luup.attr_set( "mac", "", k )
-					luup.attr_set( "ip", "", k )
-				end
-			else
-				W("Sonos zone device %1 (#%2) non-child of %3; skipping.", v.description, k, device)
 			end
 		end
 	end
 
-	-- Disable old plugin implementation if present.
-	local ipath = getInstallPath()
-	if file_exists( ipath .. "I_Sonos1.xml.lzo" ) or file_exists( ipath .. "I_Sonos1.xml" ) then
-		W("Removing old Sonos plugin implementations files (for standalone devices, no longer used)")
-		os.remove(ipath.."I_Sonos1.xml.lzo")
-		os.remove(ipath.."I_Sonos1.xml")
-	end
-	if file_exists( ipath .. "L_Sonos1.lua.lzo" ) or file_exists( ipath .. "L_Sonos1.lua" ) then
-		os.remove(ipath.."L_Sonos1.lua.lzo")
-		os.remove(ipath.."L_Sonos1.lua")
+	-- Look for and upgrade any 1.x zones remaining that don't have 2.x devices
+	local reload = false
+	for k,v in pairs( luup.devices ) do
+		if v.device_type == SONOS_ZONE_DEVICE_TYPE and v.device_num_parent == 0 then
+			local zid = getVar( "SonosID", "", k, UPNP_DEVICE_PROPERTIES_SID )
+			if zid ~= "" and not Zones[zid] then
+				-- Old-style standalone; convert to child
+				zid = getVar( "SonosID", tostring(k), k, UPNP_DEVICE_PROPERTIES_SID )
+				W("Adopting standalone (old) Sonos device %2 (#%3) %4 by new parent %1", device, v.description, k, zid)
+				luup.attr_set( "altid", zid, k )
+				luup.attr_set( "id_parent", device, k )
+				setVar( SONOS_ZONE_SID, "SonosIP", ip, k )
+				reload = true
+			else
+				-- Leave orphan zombied.
+				W("Leaving %1 (#%2) as orphan; it can be safely deleted; it has been replaced by #%3",
+					v.description, k, Zones[zid])
+				setVar(UPNP_AVTRANSPORT_SID, "CurrentStatus", "DELETE ME!", k)
+			end
+			luup.attr_set( "invisible", 0, k )
+			luup.attr_set( "impl_file", "", k )
+			-- Fix IP always (even orphan, because it can be adopted by removing new device + reload)
+			local ip = luup.attr_get( "ip", k ) or ""
+			if ip ~= "" then
+				setVar( SONOS_ZONE_SID, "SonosIP", ip, k )
+				luup.attr_set( "mac", "", k )
+				luup.attr_set( "ip", "", k )
+			end
+			luup.set_failure( 1, k )
+		end
 	end
 	-- And reload if devices were upgraded.
 	if reload then
@@ -2838,6 +2841,9 @@ local function deferredStartup(device)
 		luup.reload()
 		return false, "Reload required", MSG_CLASS
 	end
+
+	-- At this point, we can be considered ready. We want to allow discovery now.
+	systemReady = true
 
 	-- If there are no children, launch discovery and see if we can find some.
 	-- Otherwise, check the zone topology to see if there are zones we don't have.
@@ -2968,6 +2974,7 @@ function startup( lul_device )
 	L("Starting version %1 device #%2 (%3)", PLUGIN_VERSION, lul_device,
 		luup.devices[lul_device].description)
 
+	systemReady = false
 	isOpenLuup = luup.openLuup ~= nil
 	pluginDevice = lul_device
 
@@ -2989,6 +2996,18 @@ function startup( lul_device )
 
 	if file_exists( getInstallPath() .. "L_SonosSystem1.lua" ) and file_exists( getInstallPath() .. "L_SonosSystem1.lua.lzo" ) then
 		return false, "Invalid install files", MSG_CLASS
+	end
+
+	-- Disable old plugin implementation if present.
+	local ipath = getInstallPath()
+	if file_exists( ipath .. "I_Sonos1.xml.lzo" ) or file_exists( ipath .. "I_Sonos1.xml" ) then
+		W("Removing old Sonos plugin implementations files (for standalone devices, no longer used)")
+		os.remove(ipath.."I_Sonos1.xml.lzo")
+		os.remove(ipath.."I_Sonos1.xml")
+	end
+	if file_exists( ipath .. "L_Sonos1.lua.lzo" ) or file_exists( ipath .. "L_Sonos1.lua" ) then
+		os.remove(ipath.."L_Sonos1.lua.lzo")
+		os.remove(ipath.."L_Sonos1.lua")
 	end
 
 	local enabled = initVar( "Enabled", "1", lul_device, SONOS_SYS_SID )
@@ -3742,6 +3761,7 @@ end
 
 function actionSonosStartDiscovery( lul_device, lul_settings ) -- luacheck: ignore 212
 	assert(luup.devices[lul_device].device_type == SONOS_SYS_DEVICE_TYPE)
+	assert(systemReady, "System is not yet ready")
 	setVariableValue(SONOS_SYS_SID, "DiscoveryMessage", "Scanning...", lul_device)
 	local xml, devices = upnp.scanUPnPDevices("urn:schemas-upnp-org:device:ZonePlayer:1", { "modelName", "roomName", "displayName" })
 	setVariableValue(SONOS_SYS_SID, "DiscoveryResult", xml, lul_device)
@@ -3827,6 +3847,8 @@ function actionSonosStartDiscovery( lul_device, lul_settings ) -- luacheck: igno
 end
 
 function actionSonosSystemIncludeIP( lul_device, lul_settings )
+	D("actionSonosSystemIncludeIP(%1,%2)", lul_device, lul_settings)
+	assert(systemReady, "System is not yet ready")
 	local ipaddr,rest = string.match( lul_settings.IPAddress or "", "^(%d+%.%d+%.%d+%.%d+)(.*)" )
 	if not ipaddr then
 		E("IncludeIP action: invalid IP address %1", lul_settings.IPAddress)
