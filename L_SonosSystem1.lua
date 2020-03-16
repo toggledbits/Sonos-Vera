@@ -428,6 +428,9 @@ logToFile = function(str, level)
 		logFile = io.open(lfn, "a")
 		-- Yes, we leave nil if it can't be opened, and therefore don't
 		-- keep trying to open as a result. By design.
+		if not isOpenLuup and luup.short_version then
+			os.execute( "ln -sf '" .. lfn .. "' /www/sonos/" )
+		end
 	end
 	if logFile then
 		local maxsizek = getVarNumeric("MaxLogSize", 512, pluginDevice, SONOS_SYS_SID)
@@ -2789,7 +2792,7 @@ local function deferredStartup(device)
 	for k,v in pairs( luup.devices ) do
 		if v.device_type == SONOS_ZONE_DEVICE_TYPE and v.device_num_parent == device then
 			local zid = v.id or ""
-			D("deferredStartup() child %1 (#%2) zone %3", v.description, k, zid)
+			L("Found child %1 (#%2) zone %3", v.description, k, zid)
 			children[k] = v
 			Zones[zid] = k
 			count = count + 1
@@ -2811,15 +2814,15 @@ local function deferredStartup(device)
 			if zid ~= "" and not Zones[zid] then
 				-- Old-style standalone; convert to child
 				zid = getVar( "SonosID", tostring(k), k, UPNP_DEVICE_PROPERTIES_SID )
-				W("Adopting standalone (old) Sonos device %2 (#%3) %4 by new parent %1", device, v.description, k, zid)
+				W("Adopting v1.x device %2 (#%3) %4 by new parent %1", device, v.description, k, zid)
 				luup.attr_set( "altid", zid, k )
 				luup.attr_set( "id_parent", device, k )
 				setVar( SONOS_ZONE_SID, "SonosIP", ip, k )
 				reload = true
 			else
 				-- Leave orphan zombied.
-				W("Leaving %1 (#%2) as orphan; it can be safely deleted; it has been replaced by #%3",
-					v.description, k, Zones[zid])
+				W("Leaving old v1.x device %1 (#%2) %4 as orphan; it can be safely deleted; it has been replaced by #%3",
+					v.description, k, Zones[zid], zid)
 				setVar(UPNP_AVTRANSPORT_SID, "CurrentStatus", "DELETE ME!", k)
 			end
 			luup.attr_set( "invisible", 0, k )
@@ -2918,7 +2921,7 @@ local function deferredStartup(device)
 	-- Start zones
 	-- ??? Do we even need to bother to start satellites?
 	for uuid,dev in pairs( Zones ) do
-		L("Starting zone %1: %2 (#%3)", uuid, luup.devices[dev].description, dev)
+		L("Starting %2 (#%3) zone %1", uuid, luup.devices[dev].description, dev)
 		local status,success = pcall( startZone, dev, uuid )
 		if status and success then
 			luup.set_failure( 0, dev )
