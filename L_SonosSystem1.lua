@@ -8,14 +8,16 @@
 module( "L_SonosSystem1", package.seeall )
 
 PLUGIN_NAME = "Sonos"
-PLUGIN_VERSION = "2.0develop-20076.1100"
+PLUGIN_VERSION = "2.0develop-20076.1920"
 PLUGIN_ID = 4226
 PLUGIN_URL = "https://github.com/toggledbits/Sonos-Vera"
 
-local _CONFIGVERSION = 19298
+local _CONFIGVERSION = 20076
 local _UIVERSION = 20073
 
 local DEBUG_MODE = false	-- Don't hardcode true--use state variable config
+
+local DEVELOPMENT = true	-- ??? Dev: false for production
 
 local MIN_UPNP_VERSION = 20074	-- Minimum version of L_SonosUPnP that works
 local MIN_TTS_VERSION = 20072	-- Minimum version of L_SonosTTS that works
@@ -2859,7 +2861,7 @@ local function deferredStartup(device)
 				luup.attr_set( "mac", "", k )
 				luup.attr_set( "ip", "", k )
 			end
-			luup.attr_set( "plugin", "", k ) -- temp 20076, should only be set (if needed) on master, never children
+			if DEVELOPMENT then luup.attr_set( "plugin", "", k ) end -- temp 20076, should only be set (if needed) on master, never children
 		end
 	end
 
@@ -3032,6 +3034,17 @@ local function waitForProxy( task, device, tries )
 	task:delay(3, nil, { device, tries })
 end
 
+local function checkPluginInstalled()
+	local _,_,_,ra = luup.call_action( "urn:micasaverde-com:serviceId:HomeAutomationGateway1", "GetUserData", { DataFormat="json" }, 0 ) -- luacheck: ignore 311
+	ra = tostring( ra.UserData )
+	local json = require "dkjson"
+	ra = json.decode( ra )
+	for _,v in ipairs( ra.InstalledPlugins2 or {} ) do
+		if v.id == PLUGIN_ID then return tonumber(v.Version) or -1 end
+	end
+	return false
+end
+
 function startup( lul_device )
 	L("Starting version %1 device #%2 (%3)", PLUGIN_VERSION, lul_device,
 		luup.devices[lul_device].description)
@@ -3056,6 +3069,20 @@ function startup( lul_device )
 	setVar( SONOS_SYS_SID, "_UIV", _UIVERSION, lul_device )
 	setVar( SONOS_SYS_SID, "Message", "Starting...", lul_device )
 	setVar( SONOS_SYS_SID, "DiscoveryMessage", "Starting, please wait.", lul_device )
+
+	local installVersion = checkPluginInstalled()
+	if installVersion and installVersion <= 28820 then
+		E("The App Marketplace version of the v1.x plugin is installed! You must uninstall it to run this version %1", PLUGIN_VERSION)
+		luup.set_failure( 1, lul_device )
+		luup.attr_set( "plugin", "", lul_device )
+		for k,v in pairs( luup.devices ) do
+			if v.device_type == SONOS_ZONE_DEVICE_TYPE then
+				luup.attr_set( "plugin", "", k )
+			end
+		end
+		setVar( SONOS_SYS_SID, "Message", "Version conflict!", lul_device )
+		return false, "Version conflict!", PLUGIN_NAME
+	end
 
 	local ipath = getInstallPath()
 	for _,v in ipairs{ "D_Sonos1.json", "D_Sonos1.xml", "D_SonosSystem1.json", "D_SonosSystem1.xml",
@@ -3097,6 +3124,7 @@ function startup( lul_device )
 			local zid = v.id or ""
 			local ip = luup.attr_get( "ip", k ) or ""
 			D("startup() found child %1 zoneid %3 parent %2", k, v.device_num_parent, zid)
+			if DEVELOPMENT then luup.attr_set( "plugin", "", k ) end -- ??? DEV remove for production
 			if v.device_num_parent == lul_device then
 				setVar(UPNP_AVTRANSPORT_SID, "CurrentStatus", "Offline; waiting for proxy...", k)
 				Zones[zid] = k
@@ -3106,6 +3134,10 @@ function startup( lul_device )
 					luup.attr_set( "ip", "", k )
 				end
 			end
+		elseif v.device_type == SONOS_SYS_DEVICE_TYPE and k ~= lul_device then
+			E("Duplicate Sonos System master device!")
+			luup.set_failure( 1, lul_device )
+			return false, "Duplicate master device!", PLUGIN_NAME
 		end
 	end
 
@@ -5325,42 +5357,6 @@ end
 
 --]]
 
-local function getDevice( dev, pdev, v )
-	if v == nil then v = luup.devices[dev] end
-	if json == nil then json = require("dkjson") end
-	local devinfo = {
-		  devNum=dev
-		, ['type']=v.device_type
-		, description=v.description or ""
-		, room=v.room_num or 0
-		, udn=v.udn or ""
-		, id=v.id
-		, parent=v.device_num_parent or pdev
-		, ['device_json'] = luup.attr_get( "device_json", dev )
-		, ['impl_file'] = luup.attr_get( "impl_file", dev )
-		, ['device_file'] = luup.attr_get( "device_file", dev )
-		, manufacturer = luup.attr_get( "manufacturer", dev ) or ""
-		, model = luup.attr_get( "model", dev ) or ""
-		, plugin = luup.attr_get( "plugin", dev )
-	}
-	local rc,t,httpStatus,uri
-	if isOpenLuup then
-		uri = "http://localhost:3480/data_request?id=status&DeviceNum=" .. dev .. "&output_format=json"
-	else
-		uri = "http://localhost/port_3480/data_request?id=status&DeviceNum=" .. dev .. "&output_format=json"
-	end
-	rc,t,httpStatus = luup.inet.wget(uri, 15)
-	if httpStatus ~= 200 or rc ~= 0 then
-		devinfo['_comment'] = string.format( 'State info could not be retrieved, rc=%s, http=%s, UnsafeLua=%s', tostring(rc), tostring(httpStatus), tostring(unsafeLua) )
-		return devinfo
-	end
-	local d = json.decode(t)
-	local key = "Device_Num_" .. dev
-	if d ~= nil and d[key] ~= nil and d[key].states ~= nil then d = d[key].states else d = nil end
-	devinfo.states = d or {}
-	return devinfo
-end
-
 -- A "safer" JSON encode for Lua structures that may contain recursive references.
 -- This output is intended for display ONLY, it is not to be used for data transfer.
 local stringify
@@ -5456,19 +5452,31 @@ function handleRequest( lul_request, lul_parameters, lul_outputformat )
 			},
 			devices={}
 		}
-		for k,v in pairs( luup.devices ) do
-			if v.device_type == SONOS_SYS_DEVICE_TYPE or v.device_type == SONOS_ZONE_DEVICE_TYPE
-					or v.device_num_parent == pluginDevice then
-				local devinfo = getDevice( k, pluginDevice, v ) or {}
-				if k == pluginDevice then
-					devinfo.zoneInfo = zoneInfo
-					devinfo.Zones = Zones
-					devinfo.systemReady = systemReady
-					devinfo.metaDataKeys = metaDataKeys
-					devinfo.sonosServices = sonosServices
-					devinfo.tickTasks = scheduler.getOwnerTasks()
+		local _,_,_,ra = luup.call_action( "urn:micasaverde-com:serviceId:HomeAutomationGateway1", "GetUserData", { DataFormat="json" }, 0 ) -- luacheck: ignore 311
+		ra = tostring( ra.UserData )
+		local json = require "dkjson"
+		ra = json.decode( ra )
+		if ra then
+			for _,v in ipairs( ra.devices or {} ) do
+				if v.device_type == SONOS_SYS_DEVICE_TYPE or v.device_type == SONOS_ZONE_DEVICE_TYPE
+						or v.id_parent == pluginDevice then
+					if v.id == pluginDevice then
+						v.zoneInfo = zoneInfo
+						v.Zones = Zones
+						v.systemReady = systemReady
+						v.metaDataKeys = metaDataKeys
+						v.sonosServices = sonosServices
+						v.tickTasks = scheduler.getOwnerTasks()
+					end
+					table.insert( st.devices, v )
 				end
-				table.insert( st.devices, devinfo )
+			end
+			st.luup = {}
+			st.luup.InstalledPlugins2 = ra.InstalledPlugins2
+			for k,v in pairs( ra ) do
+				if string.match( ":number:string:boolean:", type(v) ) then
+					st.luup[k] = v
+				end
 			end
 		end
 		return alt_json_encode( st ), "application/json"
