@@ -5451,6 +5451,7 @@ function handleRequest( lul_request, lul_parameters, lul_outputformat )
 				isOpenLuup=isOpenLuup,
 				isALTUI=isALTUI,
 				hardware=luup.attr_get("model",0),
+				modelID=luup.modelID,
 				lua=tostring((_G or {})._VERSION)
 			},
 			devices={}
@@ -5469,6 +5470,28 @@ function handleRequest( lul_request, lul_parameters, lul_outputformat )
 				end
 				table.insert( st.devices, devinfo )
 			end
+		end
+		return alt_json_encode( st ), "application/json"
+
+	elseif action == "files" then
+		local st = {}
+		local fd = { [getInstallPath()]=true, ["/etc/cmh"]=true }
+		fd[TTSBasePath] = true
+		local function flist( dir, r )
+			r = r or {}
+			local f = io.popen( "ls -lR '"..dir.."'" )
+			r[dir] = {}
+			if f then
+				repeat
+					local line = f:read("*l")
+					if line then table.insert( r[dir], line ) end
+				until not line
+				f:close()
+			end
+			return r
+		end
+		for d in pairs( fd ) do
+			st = flist( d, st )
 		end
 		return alt_json_encode( st ), "application/json"
 
