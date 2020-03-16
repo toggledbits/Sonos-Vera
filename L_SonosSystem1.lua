@@ -8,8 +8,9 @@
 module( "L_SonosSystem1", package.seeall )
 
 PLUGIN_NAME = "Sonos"
-PLUGIN_VERSION = "2.0develop-20075.2100"
+PLUGIN_VERSION = "2.0develop-20075.1100"
 PLUGIN_ID = 4226
+PLUGIN_URL = "https://github.com/toggledbits/Sonos-Vera"
 
 local _CONFIGVERSION = 19298
 local _UIVERSION = 20073
@@ -23,6 +24,7 @@ local MSG_CLASS = "Sonos"
 local isOpenLuup = false
 local pluginDevice
 local logFile = false
+local unsafeLua = true
 
 local taskHandle = -1 -- luup.task use
 local TASK_ERROR = 2
@@ -2767,10 +2769,64 @@ local function startZone( zoneDevice )
 	return true
 end
 
+local function getFreeSpace( dirname )
+	local f = io.popen( "df -k '"..dirname.."'" )
+	if f then
+		repeat
+			local l = f:read("*l")
+			if l then
+				local freek,pct = l:match( "%d+%s+%d+%s+(%d+)%s+(%d+)%%" )
+				if freek then
+					freek = tonumber( freek )
+					pct = tonumber( pct )
+					f:close()
+					return freek,pct
+				end
+			end
+		until not l
+		f:close()
+	end
+	return nil
+end
+
 local function runMasterTick( task )
 	D("runMasterTick(%1)", task)
-	-- At the moment, nothing to do, so don't reschedule, just go away.
-	task:close()
+	task:delay( 900 ) -- run again in 15 minutes unless scheduled otherwise
+
+	-- Check disk space
+	local panic = false
+	local inst = getInstallPath()
+	local f,p = getFreeSpace( inst )
+	D("runMasterTick() %3 has %1K free at %2%%", f, p, inst)
+	if f and f < 1024 then
+		W("WARNING! Less than 1MB free space available on %2 (%1K)", f, inst)
+		panic = true
+	end
+	if p and p >= 90 then
+		W("WARNING! Free space on %2 is critical (%1%% full)", p, inst)
+		panic = true
+	end
+	if luup.short_version then
+		f,p = getFreeSpace( "/www/sonos/" )
+		D("runMasterTick() /www/sonos has %1K free at %2%%", f, p)
+		if f and f < 1024 then
+			W("WARNING! Less than 1MB free space available on /www/sonos (%1K)", f)
+			panic = true
+		end
+		if p and p >= 90 then
+			W("WARNING! Free space on /www/sonos is critical (%1%% full)", p)
+			panic = true
+		end
+	end
+	if panic then
+		setVar( SONOS_SYS_SID, "Message", "CHECK SYSTEM -- LOW DISK SPACE!", pluginDevice )
+		luupTask( "CHECK SYSTEM -- LOW DISK SPACE", TASK_ERROR_PERM )
+		if logFile then
+			logFile:write("Closing log--low disk space!\n")
+			logFile:close()
+			logFile = nil -- set to nil so no re-open
+		end
+	end
 end
 
 -- Complete startup tasks. Hopefully everything is initialized by now.
@@ -2803,6 +2859,7 @@ local function deferredStartup(device)
 				luup.attr_set( "mac", "", k )
 				luup.attr_set( "ip", "", k )
 			end
+			luup.attr_set( "plugin", "", k ) -- temp 20076, should only be set (if needed) on master, never children
 		end
 	end
 
@@ -2827,6 +2884,7 @@ local function deferredStartup(device)
 			end
 			luup.attr_set( "invisible", 0, k )
 			luup.attr_set( "impl_file", "", k )
+			luup.attr_set( "plugin", "", k )
 			-- Fix IP always (even orphan, because it can be adopted by removing new device + reload)
 			local ip = luup.attr_get( "ip", k ) or ""
 			if ip ~= "" then
@@ -2854,7 +2912,8 @@ local function deferredStartup(device)
 		if count == 0 then
 			L"No children; launching discovery to see who I can find."
 			luup.call_action( SONOS_SYS_SID, "StartSonosDiscovery", {}, device )
-		elseif zoneInfo then
+		elseif zoneInfo and next( zoneInfo.zones ) then
+			-- ??? TO-DO: this may be a good opportunity to handle child devices no longer in zoneInfo
 			D("deferredStartup() taking inventory")
 			local newZones = {}
 			for uuid in pairs( zoneInfo.zones ) do
@@ -2980,6 +3039,7 @@ function startup( lul_device )
 	systemReady = false
 	isOpenLuup = luup.openLuup ~= nil
 	pluginDevice = lul_device
+	unsafeLua = isOpenLuup or ( luup.attr_get( "UnsafeLua", 0 ) or "1" ) == "1"
 
 	local debugLogs = getVarNumeric("DebugLogs", 0, lul_device, SONOS_SYS_SID)
 	setDebugLogs(debugLogs)
@@ -2997,14 +3057,22 @@ function startup( lul_device )
 	setVar( SONOS_SYS_SID, "Message", "Starting...", lul_device )
 	setVar( SONOS_SYS_SID, "DiscoveryMessage", "Starting, please wait.", lul_device )
 
-	if file_exists( getInstallPath() .. "L_SonosSystem1.lua" ) and file_exists( getInstallPath() .. "L_SonosSystem1.lua.lzo" ) then
-		return false, "Invalid install files", MSG_CLASS
+	local ipath = getInstallPath()
+	for _,v in ipairs{ "D_Sonos1.json", "D_Sonos1.xml", "D_SonosSystem1.json", "D_SonosSystem1.xml",
+						"I_SonosSystem1.xml", "J_Sonos1.js", "J_SonosSystem1.js", "L_SonosSystem1.lua",
+						"L_SonosTTS.lua", "L_SonosUPnP.lua", "S_Sonos1.xml", "S_SonosAVTransport1.xml",
+						"S_SonosGroupRenderingControl1.xml", "S_SonosRenderingControl1.xml",
+						"S_SonosSystem1.xml" } do
+		if file_exists( ipath .. v ) and file_exists( ipath .. v .. ".lzo" ) then
+			E("Found compressed and uncompressed versions of %1; remove all plugin files and reinstall.", v)
+			setVar( SONOS_SYS_SID, "Message", "Invalid install files (see log)", lul_device )
+			return false, "Invalid install files (see log)", MSG_CLASS
+		end
 	end
 
 	-- Disable old plugin implementation if present.
-	local ipath = getInstallPath()
 	if file_exists( ipath .. "I_Sonos1.xml.lzo" ) or file_exists( ipath .. "I_Sonos1.xml" ) then
-		W("Removing old Sonos plugin implementations files (for standalone devices, no longer used)")
+		W("Removing old Sonos plugin implementation files (for standalone devices, no longer used)")
 		os.remove(ipath.."I_Sonos1.xml.lzo")
 		os.remove(ipath.."I_Sonos1.xml")
 	end
@@ -3030,7 +3098,7 @@ function startup( lul_device )
 			local ip = luup.attr_get( "ip", k ) or ""
 			D("startup() found child %1 zoneid %3 parent %2", k, v.device_num_parent, zid)
 			if v.device_num_parent == lul_device then
-				setVar(UPNP_AVTRANSPORT_SID, "CurrentStatus", "Offline; waiting for startup...", k)
+				setVar(UPNP_AVTRANSPORT_SID, "CurrentStatus", "Offline; waiting for proxy...", k)
 				Zones[zid] = k
 				if ip ~= "" then
 					setVar( SONOS_ZONE_SID, "SonosIP", ip, k )
@@ -3592,7 +3660,7 @@ function actionSonosSay( lul_device, lul_settings )
 	if ( tts.VERSION or 0 ) < MIN_TTS_VERSION then
 		W"The L_SonosTTS module installed may not be compatible with this version of the plugin core."
 	end
-	if ( luup.attr_get( 'UnsafeLua', 0 ) or "1" ) ~= "1" and not isOpenLuup then
+	if not unsafeLua then
 		W"Some engines used with the TTS module require that 'Enable Unsafe Lua' (under 'Users & Account Info > Security') be enabled in your controller settings. If your TTS actions fail, try enabling this setting."
 	end
 	-- ??? Request handler doesn't unescape?
@@ -5257,6 +5325,81 @@ end
 
 --]]
 
+local function getDevice( dev, pdev, v )
+	if v == nil then v = luup.devices[dev] end
+	if json == nil then json = require("dkjson") end
+	local devinfo = {
+		  devNum=dev
+		, ['type']=v.device_type
+		, description=v.description or ""
+		, room=v.room_num or 0
+		, udn=v.udn or ""
+		, id=v.id
+		, parent=v.device_num_parent or pdev
+		, ['device_json'] = luup.attr_get( "device_json", dev )
+		, ['impl_file'] = luup.attr_get( "impl_file", dev )
+		, ['device_file'] = luup.attr_get( "device_file", dev )
+		, manufacturer = luup.attr_get( "manufacturer", dev ) or ""
+		, model = luup.attr_get( "model", dev ) or ""
+		, plugin = luup.attr_get( "plugin", dev )
+	}
+	local rc,t,httpStatus,uri
+	if isOpenLuup then
+		uri = "http://localhost:3480/data_request?id=status&DeviceNum=" .. dev .. "&output_format=json"
+	else
+		uri = "http://localhost/port_3480/data_request?id=status&DeviceNum=" .. dev .. "&output_format=json"
+	end
+	rc,t,httpStatus = luup.inet.wget(uri, 15)
+	if httpStatus ~= 200 or rc ~= 0 then
+		devinfo['_comment'] = string.format( 'State info could not be retrieved, rc=%s, http=%s, UnsafeLua=%s', tostring(rc), tostring(httpStatus), tostring(unsafeLua) )
+		return devinfo
+	end
+	local d = json.decode(t)
+	local key = "Device_Num_" .. dev
+	if d ~= nil and d[key] ~= nil and d[key].states ~= nil then d = d[key].states else d = nil end
+	devinfo.states = d or {}
+	return devinfo
+end
+
+-- A "safer" JSON encode for Lua structures that may contain recursive references.
+-- This output is intended for display ONLY, it is not to be used for data transfer.
+local stringify
+local function alt_json_encode( st, seen )
+	seen = seen or {}
+	str = "{"
+	local comma = false
+	for k,v in pairs(st) do
+		str = str .. ( comma and "," or "" )
+		comma = true
+		str = str .. '"' .. k .. '":'
+		if type(v) == "table" then
+			if seen[v] then str = str .. '"(recursion)"'
+			else
+				seen[v] = k
+				str = str .. alt_json_encode( v, seen )
+			end
+		else
+			str = str .. stringify( v, seen )
+		end
+	end
+	str = str .. "}"
+	return str
+end
+
+-- Stringify a primitive type
+stringify = function( v, seen )
+	if v == nil then
+		return "(nil)"
+	elseif type(v) == "number" or type(v) == "boolean" then
+		return tostring(v)
+	elseif type(v) == "table" then
+		return alt_json_encode( v, seen )
+	elseif type(v) == "string" then
+		v = v:gsub("\n", "\\n"):gsub("\t", "\\t")
+	end
+	return string.format( "%q", tostring(v) )
+end
+
 function handleRequest( lul_request, lul_parameters, lul_outputformat )
 	D("request(%1,%2,%3) luup.device=%4", lul_request, lul_parameters, lul_outputformat, luup.device)
 	local action = lul_parameters['action'] or lul_parameters['command'] or ""
@@ -5282,6 +5425,52 @@ function handleRequest( lul_request, lul_parameters, lul_outputformat )
 	elseif action == "zoneinfo" then
 		local json = require "dkjson"
 		return json.encode( zoneInfo ), "application/json"
+
+	elseif action == "status" then
+		local st = {
+			name=PLUGIN_NAME,
+			plugin=PLUGIN_ID,
+			version=PLUGIN_VERSION,
+			configversion=_CONFIGVERSION,
+			uiversion=_UIVERSION,
+			MIN_UPNP_VERSION = MIN_UPNP_VERSION,
+			MIN_TTS_VERSION = MIN_TTS_VERSION,
+			UPNP_VERSION = (upnp or {}).VERSION,
+			TTS_VERSION = (tts or {}).VERSION,
+			TTSBasePath = TTSBasePath,
+			TTSBaseURL = TTSBaseURL,
+			TTSChime = TTSChime,
+			author="Patrick H. Rigney (rigpapa)",
+			url=PLUGIN_URL,
+			['type']=SONOS_SYS_DEVICE_TYPE,
+			responder=luup.device,
+			timestamp=os.time(),
+			system = {
+				version=luup.version,
+				short_version=luup.short_version,
+				isOpenLuup=isOpenLuup,
+				isALTUI=isALTUI,
+				hardware=luup.attr_get("model",0),
+				lua=tostring((_G or {})._VERSION)
+			},
+			devices={}
+		}
+		for k,v in pairs( luup.devices ) do
+			if v.device_type == SONOS_SYS_DEVICE_TYPE or v.device_type == SONOS_ZONE_DEVICE_TYPE
+					or v.device_num_parent == pluginDevice then
+				local devinfo = getDevice( k, pluginDevice, v ) or {}
+				if k == pluginDevice then
+					devinfo.zoneInfo = zoneInfo
+					devinfo.Zones = Zones
+					devinfo.systemReady = systemReady
+					devinfo.metaDataKeys = metaDataKeys
+					devinfo.sonosServices = sonosServices
+					devinfo.tickTasks = scheduler.getOwnerTasks()
+				end
+				table.insert( st.devices, devinfo )
+			end
+		end
+		return alt_json_encode( st ), "application/json"
 
 	else
 		return "ERROR\nInvalid request action", "text/plain"
