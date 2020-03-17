@@ -8,7 +8,7 @@
 module( "L_SonosSystem1", package.seeall )
 
 PLUGIN_NAME = "Sonos"
-PLUGIN_VERSION = "2.0develop-20076.2330"
+PLUGIN_VERSION = "2.0develop-20077.1800"
 PLUGIN_ID = 4226
 PLUGIN_URL = "https://github.com/toggledbits/Sonos-Vera"
 
@@ -2666,26 +2666,41 @@ local function zoneRunOnce( dev )
 		initVar( "PollDelays", "15,60", dev, SONOS_ZONE_SID )
 	end
 
-	initVar( "TTSChime", "", dev, SONOS_ZONE_SID )
-	initVar( "UseTTSCache", "", dev, SONOS_ZONE_SID )
-	initVar( "TTSCacheMaxAge", "", dev, SONOS_ZONE_SID )
 	initVar( "DesignatedMaster", "", dev, SONOS_ZONE_SID )
 
-	deleteVar( UPNP_MR_CONTENT_DIRECTORY_SID, "SavedQueues", dev )
-	deleteVar( UPNP_MR_CONTENT_DIRECTORY_SID, "Favorites", dev )
-	deleteVar( UPNP_MR_CONTENT_DIRECTORY_SID, "FavoritesRadios", dev )
-	deleteVar( UPNP_ZONEGROUPTOPOLOGY_SID, "ZoneGroupState", dev )
-	deleteVar( SONOS_ZONE_SID, "SonosServicesKeys", dev )
-	deleteVar( SONOS_ZONE_SID, "DefaultLanguageTTS", dev )
-	deleteVar( SONOS_ZONE_SID, "DefaultEngineTTS", dev )
-	deleteVar( SONOS_ZONE_SID, "GoogleTTSServerURL", dev )
-	deleteVar( SONOS_ZONE_SID, "OSXTTSServerURL", dev )
-	deleteVar( SONOS_ZONE_SID, "ResponsiveVoiceTTSServerURL", dev )
-	deleteVar( SONOS_ZONE_SID, "TTSBasePath", dev )
-	deleteVar( SONOS_ZONE_SID, "TTSBaseURL", dev )
-	deleteVar( SONOS_ZONE_SID, "TTSRate", dev )
-	deleteVar( SONOS_ZONE_SID, "TTSPitch", dev )
-	deleteVar( SONOS_ZONE_SID, "TTSChimeDuration", dev )
+	if DEVELOPMENT or s < 20077 then
+		deleteVar( SONOS_ZONE_SID, "PluginVersion", dev )
+		deleteVar( SONOS_ZONE_SID, "RouterIp", dev )
+		deleteVar( SONOS_ZONE_SID, "RouterPort", dev )
+		deleteVar( SONOS_ZONE_SID, "CheckStateRate", dev )
+		deleteVar( SONOS_ZONE_SID, "DebugLogs", dev )
+		deleteVar( SONOS_ZONE_SID, "FetchQueue", dev )
+		deleteVar( SONOS_ZONE_SID, "DiscoveryPatchInstalled", dev )
+		deleteVar( SONOS_ZONE_SID, "MaryTTSServerURL", dev )
+		deleteVar( SONOS_ZONE_SID, "MicrosoftClientId", dev )
+		deleteVar( SONOS_ZONE_SID, "MicrosoftClientSecret", dev )
+		deleteVar( SONOS_ZONE_SID, "DiscoveryPatchInstalled", dev )
+		deleteVar( SONOS_ZONE_SID, "DiscoveryPatchInstalled", dev )
+		deleteVar( SONOS_ZONE_SID, "DiscoveryPatchInstalled", dev )
+		deleteVar( UPNP_MR_CONTENT_DIRECTORY_SID, "SavedQueues", dev )
+		deleteVar( UPNP_MR_CONTENT_DIRECTORY_SID, "Favorites", dev )
+		deleteVar( UPNP_MR_CONTENT_DIRECTORY_SID, "FavoritesRadios", dev )
+		deleteVar( UPNP_ZONEGROUPTOPOLOGY_SID, "ZoneGroupState", dev )
+		deleteVar( SONOS_ZONE_SID, "SonosServicesKeys", dev )
+		deleteVar( SONOS_ZONE_SID, "DefaultLanguageTTS", dev )
+		deleteVar( SONOS_ZONE_SID, "DefaultEngineTTS", dev )
+		deleteVar( SONOS_ZONE_SID, "GoogleTTSServerURL", dev )
+		deleteVar( SONOS_ZONE_SID, "OSXTTSServerURL", dev )
+		deleteVar( SONOS_ZONE_SID, "ResponsiveVoiceTTSServerURL", dev )
+		deleteVar( SONOS_ZONE_SID, "TTSBasePath", dev )
+		deleteVar( SONOS_ZONE_SID, "TTSBaseURL", dev )
+		deleteVar( SONOS_ZONE_SID, "TTSRate", dev )
+		deleteVar( SONOS_ZONE_SID, "TTSPitch", dev )
+		deleteVar( SONOS_ZONE_SID, "TTSChimeDuration", dev )
+		deleteVar( SONOS_ZONE_SID, "TTSChime", dev )
+		deleteVar( SONOS_ZONE_SID, "UseTTSCache", dev )
+		deleteVar( SONOS_ZONE_SID, "TTSCacheMaxAge", dev )
+	end
 
 	if s < _CONFIGVERSION then
 		setVar( SONOS_SYS_SID, "ConfigVersion", _CONFIGVERSION, dev )
@@ -2701,6 +2716,9 @@ local function systemRunOnce( pdev )
 	initVar( "DebugLogs", 0, pdev, SONOS_SYS_SID )
 	initVar( "MaxLogSize", "", pdev, SONOS_SYS_SID )
 	initVar( "CheckStateRate", "", pdev, SONOS_SYS_SID )
+	initVar( "TTSChime", "", pdev, SONOS_ZONE_SID )
+	initVar( "UseTTSCache", "", pdev, SONOS_ZONE_SID )
+	initVar( "TTSCacheMaxAge", "", pdev, SONOS_ZONE_SID )
 
 	if s <= 20077 then
 		for i=0,200,25 do
@@ -2833,6 +2851,7 @@ local function deferredStartup(device)
 				luup.attr_set( "altid", zid, k )
 				luup.attr_set( "id_parent", device, k )
 				setVar( SONOS_ZONE_SID, "SonosIP", ip, k )
+				setVar( UPNP_AVTRANSPORT_SID, "CurrentStatus", "Upgrade in progress...", k )
 				reload = true
 			else
 				-- Leave orphan zombied.
