@@ -8,7 +8,7 @@
 module( "L_SonosSystem1", package.seeall )
 
 PLUGIN_NAME = "Sonos"
-PLUGIN_VERSION = "2.0develop-20076.2130"
+PLUGIN_VERSION = "2.0develop-20076.2330"
 PLUGIN_ID = 4226
 PLUGIN_URL = "https://github.com/toggledbits/Sonos-Vera"
 
@@ -3044,6 +3044,15 @@ function startup( lul_device )
 		return false, "Version conflict!", PLUGIN_NAME
 	end
 
+	local enabled = initVar( "Enabled", "1", lul_device, SONOS_SYS_SID )
+	if "0" == enabled then
+		W("%1 (#%2) disabled by configuration; startup aborting.", luup.devices[lul_device].description,
+			lul_device)
+		allOffline( lul_device )
+		setVar( SONOS_SYS_SID, "Message", "Disabled", lul_device )
+		return true, "Disabled", MSG_CLASS
+	end
+
 	local ipath = getInstallPath()
 	for _,v in ipairs{ "D_Sonos1.json", "D_Sonos1.xml", "D_SonosSystem1.json", "D_SonosSystem1.xml",
 						"I_SonosSystem1.xml", "J_Sonos1.js", "J_SonosSystem1.js", "L_SonosSystem1.lua",
@@ -3057,6 +3066,22 @@ function startup( lul_device )
 		end
 	end
 
+	-- If VeraAlexa is installed, make sure its definition of our Sonos1 service is OUR definition.
+	local unc = file_exists( ipath.."S_VeraAlexaSay1.xml" )
+	local cmp = file_exists( ipath.."S_VeraAlexaSay1.xml.lzo" )
+	if unc or cmp then
+		L("Detected VeraAlexa plugin; syncing it to our Sonos1 service definition")
+		if file_exists( ipath.."S_Sonos1.xml" ) then
+			os.execute( string.format( "cp '%s/S_Sonos1.xml' '%s/S_VeraAlexaSay1.xml'", ipath, ipath ) )
+		else
+			os.execute( string.format( "pluto-lzo d '%s/S_Sonos1.xml.lzo' '%s/S_VeraAlexaSay1.xml'", ipath, ipath ) )
+		end
+		if cmp then
+			os.execute( string.format( "pluto-lzo c '%s/S_VeraAlexaSay1.xml' '%s/S_VeraAlexaSay1.xml.lzo'", ipath, ipath ) )
+		end
+		if not unc then os.remove( ipath.."S_VeraAlexaSay1.xml" ) end
+	end
+
 	-- Disable old plugin implementation if present.
 	if file_exists( ipath .. "I_Sonos1.xml.lzo" ) or file_exists( ipath .. "I_Sonos1.xml" ) then
 		W("Removing old Sonos plugin implementation files (for standalone devices, no longer used)")
@@ -3066,15 +3091,6 @@ function startup( lul_device )
 	if file_exists( ipath .. "L_Sonos1.lua.lzo" ) or file_exists( ipath .. "L_Sonos1.lua" ) then
 		os.remove(ipath.."L_Sonos1.lua.lzo")
 		os.remove(ipath.."L_Sonos1.lua")
-	end
-
-	local enabled = initVar( "Enabled", "1", lul_device, SONOS_SYS_SID )
-	if "0" == enabled then
-		W("%1 (#%2) disabled by configuration; startup aborting.", luup.devices[lul_device].description,
-			lul_device)
-		allOffline( lul_device )
-		setVar( SONOS_SYS_SID, "Message", "Disabled", lul_device )
-		return true, "Disabled", MSG_CLASS
 	end
 
 	-- Find existing child zones
