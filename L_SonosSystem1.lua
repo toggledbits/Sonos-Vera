@@ -8,7 +8,7 @@
 module( "L_SonosSystem1", package.seeall )
 
 PLUGIN_NAME = "Sonos"
-PLUGIN_VERSION = "2.0develop-20076.1920"
+PLUGIN_VERSION = "2.0develop-20076.2130"
 PLUGIN_ID = 4226
 PLUGIN_URL = "https://github.com/toggledbits/Sonos-Vera"
 
@@ -2103,72 +2103,25 @@ local function fixLegacyIcons()
 	if not f then
 		local m = require "mime"
 		f = io.open( basePath .. "Sonos.png", "wb" )
-		f:write( m.unb64([[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]]) )
+		-- NB: mime.unb64 returns two values; we only want one.
+		f:write( ( m.unb64([[iVBORw0KGgoAAAANSUhEUgAAADwAAAA8CAIAAAC1nk4lAAAAAXNSR0IArs4c6QAAAARnQU1BAACx
+jwv8YQUAAAAJcEhZcwAADsIAAA7CARUoSoAAAANrSURBVGhD7ZpLKLxRGMbPjEH9yYosSIqUy0LZ
+YIlm3FYu2cjCpWxdc6lhxKTZEFE2SHKJhUuJFAvXKOUeKQszuUwRueTuad5jmlxm9F8cps5v873v
+c84333POd95T52sUr6+vzNlQ8qtTIU2LwilNfyxEnU7Ho79ETU0Njyx8Ydrf3z84OJjnv83BwYHR
+aPxgmsG0LbW1tZOTkzz5A8AMLPHkHVmIopCmRSFNi0KaFoU0LQppWhTStCikaVFI06L4ken19fWW
+lpa+vr7r62suMYZ4YGCgubl5YmLi6emJq4yZzWYeWeL9/X2eMHZ3dzc8PNzU1DQ2Nvbw8MBVxs7P
+zzs7O9va2mw728Gx6YWFhYKCgtvb28XFxfb2dhIPDw8TExPn5+eVSmVPT09WVpZ1POXl5RsbGxQv
+LS11dHRQbDKZkpOTp6enVSrV0NBQWlraxcUFdLjPyMjY3NxEWl1dfXNzQ/3twc+K73w+2DY2NhoM
+Bp68A5ddXV0Uv7y8lJSU1NfXU5qenh4ZGQnfiEdHR4uLi0nPzc1tbW2lGGi12oqKCgR7e3uxsbHP
+z8+kf+A/D7apqamDg4NlZWWYNlIuLy8xMdnZ2ZQqFIq8vLyZmRlKQU5OTn5+/vb2Ns8Ze3x8xBtD
+N54zhg50S1BQUEBAAIba39+P90mt9nFsOjw8HMPFT1dWVlZVVUGBS2qyAgUTwBPG4uPjGxoaYHFn
+Z4dLn7De4uLi0tvbixWIlZOUlGRbEt/xo0L09vYuLCwcHx9HGd3f33t5eUVERKAuqRXPRhnFxcVR
+SiQkJNTV1XV3d1Pq6uqKNWBNge0t8I3lDiUsLGx2dpZEO6j49XuMRmNRUVFMTMzu7m5UVJS7uztE
+vV6PNbC2thYSEoJyxLaAcqT+VtRqNfYWqwmdTocVtbW1hVe3srJydnaGCaYmrPt/FlZXV0tLS0m0
+wxefxaKjozUaDc8tLC8vz83N+fj4ZGZmenh4kHh1dYWd6/j4ODQ0FDsJ9gTSYSswMNDT05PS09NT
+X19firHD4HUdHR1hqJhaNzc30k9OTkZGRjDylJQUNJFITE1N4enys9gvIU2LQpoWhTQtCmlaFNK0
+KKRpUUjTopCmReGUpr84I+Is6Ofnx/PfxmQymc1mx//34NFfwoFpp0AWoiikaTEw9galFENnD/Sm
+4wAAAABJRU5ErkJggg==]]) ) )
 	end
 	f:close()
 
@@ -2659,12 +2612,11 @@ setup = function(zoneDevice, flag)
 	end
 	changed = setData("SonosModel", tostring(model), uuid, changed)
 
-	L("Device #%1 at %2 is %3, %4 (%5) uuid %6",
-		tostring( zoneDevice ),
+	L("Device #%1 at %2 is %3 (%4) uuid %5",
+		zoneDevice,
 		tostring( newIP ),
 		tostring( modelName ),
 		tostring( values.modelNumber ),
-		model,
 		tostring( uuid )
 	)
 
@@ -2699,7 +2651,7 @@ setup = function(zoneDevice, flag)
 		setVariableValue(HADEVICE_SID, "LastUpdate", os.time(), zoneDevice)
 	end
 
-	local rate = getCheckStateRate(zoneDevice)
+	local rate = getCheckStateRate(zoneDevice) -- ???
 	if rate > 0 then
 		local t = scheduler.getTask("checkState"..zoneDevice) or
 			scheduler.Task:new("checkState"..zoneDevice, zoneDevice, checkDeviceState, { zoneDevice } )
@@ -2755,6 +2707,16 @@ local function systemRunOnce( pdev )
 	initVar( "DebugLogs", 0, pdev, SONOS_SYS_SID )
 	initVar( "MaxLogSize", "", pdev, SONOS_SYS_SID )
 	initVar( "CheckStateRate", "", pdev, SONOS_SYS_SID )
+
+	if s <= 20077 then
+		for i=0,200,25 do
+			local t = "Sonos_"..i..".png"
+			os.remove( getInstallPath() .. t )
+			os.remove( "/www/cmh/skins/default/icons/" .. t )
+		end
+		os.remove( "/www/cmh/skins/default/icons/Sonos.png" )
+		os.remove( getInstallPath() .. "Sonos.png" )
+	end
 
 	if s < _CONFIGVERSION then
 		setVar( SONOS_SYS_SID, "ConfigVersion", _CONFIGVERSION, pdev )
@@ -2950,16 +2912,15 @@ local function deferredStartup(device)
 
 	-- Identify and mark two lowest-numbered non-satellite zones as network masters for us.
 	-- This means they will be subscribed to topology and content updates; others will not.
-	L("Identifying zones for master role...")
+	L("Selecting zones for master role...")
 	local chorder = {}
 	local designated = {}
 	for uuid,dev in pairs( Zones ) do
+		setVar( SONOS_ZONE_SID, "MasterRole", 0, dev )
 		if getVarNumeric( "DesignatedMaster", 0, dev, SONOS_ZONE_SID ) ~= 0 then
 			L("Zone %1 %2 (#%3) is a designated master", uuid, luup.devices[dev].description, dev)
 			table.insert( designated, dev )
-		end
-		setVar( SONOS_ZONE_SID, "MasterRole", 0, dev )
-		if not (zoneInfo.zones[uuid] or {}).isSatellite then
+		elseif not (zoneInfo.zones[uuid] or {}).isSatellite then
 			table.insert( chorder, dev )
 		else
 			L("Zone %1 %2 (#%3) is satellite; cannot take master role", uuid, luup.devices[dev], dev)
@@ -2982,7 +2943,6 @@ local function deferredStartup(device)
 	-- Start zones
 	-- ??? Do we even need to bother to start satellites?
 	for uuid,dev in pairs( Zones ) do
-		L("Starting %2 (#%3) zone %1", uuid, luup.devices[dev].description, dev)
 		local status,success = pcall( startZone, dev, uuid )
 		if status and success then
 			luup.set_failure( 0, dev )
@@ -3149,7 +3109,8 @@ function startup( lul_device )
 		-- Real Vera 7.30+
 		os.execute("mkdir -p /www/sonos/")
 	end
-	pcall( fixLegacyIcons )
+	local x,y = pcall( fixLegacyIcons )
+	if not x then E("fixLegacyIcons: %1 %2", x, y) end
 
 	D("startup() UPnP module version is %1", upnp.VERSION)
 	if ( upnp.VERSION or 0 ) < MIN_UPNP_VERSION then
@@ -5483,7 +5444,7 @@ function handleRequest( lul_request, lul_parameters, lul_outputformat )
 
 	elseif action == "files" then
 		local st = {}
-		local fd = { [getInstallPath()]=true, ["/etc/cmh"]=true }
+		local fd = { [getInstallPath()]=true, ["/etc/cmh-lu"]=true, ["/etc/cmh"]=true }
 		fd[TTSBasePath] = true
 		local function flist( dir, r )
 			r = r or {}
