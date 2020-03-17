@@ -432,7 +432,7 @@ logToFile = function(str, level)
 		logFile = io.open(lfn, "a")
 		-- Yes, we leave nil if it can't be opened, and therefore don't
 		-- keep trying to open as a result. By design.
-		if not isOpenLuup and luup.short_version then
+		if not isOpenLuup then
 			os.execute( "ln -sf '" .. lfn .. "' /www/sonos/" )
 		end
 	end
@@ -2014,20 +2014,13 @@ local function setupTTSSettings(device)
 	if "" == TTSBaseURL then
 		if isOpenLuup then
 			TTSBaseURL = string.format("http://%s:3480/", VERA_LOCAL_IP)
-		elseif luup.short_version then
-			-- 7.30+
-			TTSBaseURL = string.format("http://%s/sonos/", VERA_LOCAL_IP)
 		else
-			TTSBaseURL = string.format("http://%s/port_3480/", VERA_LOCAL_IP)
+			TTSBaseURL = string.format("http://%s/sonos/", VERA_LOCAL_IP)
 		end
 	end
 	TTSBasePath = getVar("TTSBasePath", "", device, SONOS_SYS_SID, true)
 	if "" == TTSBasePath then
-		TTSBasePath = getInstallPath()
-		if not isOpenLuup and luup.short_version then
-			-- Real Vera 7.30+
-			TTSBasePath = "/www/sonos/"
-		end
+		TTSBasePath = isOpenLuup and getInstallPath() or "/www/sonos/"
 	end
 
 	TTSChime = nil
@@ -2771,7 +2764,7 @@ local function runMasterTick( task )
 		W("WARNING! Free space on %2 is critical (%1%% full)", p, inst)
 		panic = true
 	end
-	if luup.short_version then
+	if not isOpenLuup then
 		f,p = getFreeSpace( "/www/sonos/" )
 		D("runMasterTick() /www/sonos has %1K free at %2%%", f, p)
 		if f and f < 1024 then
@@ -3122,8 +3115,7 @@ function startup( lul_device )
 
 	scheduler = TaskManager( 'sonosTick' )
 
-	if not isOpenLuup and luup.short_version then
-		-- Real Vera 7.30+
+	if not isOpenLuup then
 		os.execute("mkdir -p /www/sonos/")
 	end
 	local x,y = pcall( fixLegacyIcons )
