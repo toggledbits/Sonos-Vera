@@ -406,7 +406,7 @@ local function file_exists_LZO( fpath )
 end
 
 local function file_symlink( old, new )
-	if lfs then
+	if lfs and lfs.link then
 		lfs.link( old, new, true )
 	else
 		os.execute( "ln -sf '" .. old .. "' '" .. new .. "'" )
@@ -2044,7 +2044,7 @@ local function setupTTSSettings(device)
 		os.remove( installPath .. "Sonos_chime.wav.lzo" )
 		if not file_exists( installPath .. "Sonos_chime.mp3" ) then
 			L("Downloading default chime MP3 sound")
-			os.execute("curl -s -m 10 -o " .. Q( installPath, "Sonos_chime.mp3" ) ..
+			os.execute("curl -s -k -m 10 -o " .. Q( installPath, "Sonos_chime.mp3" ) ..
 				" 'https://raw.githubusercontent.com/toggledbits/Sonos-Vera/develop/Sonos_chime.mp3'")
 		end
 		if file_exists( installPath .. "Sonos_chime.mp3" ) then
@@ -2054,6 +2054,7 @@ local function setupTTSSettings(device)
 		end
 	end
 	local chimefile, chimedur, chimevol = unpack( split( chd, "," ) )
+	chimefile = chimefile or "" -- unpack returns empty array as nothing (no return values)
 	D("setupTTSSettings() chime file %1 duration %2 from %3", chimefile, chimedur, chd)
 	if chimefile == "0" or string.lower( chimefile ) == "none" or chimefile == "" then
 		D("setupTTSSettings() chime suppressed by config")
