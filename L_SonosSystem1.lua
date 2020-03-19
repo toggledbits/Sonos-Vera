@@ -66,9 +66,10 @@ if type( upnp ) ~= "table" then error "Sonos: invalid installation; the L_SonosU
 local _,tts = pcall( require, "L_SonosTTS" )
 if type( tts ) ~= "table" then tts = nil end
 
-local url = require "socket.url"
-local lom = require "lxp.lom"
-local lfs = require "lfs"
+local _,url = pcall( require, "socket.url" )
+local _,lom = pcall( require,  "lxp.lom" )
+local _,json = pcall( require, "dkjson" )
+local _,lfs = pcall( require, "lfs" )
 
 -- Table of Sonos IP addresses indexed by Vera devices
 local port = 1400
@@ -820,7 +821,6 @@ function updateZoneInfo( zs )
 		table.sort( gr.members ) -- sort for deterministic variable handling
 	end
 	D("updateZoneInfo() updated zoneInfo: %1", zoneInfo)
-	local json = require "dkjson"
 	setVar( SONOS_SYS_SID, "zoneInfo", json.encode( zoneInfo ), pluginDevice )
 
 	-- Update data fields
@@ -1989,7 +1989,6 @@ local function setupTTSSettings(device)
 	D("setupTTSSettings(%1)", device)
 	TTSConfig = nil
 	if not tts then return end
-	local json = require "dkjson"
 	local s = getVar("TTSConfig", "", device, SONOS_SYS_SID)
 	if s ~= "" then
 		TTSConfig = json.decode( s )
@@ -2095,7 +2094,8 @@ local function fixLegacyIcons()
 	local basePath = getInstallPath()
 	local f = io.open( basePath .. "Sonos.png", "rb" )
 	if not f then
-		local m = require "mime"
+		local _,m = pcall( require, "mime" )
+		if not package.loaded.mime then L{level=2,msg="System package 'mime' needed but could not be loaded."} return end
 		f = io.open( basePath .. "Sonos.png", "wb" )
 		-- NB: mime.unb64 returns two values; we only want one.
 		f:write( ( m.unb64([[iVBORw0KGgoAAAANSUhEUgAAADwAAAA8CAIAAAC1nk4lAAAAAXNSR0IArs4c6QAAAARnQU1BAACx
@@ -2181,7 +2181,6 @@ local function setDeviceIcon( device, icon, model, uuid )
 			-- Read default static JSON
 			s = f:read("*a")
 			f:close()
-			local json = require "dkjson"
 			local d = json.decode( s )
 			if not d then error "Can't parse generic static JSON file" end
 			-- Modify to new icon in default path
@@ -3010,7 +3009,6 @@ end
 local function checkPluginInstalled()
 	local _,_,_,ra = luup.call_action( "urn:micasaverde-com:serviceId:HomeAutomationGateway1", "GetUserData", { DataFormat="json" }, 0 ) -- luacheck: ignore 311
 	ra = tostring( ra.UserData )
-	local json = require "dkjson"
 	ra = json.decode( ra )
 	for _,v in ipairs( ra.InstalledPlugins2 or {} ) do
 		if v.id == PLUGIN_ID then return tonumber(v.Version) or -1 end
@@ -3036,6 +3034,15 @@ function startup( lul_device )
 		pcall( logToFile, string.format( "Log file opened at startup; plugin %s; luup %s", PLUGIN_VERSION, luup.version) )
 	end
 
+	-- Check required packages.
+	for _,v in ipairs{ "socket", "socket.http", "socket.url", "ltn12", "lxp.lom", "dkjson", "lfs" } do
+		local st,m = pcall( require, v )
+		if not st or type(m) ~= "table" then
+			L({level=1,"Required system package %1 could not be loaded. Please install it."}, v)
+			return false, "Missing required system package", PLUGIN_NAME
+		end
+	end
+
 	systemRunOnce( lul_device )
 
 	setVar( SONOS_SYS_SID, "PluginVersion", PLUGIN_VERSION, lul_device )
@@ -3043,7 +3050,7 @@ function startup( lul_device )
 	setVar( SONOS_SYS_SID, "Message", "Starting...", lul_device )
 	setVar( SONOS_SYS_SID, "DiscoveryMessage", "Starting, please wait.", lul_device )
 
-	local installVersion = checkPluginInstalled()
+	local installVersion = not isOpenLuup and checkPluginInstalled()
 	if installVersion and installVersion <= 28820 then
 		E("The App Marketplace version of the v1.x plugin is installed! You must uninstall it to run this version %1", PLUGIN_VERSION)
 		luup.set_failure( 1, lul_device )
@@ -3212,7 +3219,6 @@ function startup( lul_device )
 	zoneInfo = { zones={}, groups={} }
 	local s = getVar( "zoneInfo", "", lul_device, SONOS_SYS_SID )
 	if s ~= "" then
-		local json = require "dkjson"
 		s = json.decode( s )
 		if s then
 			zoneInfo = s
@@ -3471,7 +3477,7 @@ local function hash(t)
 end
 
 local function loadTTSCache( engine, language, hashcode )
-	local json = require "dkjson"
+	D("loadTTSCache(%1,%2,%3)", engine, language, hashcode)
 	local curl = string.format( "ttscache/%s/%s/%d/", tostring(engine), tostring(language), tostring(hashcode) )
 	local cpath = TTSBasePath .. curl
 	local fm = io.open( cpath .. "ttsmeta.json", "r" )
@@ -3488,7 +3494,7 @@ local function loadTTSCache( engine, language, hashcode )
 end
 
 local function saveTTSCache( engine, language, hashcode, fmeta )
-	local json = require "dkjson"
+	D("saveTTSCache(%1,%2,%3,%4)", engine, language, hashcode, fmeta )
 	local cpath = string.format( "%sttscache/%s/%s/%d/ttsmeta.json",
 		TTSBasePath, tostring(engine), tostring(language), tostring(hashcode) )
 	local fm = io.open( cpath, "w" )
@@ -3502,17 +3508,16 @@ end
 
 -- Cache cleaning task.
 local function cleanTTSCache( task )
-	local json = require "dkjson"
 	local maxAge = 86400 * getVarNumeric( "TTSCacheMaxAge", 90, pluginDevice, SONOS_SYS_SID )
 	if maxAge <= 0 then return end
-	maxAge = os.time() + maxAge
+	maxAge = os.time() - maxAge
 	L("Cleaning TTS cache of files older than %1", os.date("%x %X", maxAge))
 	function scan( d )
 		D("cleanTTSCache() scanning %1", d)
 		-- See if directory contains a cache meta
 		local fm = io.open( d .. "/ttsmeta.json", "r" )
 		if fm then
-			D("cleanTTSCache() reading TSSMeta in %1", d)
+			D("cleanTTSCache() reading TTSMeta in %1", d)
 			local fmeta = json.decode( fm:read("*a") )
 			fm:close()
 			if fmeta then
@@ -3566,7 +3571,6 @@ end
 
 local function makeTTSAlert( device, settings )
 	local s = getVar( "TTSConfig", "", pluginDevice, SONOS_SYS_SID )
-	local json = require "dkjson"
 	TTSConfig = json.decode( s ) or { defaultengine=tts.getDefaultEngineId(), engines={} }
 	local eid = (settings.Engine or "") ~= "" and settings.Engine or TTSConfig.defaultengine or
 		tts.getDefaultEngineId()
@@ -3595,7 +3599,9 @@ local function makeTTSAlert( device, settings )
 		getVarNumeric( "UseTTSCache", 1, pluginDevice, SONOS_SYS_SID ) ~= 0
 	if cacheTTS and settings.UseCache ~= "0" then
 		local fmeta = loadTTSCache( eid, voice, hash(text) )
+		D("makeTTSAlert() checking cache for %1: %2", text, fmeta)
 		if fmeta.strings[text] then
+			D("makeTTSAlert() found it!")
 			fmeta.strings[text].lastused = os.time()
 			saveTTSCache( eid, voice, hash(text), fmeta )
 			settings.Duration = fmeta.strings[text].duration
@@ -3614,6 +3620,7 @@ local function makeTTSAlert( device, settings )
 	else
 		D("(tts) caching disabled")
 	end
+	D("makeTTSAlert() not cached, creating")
 
 	-- Convert text to speech using specified engine
 	local file = string.format( "Say.%s.%s", tostring(device), engobj.fileType or "mp3" )
@@ -5395,7 +5402,6 @@ function handleRequest( lul_request, lul_parameters, lul_outputformat )
 		return string.format("OK\nDebug is now 0x%x", mode), "text/plain"
 
 	elseif action == "ttsengines" then
-		local json = require "dkjson"
 		local resp = { status=true, engines={} }
 		local edata = tts.getEngines()
 		for k,e in pairs( edata ) do
@@ -5408,7 +5414,6 @@ function handleRequest( lul_request, lul_parameters, lul_outputformat )
 		return json.encode( resp ), "application/json"
 
 	elseif action == "zoneinfo" then
-		local json = require "dkjson"
 		return json.encode( zoneInfo ), "application/json"
 
 	elseif action == "status" then
@@ -5443,7 +5448,6 @@ function handleRequest( lul_request, lul_parameters, lul_outputformat )
 		}
 		local _,_,_,ra = luup.call_action( "urn:micasaverde-com:serviceId:HomeAutomationGateway1", "GetUserData", { DataFormat="json" }, 0 ) -- luacheck: ignore 311
 		ra = tostring( ra.UserData )
-		local json = require "dkjson"
 		ra = json.decode( ra )
 		if ra then
 			for _,v in ipairs( ra.devices or {} ) do
