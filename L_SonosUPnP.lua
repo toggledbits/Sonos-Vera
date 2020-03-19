@@ -167,6 +167,7 @@ end
 
 
 function UPnP_request(controlURL, action, servicetype, args)
+  debug("UPnP_request(%1,%2,%3,%4)", controlURL, action, servicetype, args)
   local function table2XML(value)
     local result = ""
 
@@ -225,18 +226,22 @@ function UPnP_request(controlURL, action, servicetype, args)
   --
   -- Execute the resulting URL, and collect the results as a Table
   --
+  local t1 = socket.gettime()
   local resultTable = {}
+  http.TIMEOUT = 15
   local status, statusMsg = http.request{
     url = controlURL,
     sink = ltn12.sink.table(resultTable),
     method = "POST",
-    headers = {["Accept"] = "*/*",
+    headers = {["accept"] = "*/*",
                ["SOAPAction"] = '"' .. servicetype .. "#" .. action .. '"',
-               ["Connection"] = "close",
-               ["Content-Length"] = postBody:len(),
-               ["Content-Type"] = contentType},
+               ["connection"] = "close",
+               ["content-length"] = postBody:len(),
+               ["content-type"] = contentType},
     source = ltn12.source.string(postBody),
   }
+  local dt = socket.gettime() - t1
+  if dt >= 1 then warning("UPnP_request() %1#%2 action took %3s (long)", servicetype, action, dt) end
 
   --
   -- Flatten the resultTable into a regular string
