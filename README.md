@@ -312,11 +312,25 @@ If you are using any of the other services *successfully*, [please let us know](
 
 ### Special TTS Configuration for openLuup
 
-If you are using the plugin on openLuup, you will first need to configure the `TTSBaseURL` and `TTSBasePath` state variables. The TTS services require that sound files be written somewhere where they can retrieved by an HTTP request from the Sonos players in your network. This may be within the openLuup directory tree, but not necessarily; configuration will depend on how your openLuup is installed and where, and what if any additional services (e.g. Apache) may be running on the same host. As a result, local knowledge is required.
+TTS on openLuup presents a small challenge in that the Sonos zones use the openLuup system to source the speech audio files. For technical reasons deeper than this document warrants (contact the author if you care to know), you must install Apache or a similar web server to serve the speech files. Instructions for Apache follow; if you intend to use a different server (nginx, lighttpd, etc.), then read these instructions and follow their spirit with the specifics of your server of choice.
 
-Set the `TTSBasePath` to the full pathname of a directory in your openLuup installation where the sound files should be written, and set `TTSBaseURL` to the full URL (e.g. `http://192.168.0.2:80`) that can be used to retrieve files written in the `TTSBasePath` directory.
+1. Install the Apache web server. This is often as simple as `apt-get apache2` or `yum install apache2` depending on your Linux distribution.
+2. Alias a path to your openLuup runtime directory, which is where the plugin keeps the TTS resource files that the zone players need to access. Add the following lines to the configuration of the default server instance (e.g. in many cases `/etc/apache2/sites-enabled/000-default.conf`). In the example below, change `/path/to/...etc...` to the full path of your openLuup runtime directory--the same directory in which the Sonos plugin's files are installed:
 
-If you're not sure, try setting `TTSBasePath` to the full directory path of the openLuup subdirectory containing the installed Sonos plugin files, and setting `TTSBaseURL` to `http://openluup-ip-addr:3480` (e.g. `http://192.168.0.120:3480`).
+```
+    Alias "/openluup/" "/path/to/your/openluup/directory/"
+	<Directory "/path/to/your/openluup/directory/">
+		Require all granted
+	</Directory>
+```
+
+3. Make sure that either the Apache user/group or all users have directory traversal permissions (`rx`) on every directory on the path to your openLuup runtime directory.
+3. Restart Apache, and then test by requesting `http://system-ip-address/openluup/Sonos_chime.mp3` in a browser. You should hear the Sonos TTS chime play in your browser.
+3. Make sure the state variable `LocalIP` on the Sonos master device is correctly configured to the IP address of the openLuup system; it *must not* be blank, `localhost` or `127.0.0.1`.
+3. If (and only if) you have used any directory alias other than "/openluup/", set the `TTSBaseURL` state variable on your Sonos plugin master device to the same value. For example, if you configured "/house/" as the directory alias, set `TTSBaseURL` to `/house/` as well.
+4. Reload openLuup.
+
+Be sure to check the Apache error log for errors, in addition the LuaUPnP.log file, if TTS isn't working.
 
 ## Other Configuration
 

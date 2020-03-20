@@ -8,7 +8,7 @@
 module( "L_SonosSystem1", package.seeall )
 
 PLUGIN_NAME = "Sonos"
-PLUGIN_VERSION = "2.0develop-20077.1800"
+PLUGIN_VERSION = "2.0develop-20080.0900"
 PLUGIN_ID = 4226
 PLUGIN_URL = "https://github.com/toggledbits/Sonos-Vera"
 
@@ -2009,18 +2009,24 @@ local function setupTTSSettings(device)
 
 	-- NOTA BENE! TTSBaseURL must resolve to TTSBasePath in runtime! That is, whatever directory
 	--            TTSBasePath points to must be the directory accessed via TTSBaseURL.
+	-- On openLuup, TTS must be supported by Apache or similar external web server--openLuup's web
+	-- server doesn't work (non-multitasking). The web server should alias a directory path into
+	-- the openLuup runtime (or to wherever TTSBasePath points), and that alias should be used in
+	-- TTSBaseURL. LocalIP must also be set to the IP address of the openLuup system (and cannot be
+	-- localhost or 127.0.0.1).
 	TTSBaseURL = getVar("TTSBaseURL", "", device, SONOS_SYS_SID, true)
 	if "" == TTSBaseURL then
-		if isOpenLuup then
-			TTSBaseURL = string.format("http://%s:3480/", VERA_LOCAL_IP)
-		else
-			TTSBaseURL = string.format("http://%s/sonos/", VERA_LOCAL_IP)
-		end
+		TTSBaseURL = isOpenLuup and "/openluup/" or "/sonos/"
+	end
+	if TTSBaseURL:match( "^/" ) then -- not elseif!
+		-- Expand directory only to full URL
+		TTSBaseURL = string.format("http://%s:%d%s", VERA_LOCAL_IP, 80, TTSBaseURL)
 	end
 	TTSBasePath = getVar("TTSBasePath", "", device, SONOS_SYS_SID, true)
 	if "" == TTSBasePath then
 		TTSBasePath = isOpenLuup and getInstallPath() or "/www/sonos/"
 	end
+	D("setupTTSSettings() TTSBaseURL=%1; TTSBasePath=%2", TTSBaseURL, TTSBasePath)
 
 	TTSChime = nil
 	local installPath = getInstallPath()
@@ -3192,6 +3198,10 @@ function startup( lul_device )
 		E("Unable to establish local IP address of Vera/openLuup system. Please set 'LocalIP'")
 		luup.set_failure( 1, lul_device )
 		return false, "Unable to establish local IP -- see log", PLUGIN_NAME
+	elseif VERA_LOCAL_IP:match("^localhost") or VERA_LOCAL_IP == "127.0.0.1" then
+		E("Invalid configuration -- `LocalIP' cannot be localhost or 127.0.0.1")
+		luup.set_failure( 1, lul_device )
+		return false, "Configuration error -- see log", PLUGIN_NAME
 	end
 
 	if routerIp == "" then
