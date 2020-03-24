@@ -8,12 +8,12 @@
 module( "L_SonosSystem1", package.seeall )
 
 PLUGIN_NAME = "Sonos"
-PLUGIN_VERSION = "2.0develop-20081.1005"
+PLUGIN_VERSION = "2.0develop-20084.1825"
 PLUGIN_ID = 4226
 PLUGIN_URL = "https://github.com/toggledbits/Sonos-Vera"
 
 local _CONFIGVERSION = 20076
-local _UIVERSION = 20073
+local _UIVERSION = 20084
 
 local DEBUG_MODE = false	-- Don't hardcode true--use state variable config
 
@@ -438,7 +438,7 @@ logToFile = function(str, level)
 		end
 	end
 	if logFile then
-		local maxsizek = getVarNumeric("MaxLogSize", 512, pluginDevice, SONOS_SYS_SID)
+		local maxsizek = getVarNumeric("MaxLogSize", DEVELOPMENT and 512 or 0, pluginDevice, SONOS_SYS_SID)
 		if maxsizek <= 0 then
 			-- We should not be open now (runtime change, no reload needed)
 			logFile:close()
@@ -2043,7 +2043,7 @@ local function setupTTSSettings(device)
 		if not file_exists( installPath .. "Sonos_chime.mp3" ) then
 			L("Downloading default chime MP3 sound")
 			os.execute("curl -s -k -m 10 -o " .. Q( installPath, "Sonos_chime.mp3" ) ..
-				" 'https://raw.githubusercontent.com/toggledbits/Sonos-Vera/develop/Sonos_chime.mp3'")
+				" 'https://www.toggledbits.com/assets/sonos/Sonos_chime.mp3'")
 		end
 		if file_exists( installPath .. "Sonos_chime.mp3" ) then
 			chd = "Sonos_chime.mp3,3"
@@ -3035,7 +3035,7 @@ function startup( lul_device )
 	setDebugLogs(debugLogs)
 
 	-- See if log file needs to be opened
-	if getVarNumeric("MaxLogSize", 512, lul_device, SONOS_SYS_SID) > 0 then
+	if getVarNumeric("MaxLogSize", DEVELOPMENT and 512 or 0, lul_device, SONOS_SYS_SID) > 0 then
 		pcall( logToFile, string.rep( "_", 132) )
 		pcall( logToFile, string.format( "Log file opened at startup; plugin %s; luup %s", PLUGIN_VERSION, luup.version) )
 	end
