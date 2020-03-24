@@ -3114,9 +3114,9 @@ function startup( lul_device )
 		os.remove(ipath.."I_Sonos1.xml.lzo")
 		os.remove(ipath.."I_Sonos1.xml")
 	end
-	if file_exists( ipath .. "L_Sonos1.lua.lzo" ) or file_exists( ipath .. "L_Sonos1.lua" ) then
-		os.remove(ipath.."L_Sonos1.lua.lzo")
-		os.remove(ipath.."L_Sonos1.lua")
+	for _,v in ipairs{ "L_Sonos1.lua", "D_Sonos1_UI4.json" } do
+		if file_exists( ipath .. v .. ".lzo" ) then os.remove( ipath .. v .. ".lzo" ) end
+		if file_exists( ipath .. v ) then os.remove( ipath .. v ) end
 	end
 
 	-- Find existing child zones
