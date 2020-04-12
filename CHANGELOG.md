@@ -2,7 +2,7 @@
 
 **NOTAM (NOtice To All Music-lovers):** ResponsiveVoice has been evolving their business model for some time, and as a result, the API that this plugin uses to integrate with RV and create speech audio is now deprecated and not supported. RV could remove access to this API at any time, without notice, and has changed the URL at least once in the past couple of years. Just be aware that if you use RV for TTS, it may stop working at any time. The effect of this may be somewhat alleviated by the new TTS caching--if the service stops working, the cached audio file is still be used for previously-seen phrases, only conversion of new phrases would stop working. The suggested alternative to RV is the Microsoft Azure Speech Service, which produces clear speech audio from a large variety of voices, and offers a usable/meaningful free tier level that is likely sufficient for most users.
 
-## Version 2.0 (development)
+## Version 2.0 (released)
 
 **DEPRECATION ANNOUNCEMENT:** The "Language" parameter on `Say` actions is now deprecated; it will be removed in a future release. Since language is closely coupled to engine configuration, it isn't reasonable to allow language selection at the action.
 

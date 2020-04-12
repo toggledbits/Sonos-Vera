@@ -8,22 +8,23 @@
 module( "L_SonosSystem1", package.seeall )
 
 PLUGIN_NAME = "Sonos"
-PLUGIN_VERSION = "2.0develop-20084.1825"
+PLUGIN_VERSION = "2.0"
 PLUGIN_ID = 4226
 PLUGIN_URL = "https://github.com/toggledbits/Sonos-Vera"
 
-local _CONFIGVERSION = 20076
-local _UIVERSION = 20084
+local _CONFIGVERSION = 20103
+local _UIVERSION = 20103
 
 local DEBUG_MODE = false	-- Don't hardcode true--use state variable config
 
-local DEVELOPMENT = true	-- ??? Dev: false for production
+local DEVELOPMENT = false	-- ??? Dev: false for production
 
-local MIN_UPNP_VERSION = 20074	-- Minimum version of L_SonosUPnP that works
-local MIN_TTS_VERSION = 20072	-- Minimum version of L_SonosTTS that works
+local MIN_UPNP_VERSION = 20103	-- Minimum version of L_SonosUPnP that works
+local MIN_TTS_VERSION = 20103	-- Minimum version of L_SonosTTS that works
 
 local MSG_CLASS = "Sonos"
 local isOpenLuup = false
+local isALTUI = false
 local pluginDevice
 local logFile = false
 local unsafeLua = true
@@ -2673,7 +2674,7 @@ local function zoneRunOnce( dev )
 
 	initVar( "DesignatedMaster", "", dev, SONOS_ZONE_SID )
 
-	if DEVELOPMENT or s < 20077 then
+	if DEVELOPMENT or s < 20103 then
 		deleteVar( SONOS_ZONE_SID, "PluginVersion", dev )
 		deleteVar( SONOS_ZONE_SID, "RouterIp", dev )
 		deleteVar( SONOS_ZONE_SID, "RouterPort", dev )
@@ -2684,9 +2685,6 @@ local function zoneRunOnce( dev )
 		deleteVar( SONOS_ZONE_SID, "MaryTTSServerURL", dev )
 		deleteVar( SONOS_ZONE_SID, "MicrosoftClientId", dev )
 		deleteVar( SONOS_ZONE_SID, "MicrosoftClientSecret", dev )
-		deleteVar( SONOS_ZONE_SID, "DiscoveryPatchInstalled", dev )
-		deleteVar( SONOS_ZONE_SID, "DiscoveryPatchInstalled", dev )
-		deleteVar( SONOS_ZONE_SID, "DiscoveryPatchInstalled", dev )
 		deleteVar( UPNP_MR_CONTENT_DIRECTORY_SID, "SavedQueues", dev )
 		deleteVar( UPNP_MR_CONTENT_DIRECTORY_SID, "Favorites", dev )
 		deleteVar( UPNP_MR_CONTENT_DIRECTORY_SID, "FavoritesRadios", dev )
@@ -2725,7 +2723,7 @@ local function systemRunOnce( pdev )
 	initVar( "UseTTSCache", "", pdev, SONOS_ZONE_SID )
 	initVar( "TTSCacheMaxAge", "", pdev, SONOS_ZONE_SID )
 
-	if s <= 20077 then
+	if s < 20103 and not isOpenLuup then
 		for i=0,200,25 do
 			local t = "Sonos_"..i..".png"
 			os.remove( getInstallPath() .. t )
@@ -2834,13 +2832,6 @@ local function deferredStartup(device)
 			Zones[zid] = k
 			count = count + 1
 			setVar(UPNP_AVTRANSPORT_SID, "CurrentStatus", "Starting...", k)
-			local ip = luup.attr_get( "ip", k ) or ""
-			if ip ~= "" then
-				setVar( SONOS_ZONE_SID, "SonosIP", ip, k )
-				luup.attr_set( "mac", "", k )
-				luup.attr_set( "ip", "", k )
-			end
-			if DEVELOPMENT then luup.attr_set( "plugin", "", k ) end -- temp 20076, should only be set (if needed) on master, never children
 		end
 	end
 
@@ -3057,7 +3048,7 @@ function startup( lul_device )
 	setVar( SONOS_SYS_SID, "DiscoveryMessage", "Starting, please wait.", lul_device )
 
 	local installVersion = not isOpenLuup and checkPluginInstalled()
-	if installVersion and installVersion <= 28820 then
+	if false and installVersion and installVersion <= 28820 then -- ???
 		E("The App Marketplace version of the v1.x plugin is installed! You must uninstall it to run this version %1", PLUGIN_VERSION)
 		luup.set_failure( 1, lul_device )
 		luup.attr_set( "plugin", "", lul_device )
@@ -3122,24 +3113,26 @@ function startup( lul_device )
 	-- Find existing child zones
 	Zones = {}
 	for k,v in pairs( luup.devices ) do
-		if v.device_type == SONOS_ZONE_DEVICE_TYPE then
+		if v.device_type == SONOS_ZONE_DEVICE_TYPE and v.device_num_parent == lul_device then
 			local zid = v.id or ""
-			local ip = luup.attr_get( "ip", k ) or ""
 			D("startup() found child %1 zoneid %3 parent %2", k, v.device_num_parent, zid)
-			if DEVELOPMENT then luup.attr_set( "plugin", "", k ) end -- ??? DEV remove for production
-			if v.device_num_parent == lul_device then
-				setVar(UPNP_AVTRANSPORT_SID, "CurrentStatus", "Offline; waiting for proxy...", k)
-				Zones[zid] = k
-				if ip ~= "" then
-					setVar( SONOS_ZONE_SID, "SonosIP", ip, k )
-					luup.attr_set( "mac", "", k )
-					luup.attr_set( "ip", "", k )
-				end
+			setVar(UPNP_AVTRANSPORT_SID, "CurrentStatus", "Offline; waiting for proxy...", k)
+			Zones[zid] = k
+			local ip = luup.attr_get( "ip", k ) or ""
+			if ip ~= "" then
+				setVar( SONOS_ZONE_SID, "SonosIP", ip, k )
+				luup.attr_set( "mac", "", k )
+				luup.attr_set( "ip", "", k )
+			end
+			if ( luup.attr_get( "plugin", k ) or "" ) ~= "" then
+				luup.attr_set( "plugin", "", k )
 			end
 		elseif v.device_type == SONOS_SYS_DEVICE_TYPE and k ~= lul_device then
 			E("Duplicate Sonos System master device!")
 			luup.set_failure( 1, lul_device )
 			return false, "Duplicate master device!", PLUGIN_NAME
+		elseif v.device_type == "urn:schemas-upnp-org:device:altui:1" and v.device_num_parent == 0 then
+			isALTUI = k
 		end
 	end
 
