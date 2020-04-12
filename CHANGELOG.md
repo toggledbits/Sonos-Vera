@@ -1,12 +1,12 @@
 # Change Log
 
-**NOTAM (NOtice To All Music-lovers):** ResponsiveVoice has been evolving their business model for some time, and as a result, the API that this plugin uses to integrate with RV and create speech audio is now deprecated and not supported. RV could remove access to this API at any time, without notice, and has changed the URL at least once in the past couple of years. Just be aware that if you use RV for TTS, it may stop working at any time. The effect of this may be somewhat alleviated by the new TTS caching--if the service stops working, the cached audio file is still be used for previously-seen phrases, only conversion of new phrases would stop working. The suggested alternative to RV is the Microsoft Azure Speech Service, which produces clear speech audio from a large variety of voices, and offers a usable/meaningful free tier level that is likely sufficient for most users.
+**NOTAM (NOtice To All Music-lovers):** ResponsiveVoice is no longer supported. They removed the public URL/endpoint that was being used to create speech audio files by the plugin. The suggested alternative to RV is the Microsoft Azure Speech Service, which produces clear speech audio from a large variety of voices, and offers a usable/meaningful free tier level that is likely sufficient for most users.
 
 ## Version 2.0 (released)
 
 **DEPRECATION ANNOUNCEMENT:** The "Language" parameter on `Say` actions is now deprecated; it will be removed in a future release. Since language is closely coupled to engine configuration, it isn't reasonable to allow language selection at the action.
 
-**SUPPORT ANNOUNCEMENT -- VERA 3/LITE:** The Sonos plugin generally runs well on the Vera3 and Lite, but the SSL library on the device is unable to meet the encryption requirements of the Microsoft Azure services for TTS. As a result, MARY is the only supported TTS for these platforms. This is a limitation of the firmware on these systems, and since they are now off maintenance with Vera/eZLO, it is not expected that these will receive any further updates.
+**SUPPORT FOR VERA 3/LITE:** The Sonos plugin generally runs well on the Vera3 and Lite, but the SSL library on the device is unable to meet the encryption requirements of the Microsoft Azure services for TTS. As a result, MARY is the only supported TTS for these platforms. This is a limitation of the firmware on these systems, and since they are now off maintenance with Vera/eZLO, it is not expected that these will receive any further updates. Your only option is to move up to the newer Edge/Plus/Secure models.
 
 **OPENLUUP USERS:** If you plan on using TTS on openLuup, please see the README file for the latest instructions on special setup requirements.
 
@@ -25,7 +25,7 @@
 * Startup waits for the UPnP Proxy to come up, when installed.
 * Fixed an error in the timing of renewal subscriptions. The UPnP module would schedule renewals for exactly the expiration time, which then meant that the subscription expiration at the Sonos device and the renewal operation of the plugin were in a race, and if the plugin lost, updates just stopped happening on the zone devices. The UPnP module now schedules renewals for 80% of the subscription length or length - 60 seconds, whichever is longer, to give the plugin ample time to do the renewals before they expire. In addition, the plugin will now retry (once) if renewals fail. If all renewals fail, a hard check of the proxy is launched.
 
-## Version 1.5 (stable/release candidate)
+## Version 1.5 (legacy; not supported)
 
 * Implement TTS caching to reduce traffic to and dependence on remote services. The performance of remote services can vary greatly; for example, ResponsiveVoice has been seen taking up to 30 seconds to respond with an audio result. Since most users likely speak a small number of fixed phrases repeatedly, caching removes repeated remote queries for the same data and allows immediate replay of the previously-played phrase.
 * TTS now plays a chime prior to announcement.
@@ -35,7 +35,7 @@
 * Support `TTSBasePath` and `TTSBaseURL` variables to move TTS sound files and cache to a directory of the user's chosing. The directory must be accessible by the Sonos system(s) via HTTP. The `TTSBasePath` must contain an absolute filesystem path that refers to the directory accessible at `TTSBaseURL`.
 * Update icon handling and various other tweaks for 7.30, which restricts certain directories previously used to read-only. Vera 7.30 and up will now use `/www/sonos`, and below will use the standard `/www/cmh/skins/default/icons` directory accessed via a relative URL to be compatible/consistent with many prior versions. OpenLuup will continue to use the install directory.
 
-## Version 1.4.3 (interim)
+## Version 1.4.3 (legacy; not supported)
 
 * rigpapa: Dynamic icon by mashing up static JSON on the fly using device description URL. Should eliminate need to change code when new devices are released just to get the icon right.
 * rigpapa: Implement variable polling for when UPnP Event Proxy is not installed to reduce system load and network traffic; configurable: polling rates are controlled by PollDelay, default 15,60; polls every 15 seconds except when player stopped, then every 60 seconds.
@@ -45,10 +45,10 @@
 * rigpapa: Fix small issue with MaryTTS.
 * rigpapa: In-place fix for non-working JS UI elements; the JS UI needs an upgrade to the "new" (since UI5) JS API--it's still using the ancient approach, but it's still working at the moment. I suspect some upcoming firmware release will force the upgrade.
 
-## Version 1.4.1 (in the wild)
+## Version 1.4.1 (in the wild; not supported)
 
 * Released by unknown parties and modified by at least three, this version added ResponsiveVoiceTTS and also attempted some fixes/upgrades for openLuup, but the version of code I had would not allow TTS on Vera (at odds with openLuup changes).
 
-## Version 1.4 (released)
+## Version 1.4 (in the wild; not supported)
 
 * This is the last version released by lolodomo; original code is (here)[http://code.mios.com/trac/mios_sonos-wireless-music-systems].
