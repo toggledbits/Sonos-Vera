@@ -257,7 +257,7 @@ end
 
 local function W(msg, ...)
 	L({msg=msg,level=2}, ...)
-	if debug and debug.traceback then luup.log( debug.traceback(), 2 ) end
+	-- if debug and debug.traceback then luup.log( debug.traceback(), 2 ) end
 end
 
 local function E(msg, ...)
@@ -2682,6 +2682,8 @@ local function zoneRunOnce( dev )
 		deleteVar( SONOS_ZONE_SID, "DebugLogs", dev )
 		deleteVar( SONOS_ZONE_SID, "FetchQueue", dev )
 		deleteVar( SONOS_ZONE_SID, "DiscoveryPatchInstalled", dev )
+		deleteVar( SONOS_ZONE_SID, "DiscoveryResult", dev )
+		deleteVar( SONOS_ZONE_SID, "ProxyUsed", dev )
 		deleteVar( SONOS_ZONE_SID, "MaryTTSServerURL", dev )
 		deleteVar( SONOS_ZONE_SID, "MicrosoftClientId", dev )
 		deleteVar( SONOS_ZONE_SID, "MicrosoftClientSecret", dev )
@@ -3100,11 +3102,13 @@ function startup( lul_device )
 	end
 
 	-- Disable old plugin implementation if present.
+	--[[ DO NOT; we need a special version of this to bootstrap users with "official" installs
 	if file_exists( ipath .. "I_Sonos1.xml.lzo" ) or file_exists( ipath .. "I_Sonos1.xml" ) then
 		W("Removing old Sonos plugin implementation files (for standalone devices, no longer used)")
 		os.remove(ipath.."I_Sonos1.xml.lzo")
 		os.remove(ipath.."I_Sonos1.xml")
 	end
+	--]]
 	for _,v in ipairs{ "L_Sonos1.lua", "D_Sonos1_UI4.json" } do
 		if file_exists( ipath .. v .. ".lzo" ) then os.remove( ipath .. v .. ".lzo" ) end
 		if file_exists( ipath .. v ) then os.remove( ipath .. v ) end
