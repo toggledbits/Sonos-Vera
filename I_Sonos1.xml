@@ -14,6 +14,7 @@
 			for k,v in pairs( luup.devices ) do
 				if v.device_type == "urn:schemas-toggledbits-com:device:SonosSystem:1" then
 					found = k
+					luup.attr_set( "plugin", 4226, k )
 					break
 				elseif v.device_type == "urn:schemas-micasaverde-com:device:Sonos:1" and v.device_num_parent == 0 then
 					if not lmin or k &lt; lmin then lmin = k end
@@ -21,7 +22,7 @@
 			end
 			if not found and lmin == pdev then
 				-- Create new Sonos System device, reload.
-				luup.log("Sonos: legacy bootstrap creating new 2.0 master device (reload required)")
+				luup.log("Sonos: legacy bootstrap creating new 2.0 master device (reload required)",2)
 				luup.call_action( "urn:micasaverde-com:serviceId:HomeAutomationGateway1",
 					"CreateDevice", { Description="Sonos System", UpnpDevFilename="D_SonosSystem1.xml",
 						UpnpImplFilename="I_SonosSystem1.xml" }, 0 )
