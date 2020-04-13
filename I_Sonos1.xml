@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- I_Sonos1.xml -->
+<implementation>
+    <functions>
+		function legacy_reload()
+			luup.log("Sonos: reloading Luup after device creation",2)
+			luup.reload()
+		end
+
+		function legacy_start( pdev )
+			-- Bootstrap to 2.0 from 1.x
+			local found = false
+			local lmin
+			for k,v in pairs( luup.devices ) do
+				if v.device_type == "urn:schemas-toggledbits-com:device:SonosSystem:1" then
+					found = k
+					break
+				elseif v.device_type == "urn:schemas-micasaverde-com:device:Sonos:1" and v.device_num_parent == 0 then
+					if not lmin or k &lt; lmin then lmin = k end
+				end
+			end
+			if not found and lmin == pdev then
+				-- Create new Sonos System device, reload.
+				luup.log("Sonos: legacy bootstrap creating new 2.0 master device (reload required)")
+				luup.call_action( "urn:micasaverde-com:serviceId:HomeAutomationGateway1",
+					"CreateDevice", { Description="Sonos System", UpnpDevFilename="D_SonosSystem1.xml",
+						UpnpImplFilename="I_SonosSystem1.xml" }, 0 )
+				luup.call_delay( 'legacy_reload', 30 )
+				return false, "Upgrading...", "Sonos"
+			end
+			return true, "", "Sonos"
+		end
+	</functions>
+	<startup>legacy_start</startup>
+</implementation>
