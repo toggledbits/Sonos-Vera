@@ -3010,7 +3010,7 @@ local function checkPluginInstalled()
 	ra = tostring( ra.UserData )
 	ra = json.decode( ra )
 	for _,v in ipairs( ra.InstalledPlugins2 or {} ) do
-		if v.id == PLUGIN_ID then return tonumber(v.Version) or -1 end
+		if v.id == PLUGIN_ID then return tonumber(v.Version) or false end
 	end
 	return false
 end
@@ -3049,18 +3049,20 @@ function startup( lul_device )
 	setVar( SONOS_SYS_SID, "Message", "Starting...", lul_device )
 	setVar( SONOS_SYS_SID, "DiscoveryMessage", "Starting, please wait.", lul_device )
 
-	local installVersion = not isOpenLuup and checkPluginInstalled()
-	if false and installVersion and installVersion <= 28820 then -- ???
-		E("The App Marketplace version of the v1.x plugin is installed! You must uninstall it to run this version %1", PLUGIN_VERSION)
-		luup.set_failure( 1, lul_device )
-		luup.attr_set( "plugin", "", lul_device )
-		for k,v in pairs( luup.devices ) do
-			if v.device_type == SONOS_ZONE_DEVICE_TYPE then
-				luup.attr_set( "plugin", "", k )
+	if false and not isOpenLuup then -- ??? disabled for v2.0 release
+		local installVersion = not isOpenLuup and checkPluginInstalled()
+		if installVersion and installVersion <= 28820 then -- ???
+			E("The App Marketplace version of the v1.x plugin is installed! You must uninstall it to run this version %1", PLUGIN_VERSION)
+			luup.set_failure( 1, lul_device )
+			luup.attr_set( "plugin", "", lul_device )
+			for k,v in pairs( luup.devices ) do
+				if v.device_type == SONOS_ZONE_DEVICE_TYPE then
+					luup.attr_set( "plugin", "", k )
+				end
 			end
+			setVar( SONOS_SYS_SID, "Message", "Version conflict!", lul_device )
+			return false, "Version conflict!", PLUGIN_NAME
 		end
-		setVar( SONOS_SYS_SID, "Message", "Version conflict!", lul_device )
-		return false, "Version conflict!", PLUGIN_NAME
 	end
 
 	local enabled = initVar( "Enabled", "1", lul_device, SONOS_SYS_SID )
@@ -3102,13 +3104,16 @@ function startup( lul_device )
 	end
 
 	-- Disable old plugin implementation if present.
-	--[[ DO NOT; we need a special version of this to bootstrap users with "official" installs
-	if file_exists( ipath .. "I_Sonos1.xml.lzo" ) or file_exists( ipath .. "I_Sonos1.xml" ) then
-		W("Removing old Sonos plugin implementation files (for standalone devices, no longer used)")
-		os.remove(ipath.."I_Sonos1.xml.lzo")
-		os.remove(ipath.."I_Sonos1.xml")
+	if not isOpenLuup then
+		-- For now, don't do this on Vera. We need our version of the impl file around to bootstrap
+		-- the new version, since Luup's plugin upgrade won't create the new system device itself.
+		if file_exists( ipath .. "I_Sonos1.xml.lzo" ) or file_exists( ipath .. "I_Sonos1.xml" ) then
+			W("Removing old Sonos plugin implementation files (for standalone devices, no longer used)")
+			os.remove(ipath.."I_Sonos1.xml.lzo")
+			os.remove(ipath.."I_Sonos1.xml")
+		end
 	end
-	--]]
+	-- These are removed on all platforms.
 	for _,v in ipairs{ "L_Sonos1.lua", "D_Sonos1_UI4.json" } do
 		if file_exists( ipath .. v .. ".lzo" ) then os.remove( ipath .. v .. ".lzo" ) end
 		if file_exists( ipath .. v ) then os.remove( ipath .. v ) end
