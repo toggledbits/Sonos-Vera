@@ -3104,7 +3104,7 @@ function startup( lul_device )
 	end
 
 	-- Disable old plugin implementation if present.
-	if not isOpenLuup then
+	if false and not isOpenLuup then
 		-- For now, don't do this on Vera. We need our version of the impl file around to bootstrap
 		-- the new version, since Luup's plugin upgrade won't create the new system device itself.
 		if file_exists( ipath .. "I_Sonos1.xml.lzo" ) or file_exists( ipath .. "I_Sonos1.xml" ) then
