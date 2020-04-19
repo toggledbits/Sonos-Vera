@@ -675,7 +675,9 @@ luupTask = function(text, mode)
 end
 
 local function defaultValue(arr, val, default)
-	return (arr or {})[val] or default
+	local ret = (arr or {})[val] or ""
+	if "" == ret then return default end
+	return ret
 end
 
 -- Set local and state variable data for zone. `zoneident` can be device number or zone UUID.
