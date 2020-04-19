@@ -47,9 +47,9 @@
 		<action>
 			<serviceId>urn:toggledbits-com:serviceId:SonosSystem1</serviceId>
 			<name>PauseAll</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionSonosPauseAll( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:toggledbits-com:serviceId:SonosSystem1</serviceId>
@@ -82,16 +82,16 @@
 		<action>
 			<serviceId>urn:toggledbits-com:serviceId:SonosSystem1</serviceId>
 			<name>InstallDiscoveryPatch</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionSonosInstallDiscoveryPatch( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:toggledbits-com:serviceId:SonosSystem1</serviceId>
 			<name>UninstallDiscoveryPatch</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionSonosUninstallDiscoveryPatch( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:toggledbits-com:serviceId:SonosSystem1</serviceId>
@@ -108,72 +108,72 @@
 		<action>
 			<serviceId>urn:micasaverde-com:serviceId:Sonos1</serviceId>
 			<name>PlayURI</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionSonosPlayURI( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:micasaverde-com:serviceId:Sonos1</serviceId>
 			<name>EnqueueURI</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionSonosEnqueueURI( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:micasaverde-com:serviceId:Sonos1</serviceId>
 			<name>SetURIToPlay</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionSonosSetURIToPlay( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:micasaverde-com:serviceId:Sonos1</serviceId>
 			<name>Say</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionSonosSay( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:micasaverde-com:serviceId:Sonos1</serviceId>
 			<name>Alert</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionSonosAlert( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:micasaverde-com:serviceId:Sonos1</serviceId>
 			<name>PauseAll</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionSonosPauseAll( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:micasaverde-com:serviceId:Sonos1</serviceId>
 			<name>JoinGroup</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionSonosJoinGroup( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:micasaverde-com:serviceId:Sonos1</serviceId>
 			<name>LeaveGroup</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionSonoLeaveGroup( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:micasaverde-com:serviceId:Sonos1</serviceId>
 			<name>UpdateGroupMembers</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionSonosUpdateGroupMembers( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:micasaverde-com:serviceId:Sonos1</serviceId>
 			<name>SelectSonosDevice</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionSonosSelectDevice( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:micasaverde-com:serviceId:Sonos1</serviceId>
@@ -185,16 +185,16 @@
 		<action>
 			<serviceId>urn:micasaverde-com:serviceId:Sonos1</serviceId>
 			<name>SetCheckStateRate</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionSonosSetCheckStateRate( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:micasaverde-com:serviceId:Sonos1</serviceId>
 			<name>SetReadQueueContent</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionSonosSetReadQueueContent( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:micasaverde-com:serviceId:Sonos1</serviceId>
@@ -239,23 +239,23 @@
 		<action>
 			<serviceId>urn:micasaverde-com:serviceId:Volume1</serviceId>
 			<name>Mute</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionVolumeMute( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:micasaverde-com:serviceId:Volume1</serviceId>
 			<name>Up</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionVolumeUp( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:micasaverde-com:serviceId:Volume1</serviceId>
 			<name>Down</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionVolumeDown( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<!--
 
@@ -265,40 +265,40 @@
 		<action>
 			<serviceId>urn:micasaverde-com:serviceId:MediaNavigation1</serviceId>
 			<name>Play</name>
-			<run>
+			<job>
 				-- Reuse AVTransport service function; works the same apparently
 				return L_SonosSystem1.actionAVTransportPlayMedia( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:micasaverde-com:serviceId:MediaNavigation1</serviceId>
 			<name>Pause</name>
-			<run>
+			<job>
 				-- Reuse AVTransport service function; works the same apparently
 				return L_SonosSystem1.actionAVTransportPause( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:micasaverde-com:serviceId:MediaNavigation1</serviceId>
 			<name>Stop</name>
-			<run>
+			<job>
 				-- Reuse AVTransport service function; works the same apparently
 				return L_SonosSystem1.actionAVTransportStop( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:micasaverde-com:serviceId:MediaNavigation1</serviceId>
 			<name>SkipDown</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionMediaNavigationSkipDown( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:micasaverde-com:serviceId:MediaNavigation1</serviceId>
 			<name>SkipUp</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionMediaNavigationSkipUp( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<!--
 
@@ -308,254 +308,254 @@
 		<action>
 			<serviceId>urn:upnp-org:serviceId:AVTransport</serviceId>
 			<name>Play</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionAVTransportPlayMedia( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:upnp-org:serviceId:AVTransport</serviceId>
 			<name>Seek</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionAVTransportSeek( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:upnp-org:serviceId:AVTransport</serviceId>
 			<name>Pause</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionAVTransportPause( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:upnp-org:serviceId:AVTransport</serviceId>
 			<name>Stop</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionAVTransportStop( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:upnp-org:serviceId:AVTransport</serviceId>
 			<name>Next</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionAVTransportNext( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:upnp-org:serviceId:AVTransport</serviceId>
 			<name>NextProgrammedRadioTracks</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionAVTransportNextProgrammedRadioTracks( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:upnp-org:serviceId:AVTransport</serviceId>
 			<name>NextSection</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionAVTransportNextSection( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:upnp-org:serviceId:AVTransport</serviceId>
 			<name>Previous</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionAVTransportPrevious( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:upnp-org:serviceId:AVTransport</serviceId>
 			<name>PreviousSection</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionAVTransportPreviousSection( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:upnp-org:serviceId:AVTransport</serviceId>
 			<name>GetPositionInfo</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionAVTransportGetPositionInfo( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:upnp-org:serviceId:AVTransport</serviceId>
 			<name>SetPlayMode</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionAVTransportSetPlayMode( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:upnp-org:serviceId:AVTransport</serviceId>
 			<name>SetAVTransportURI</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionAVTransportSetURI( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:upnp-org:serviceId:AVTransport</serviceId>
 			<name>SetNextAVTransportURI</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionAVTransportSetNextURI( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:upnp-org:serviceId:AVTransport</serviceId>
 			<name>AddMultipleURIsToQueue</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionAVTransportAddMultipleURIs( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:upnp-org:serviceId:AVTransport</serviceId>
 			<name>AddURIToQueue</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionAVTransportAddURI( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:upnp-org:serviceId:AVTransport</serviceId>
 			<name>CreateSavedQueue</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionAVTransportCreateSavedQueue( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:upnp-org:serviceId:AVTransport</serviceId>
 			<name>AddURIToSavedQueue</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionAVTransportAddURItoSaved( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:upnp-org:serviceId:AVTransport</serviceId>
 			<name>ReorderTracksInQueue</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionAVTransportReorderQueue( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:upnp-org:serviceId:AVTransport</serviceId>
 			<name>ReorderTracksInSavedQueue</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionAVTransportReorderSaved( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:upnp-org:serviceId:AVTransport</serviceId>
 			<name>RemoveTrackFromQueue</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionAVTransportRemoveTrackFromQueue( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:upnp-org:serviceId:AVTransport</serviceId>
 			<name>RemoveTrackRangeFromQueue</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionAVTransportRemoveTrackRangeFromQueue( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:upnp-org:serviceId:AVTransport</serviceId>
 			<name>RemoveAllTracksFromQueue</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionAVTransportRemoveAllTracksFromQueue( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:upnp-org:serviceId:AVTransport</serviceId>
 			<name>SaveQueue</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionAVTransportSaveQueue( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:upnp-org:serviceId:AVTransport</serviceId>
 			<name>BackupQueue</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionAVTransportBackupQueue( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:upnp-org:serviceId:AVTransport</serviceId>
 			<name>ChangeTransportSettings</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionAVTransportChangeTransportSettings( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:upnp-org:serviceId:AVTransport</serviceId>
 			<name>ConfigureSleepTimer</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionAVTransportConfigureSleepTimer( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:upnp-org:serviceId:AVTransport</serviceId>
 			<name>RunAlarm</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionAVTransportRunAlarm( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:upnp-org:serviceId:AVTransport</serviceId>
 			<name>StartAutoplay</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionAVTransportStartAutoplay( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:upnp-org:serviceId:AVTransport</serviceId>
 			<name>SnoozeAlarm</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionAVTransportSnoozeAlarm( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:upnp-org:serviceId:AVTransport</serviceId>
 			<name>SetCrossfadeMode</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionAVTransportSetCrossfadeMode( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:upnp-org:serviceId:AVTransport</serviceId>
 			<name>NotifyDeletedURI</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionAVTransportNotifyDeletedURI( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:upnp-org:serviceId:AVTransport</serviceId>
 			<name>BecomeCoordinatorOfStandaloneGroup</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionAVTransportBecomeCoordinatorSG( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:upnp-org:serviceId:AVTransport</serviceId>
 			<name>BecomeGroupCoordinator</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionAVTransportBecomeGroupCoordinator( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:upnp-org:serviceId:AVTransport</serviceId>
 			<name>BecomeGroupCoordinatorAndSource</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionAVTransportBecomeGCAndSource( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:upnp-org:serviceId:AVTransport</serviceId>
 			<name>ChangeCoordinator</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionAVTransportChangeCoordinator( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:upnp-org:serviceId:AVTransport</serviceId>
 			<name>DelegateGroupCoordinationTo</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionAVTransportDelegateGCTo( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<!--
 
@@ -565,100 +565,100 @@
 		<action>
 			<serviceId>urn:upnp-org:serviceId:RenderingControl</serviceId>
 			<name>SetMute</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionRCSetMute( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:upnp-org:serviceId:RenderingControl</serviceId>
 			<name>ResetBasicEQ</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionRCResetBasicEQ( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:upnp-org:serviceId:RenderingControl</serviceId>
 			<name>ResetExtEQ</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionRCResetExtEQ( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:upnp-org:serviceId:RenderingControl</serviceId>
 			<name>SetVolume</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionRCSetVolume( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:upnp-org:serviceId:RenderingControl</serviceId>
 			<name>SetRelativeVolume</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionRCSetRelativeVolume( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:upnp-org:serviceId:RenderingControl</serviceId>
 			<name>SetVolumeDB</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionRCSetVolumeDB( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:upnp-org:serviceId:RenderingControl</serviceId>
 			<name>SetBass</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionRCSetBass( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:upnp-org:serviceId:RenderingControl</serviceId>
 			<name>SetTreble</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionRCSetTreble( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:upnp-org:serviceId:RenderingControl</serviceId>
 			<name>SetEQ</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionRCSetEQ( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:upnp-org:serviceId:RenderingControl</serviceId>
 			<name>SetLoudness</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionRCSetLoudness( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:upnp-org:serviceId:RenderingControl</serviceId>
 			<name>SetOutputFixed</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionRCSetOutputFixed( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:upnp-org:serviceId:RenderingControl</serviceId>
 			<name>RampToVolume</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionRCRampToVolume( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:upnp-org:serviceId:RenderingControl</serviceId>
 			<name>RestoreVolumePriorToRamp</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionRCRestoreVolumePriorToRamp( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:upnp-org:serviceId:RenderingControl</serviceId>
 			<name>SetChannelMap</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionRCSetChannelMap( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<!--
 
@@ -668,30 +668,30 @@
 		<action>
 			<serviceId>urn:upnp-org:serviceId:GroupRenderingControl</serviceId>
 			<name>SetGroupMute</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionGRCSetGroupMute( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:upnp-org:serviceId:GroupRenderingControl</serviceId>
 			<name>SetGroupVolume</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionGRCSetGroupVolume( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:upnp-org:serviceId:GroupRenderingControl</serviceId>
 			<name>SetRelativeGroupVolume</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionGRCSetRelativeGroupVolume( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<action>
 			<serviceId>urn:upnp-org:serviceId:GroupRenderingControl</serviceId>
 			<name>SnapshotGroupVolume</name>
-			<run>
+			<job>
 				return L_SonosSystem1.actionGRCSnapshotGroupVolume( lul_device, lul_settings )
-			</run>
+			</job>
 		</action>
 		<!--
 
@@ -708,9 +708,9 @@
 		<action>
 			<serviceId>urn:micasaverde-com:serviceId:HaDevice1</serviceId>
 			<name>ToggleState</name>
-			<run>
+			<job>
 				-- ??? TODO: This needs to be implemented to make the Icon cause a toggle action
-			</run>
+			</job>
 		</action>
 	</actionList>
 </implementation>
