@@ -3051,7 +3051,7 @@ function startup( lul_device )
 	setVar( SONOS_SYS_SID, "Message", "Starting...", lul_device )
 	setVar( SONOS_SYS_SID, "DiscoveryMessage", "Starting, please wait.", lul_device )
 
-	if false and not isOpenLuup then -- ??? disabled for v2.0 release
+	if not isOpenLuup then -- ??? disabled for v2.0 release
 		local installVersion = not isOpenLuup and checkPluginInstalled()
 		if installVersion and installVersion <= 28820 then -- ???
 			E("The App Marketplace version of the v1.x plugin is installed! You must uninstall it to run this version %1", PLUGIN_VERSION)
