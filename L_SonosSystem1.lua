@@ -3012,7 +3012,10 @@ local function checkPluginInstalled()
 	ra = tostring( ra.UserData )
 	ra = json.decode( ra )
 	for _,v in ipairs( ra.InstalledPlugins2 or {} ) do
-		if v.id == PLUGIN_ID then return tonumber(v.Version) or false end
+		if v.id == PLUGIN_ID then
+			L("Installed plugin version %1", v.Version)
+			return tonumber(v.Version) or false
+		end
 	end
 	return false
 end
