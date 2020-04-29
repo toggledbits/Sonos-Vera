@@ -2130,6 +2130,7 @@ KKRpUUjTopCmReGUpr84I+Is6Ofnx/PfxmQymc1mx//34NFfwoFpp0AWoiikaTEw9galFENnD/Sm
 
 	-- Apparently as of 7.30, this is new designated location.
 	if not ( isOpenLuup or file_exists( "/www/cmh/skins/default/icons/Sonos.png" ) ) then
+		os.execute( "mkdir -p /www/cmh/skins/default/icons/" )
 		file_symlink( basePath.."Sonos.png", "/www/cmh/skins/default/icons/Sonos.png" )
 	end
 end
@@ -2723,9 +2724,9 @@ local function systemRunOnce( pdev )
 	initVar( "DebugLogs", 0, pdev, SONOS_SYS_SID )
 	initVar( "MaxLogSize", "", pdev, SONOS_SYS_SID )
 	initVar( "CheckStateRate", "", pdev, SONOS_SYS_SID )
-	initVar( "TTSChime", "", pdev, SONOS_ZONE_SID )
-	initVar( "UseTTSCache", "", pdev, SONOS_ZONE_SID )
-	initVar( "TTSCacheMaxAge", "", pdev, SONOS_ZONE_SID )
+	initVar( "TTSChime", "", pdev, SONOS_SYS_SID )
+	initVar( "UseTTSCache", "", pdev, SONOS_SYS_SID )
+	initVar( "TTSCacheMaxAge", "", pdev, SONOS_SYS_SID )
 
 	if s < 20103 and not isOpenLuup then
 		for i=0,200,25 do
@@ -2736,6 +2737,10 @@ local function systemRunOnce( pdev )
 		os.remove( "/www/cmh/skins/default/icons/Sonos.png" )
 		os.remove( getInstallPath() .. "Sonos.png" )
 	end
+
+	deleteVar( SONOS_ZONE_SID, "TTSChime", pdev ) -- wrong SID
+	deleteVar( SONOS_ZONE_SID, "UseTTSCache", pdev ) -- wrong SID
+	deleteVar( SONOS_ZONE_SID, "TTSCacheMaxAge", pdev ) -- wrong SID
 
 	if s < _CONFIGVERSION then
 		setVar( SONOS_SYS_SID, "ConfigVersion", _CONFIGVERSION, pdev )
