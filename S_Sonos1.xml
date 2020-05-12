@@ -7,6 +7,10 @@
 	</specVersion>
 	<serviceStateTable>
 		<stateVariable sendEvents="no">
+			<name>A_ARG_TYPE_instance</name>
+			<dataType>string</dataType>
+		</stateVariable>
+		<stateVariable sendEvents="no">
 			<name>A_ARG_TYPE_URI</name>
 			<dataType>string</dataType>
 		</stateVariable>
@@ -134,6 +138,11 @@
 			<name>PlayURI</name>
 			<argumentList>
 				<argument>
+					<name>InstanceID</name>
+					<direction>in</direction>
+					<relatedStateVariable>A_ARG_TYPE_instance</relatedStateVariable>
+				</argument>
+				<argument>
 					<name>URIToPlay</name>
 					<direction>in</direction>
 					<relatedStateVariable>A_ARG_TYPE_URI</relatedStateVariable>
@@ -148,6 +157,11 @@
 		<action>
 			<name>EnqueueURI</name>
 			<argumentList>
+				<argument>
+					<name>InstanceID</name>
+					<direction>in</direction>
+					<relatedStateVariable>A_ARG_TYPE_instance</relatedStateVariable>
+				</argument>
 				<argument>
 					<name>URIToEnqueue</name>
 					<direction>in</direction>
