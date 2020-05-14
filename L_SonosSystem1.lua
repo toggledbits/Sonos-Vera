@@ -3447,10 +3447,7 @@ local function endTTSPlayback(device)
 	if sayQueue[device] and #sayQueue[device] > 0 then
 		local settings = sayQueue[device][1]
 		D("endTTSPlayback() finished %1", settings.URI)
-		if settings.TempFile then
-			-- Remove temp file
-			os.remove( settings.TempFile )
-		end
+		-- Don't delete temp file; we may need for repeats, useful for debug/diag.
 		table.remove(sayQueue[device], 1)
 		D("endTTSPlayback() queue contains %1 more", #sayQueue[device])
 		if #sayQueue[device] > 0 then
