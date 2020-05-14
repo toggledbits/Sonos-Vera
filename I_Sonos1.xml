@@ -9,11 +9,13 @@
 
 		function legacy_start( pdev )
 			-- Bootstrap to 2.0 from 1.x
+			luup.log("Sonos legacy bootstrap 20135 starting",1)
 			local found = false
 			local lmin
 			for k,v in pairs( luup.devices ) do
 				if v.device_type == "urn:schemas-toggledbits-com:device:SonosSystem:1" then
 					found = k
+					luup.log("Sonos legacy bootstrap found v2.x system device at "..tostring(k))
 				elseif v.device_type == "urn:schemas-micasaverde-com:device:Sonos:1" and v.device_num_parent == 0 then
 					if not lmin or k &lt; lmin then lmin = k end
 					luup.attr_set( "impl_file", "", k )
@@ -21,12 +23,13 @@
 			end
 			if not found and lmin == pdev then
 				-- Create new Sonos System device, reload.
-				luup.log("Sonos: legacy bootstrap creating new 2.0 master device (reload required)",2)
+				luup.log("Sonos legacy bootstrap creating new 2.x master device (reload required)",2)
 				luup.call_action( "urn:micasaverde-com:serviceId:HomeAutomationGateway1",
 					"CreateDevice", { Description="Sonos System", UpnpDevFilename="D_SonosSystem1.xml",
 						UpnpImplFilename="I_SonosSystem1.xml" }, 0 )
 				luup.call_delay( 'legacy_reload', 30 )
 			end
+			-- All startups of old devices fail.
 			return false, "Upgrading...", "Sonos"
 		end
 	</functions>
