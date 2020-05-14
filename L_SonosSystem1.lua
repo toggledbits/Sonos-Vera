@@ -3061,7 +3061,7 @@ function startup( lul_device )
 
 	if not isOpenLuup then -- ??? disabled for v2.0 release
 		local installVersion = not isOpenLuup and checkPluginInstalled()
-		if installVersion and installVersion <= 28820 then -- ???
+		if installVersion and installVersion < 39806 then -- ???
 			E("The App Marketplace version of the v1.x plugin is installed! You must uninstall it to run this version %1", PLUGIN_VERSION)
 			luup.set_failure( 1, lul_device )
 			luup.attr_set( "plugin", "", lul_device )

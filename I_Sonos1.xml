@@ -3,7 +3,7 @@
 <implementation>
     <functions>
 		function legacy_reload()
-			luup.log("Sonos: reloading Luup after device creation",2)
+			luup.log("\n***** Sonos: reloading Luup after device creation *****\n",2)
 			luup.reload()
 		end
 
@@ -16,6 +16,7 @@
 					found = k
 				elseif v.device_type == "urn:schemas-micasaverde-com:device:Sonos:1" and v.device_num_parent == 0 then
 					if not lmin or k &lt; lmin then lmin = k end
+					luup.attr_set( "impl_file", "", k )
 				end
 			end
 			if not found and lmin == pdev then
@@ -25,9 +26,8 @@
 					"CreateDevice", { Description="Sonos System", UpnpDevFilename="D_SonosSystem1.xml",
 						UpnpImplFilename="I_SonosSystem1.xml" }, 0 )
 				luup.call_delay( 'legacy_reload', 30 )
-				return false, "Upgrading...", "Sonos"
 			end
-			return true, "", "Sonos"
+			return false, "Upgrading...", "Sonos"
 		end
 	</functions>
 	<startup>legacy_start</startup>
