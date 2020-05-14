@@ -3029,6 +3029,19 @@ function startup( lul_device )
 	L("Starting version %1 device #%2 (%3)", PLUGIN_VERSION, lul_device,
 		luup.devices[lul_device].description)
 
+	-- Hmmm... are we a zone device that's been given the new implementation file?
+	if luup.devices[lul_device].device_type == SONOS_ZONE_DEVICE_TYPE then
+		E("Detected system startup on zone device. Fixing!")
+		L("zone device is %1", getVar( "SonosID", "", lul_device, UPNP_DEVICE_PROPERTIES_SID ))
+		luup.attr_set( "impl_file", "", lul_device )
+		luup.attr_set( "device_file", "D_Sonos1.xml", lul_device )
+		luup.attr_set( "plugin", "", lul_device )
+		return true, "*Upgrading...", "Sonos"
+	elseif luup.devices[lul_device].device_type ~= SONOS_SYS_DEVICE_TYPE then
+		E("I don't know what kind of device I am! #%1, %2", lul_device, luup.devices[lul_device].device_type)
+		return false, "Invalid device", "Sonos"
+	end
+
 	systemReady = false
 	isOpenLuup = luup.openLuup ~= nil
 	pluginDevice = lul_device
@@ -3041,6 +3054,20 @@ function startup( lul_device )
 	if getVarNumeric("MaxLogSize", DEVELOPMENT and 512 or 0, lul_device, SONOS_SYS_SID) > 0 then
 		pcall( logToFile, string.rep( "_", 132) )
 		pcall( logToFile, string.format( "Log file opened at startup; plugin %s; luup %s", PLUGIN_VERSION, luup.version) )
+	end
+
+	-- Quick pass at devices to check for duplicate master devices
+	local master = lul_device
+	for k,v in pairs( luup.devices ) do
+		if v.device_type == SONOS_SYS_DEVICE_TYPE then
+			if k < master then master = k end
+		end
+	end
+	if lul_device ~= master then
+		E("Duplicate Sonos System master device! Real master is #%1", master)
+		luup.variable_set( SONOS_SYS_SID, "Message", "Duplicate master device! Delete me!", lul_device )
+		luup.set_failure( 1, lul_device )
+		return false, "Duplicate master device!", PLUGIN_NAME
 	end
 
 	-- Check required packages.
@@ -3146,10 +3173,6 @@ function startup( lul_device )
 			if ( luup.attr_get( "plugin", k ) or "" ) ~= "" then
 				luup.attr_set( "plugin", "", k )
 			end
-		elseif v.device_type == SONOS_SYS_DEVICE_TYPE and k ~= lul_device then
-			E("Duplicate Sonos System master device!")
-			luup.set_failure( 1, lul_device )
-			return false, "Duplicate master device!", PLUGIN_NAME
 		elseif v.device_type == "urn:schemas-upnp-org:device:altui:1" and v.device_num_parent == 0 then
 			isALTUI = k
 		end

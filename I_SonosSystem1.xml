@@ -5,7 +5,11 @@
 		function sonosSystemStartup( dev )
 			luup.log("Sonos System implementation startup")
 			local f = io.open("/etc/cmh-ludl/Z_SonosSystem1.zzz","r")
-			if f then f:close() return false, "Startup blocked (zzz)", "SonosSystem" end
+			if f then
+				f:close()
+				luup.log("Sonos (I_SonosSystem1.xml): file /etc/cmh-ludl/Z_SonosSystem1.zzz exists, aborting startup!", 1)
+				return false, "Zzz", "Sonos"
+			end
 			L_SonosSystem1 = require "L_SonosSystem1"
 			-- Sanity check installation
 			if ( L_SonosSystem1.PLUGIN_VERSION or "" ) == "" then
