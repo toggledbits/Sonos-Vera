@@ -8,11 +8,11 @@
 module( "L_SonosSystem1", package.seeall )
 
 PLUGIN_NAME = "Sonos"
-PLUGIN_VERSION = "2.0-20135"
+PLUGIN_VERSION = "2.0-20136"
 PLUGIN_ID = 4226
 PLUGIN_URL = "https://github.com/toggledbits/Sonos-Vera"
 
-local _CONFIGVERSION = 20103
+local _CONFIGVERSION = 20136
 local _UIVERSION = 20103
 
 local DEBUG_MODE = false	-- Don't hardcode true--use state variable config
@@ -3018,7 +3018,6 @@ local function checkPluginInstalled()
 	ra = json.decode( ra )
 	for _,v in ipairs( ra.InstalledPlugins2 or {} ) do
 		if v.id == PLUGIN_ID then
-			L("Installed plugin version %1", v.Version)
 			return tonumber(v.Version) or false
 		end
 	end
@@ -3039,6 +3038,7 @@ function startup( lul_device )
 		return true, "*Upgrading...", "Sonos"
 	elseif luup.devices[lul_device].device_type ~= SONOS_SYS_DEVICE_TYPE then
 		E("I don't know what kind of device I am! #%1, %2", lul_device, luup.devices[lul_device].device_type)
+		luup.set_failure( 1, lul_device )
 		return false, "Invalid device", "Sonos"
 	end
 
@@ -3056,7 +3056,7 @@ function startup( lul_device )
 		pcall( logToFile, string.format( "Log file opened at startup; plugin %s; luup %s", PLUGIN_VERSION, luup.version) )
 	end
 
-	-- Quick pass at devices to check for duplicate master devices
+	-- Quick pass at devices to check for duplicate master devices. Only lowest-numbered survives/runs.
 	local master = lul_device
 	for k,v in pairs( luup.devices ) do
 		if v.device_type == SONOS_SYS_DEVICE_TYPE then
@@ -3075,8 +3075,36 @@ function startup( lul_device )
 		local st,m = pcall( require, v )
 		if not st or type(m) ~= "table" then
 			L({level=1,"Required system package %1 could not be loaded. Please install it."}, v)
+			luup.set_failure( 1, lul_device )
 			return false, "Missing required system package", PLUGIN_NAME
 		end
+	end
+
+	local installVersion = not isOpenLuup and checkPluginInstalled()
+	if installVersion then
+		L("Installed (App Marketplace) plugin version is %1", installVersion)
+		if installVersion < 39806 then -- 28820 is 1.4, 39806 is first 2.0 RC
+			E("The App Marketplace version of the v1.x plugin (%1) is installed! You must first uninstall it to run this version.", installVersion, PLUGIN_VERSION)
+			luup.attr_set( "plugin", "", lul_device )
+			for k,v in pairs( luup.devices ) do
+				if v.device_type == SONOS_ZONE_DEVICE_TYPE then
+					luup.attr_set( "plugin", "", k )
+				end
+			end
+			setVar( SONOS_SYS_SID, "Message", "Version conflict!", lul_device )
+			luup.set_failure( 1, lul_device )
+			return false, "Version conflict!", PLUGIN_NAME
+		elseif not DEVELOPMENT then -- >= first 2.0 RC
+			-- N.B. This MUST come before systemRunOnce()
+			if getVarNumeric( "ConfigVersion", 0, lul_device, SONOS_SYS_SID ) < _CONFIGVERSION then
+				-- Attach to installed plugin
+				L("Attaching to installed plugin")
+				luup.attr_set( "plugin", PLUGIN_ID, lul_device )
+			end
+		end
+	end
+	if DEVELOPMENT then
+		luup.attr_set( "plugin", "", lul_device )
 	end
 
 	systemRunOnce( lul_device )
@@ -3085,22 +3113,6 @@ function startup( lul_device )
 	setVar( SONOS_SYS_SID, "_UIV", _UIVERSION, lul_device )
 	setVar( SONOS_SYS_SID, "Message", "Starting...", lul_device )
 	setVar( SONOS_SYS_SID, "DiscoveryMessage", "Starting, please wait.", lul_device )
-
-	if not isOpenLuup then -- ??? disabled for v2.0 release
-		local installVersion = not isOpenLuup and checkPluginInstalled()
-		if installVersion and installVersion < 39806 then -- ???
-			E("The App Marketplace version of the v1.x plugin is installed! You must uninstall it to run this version %1", PLUGIN_VERSION)
-			luup.set_failure( 1, lul_device )
-			luup.attr_set( "plugin", "", lul_device )
-			for k,v in pairs( luup.devices ) do
-				if v.device_type == SONOS_ZONE_DEVICE_TYPE then
-					luup.attr_set( "plugin", "", k )
-				end
-			end
-			setVar( SONOS_SYS_SID, "Message", "Version conflict!", lul_device )
-			return false, "Version conflict!", PLUGIN_NAME
-		end
-	end
 
 	local enabled = initVar( "Enabled", "1", lul_device, SONOS_SYS_SID )
 	if "0" == enabled then
