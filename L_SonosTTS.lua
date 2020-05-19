@@ -6,7 +6,7 @@
 
 module("L_SonosTTS", package.seeall)
 
-VERSION = 20103
+VERSION = 20140
 DEBUG_MODE = false
 
 local urllib = require("socket.url")
@@ -21,7 +21,7 @@ local log = print
 local warning = log
 local error = log	--luacheck: ignore 231
 
-local defaultEngine = "RV"
+local defaultEngine = "MARY"
 
 local engines = {}
 
@@ -198,7 +198,7 @@ MaryTTSEngine = HTTPGetTTSEngine:new{
 --connect-timeout %{timeout:s|15} \
 --header "Accept-Charset: utf-8;q=0.7,*;q=0.3" \
 --header "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" \
-'%{url:s}?INPUT_TYPE=TEXT&AUDIO=WAVE_FILE&OUTPUT_TYPE=AUDIO&LOCALE=%{lang|en_US}&INPUT_TEXT=%{text}']],
+'%{url:s}?INPUT_TYPE=TEXT&AUDIO=WAVE_FILE&OUTPUT_TYPE=AUDIO&LOCALE=%{lang|en-US}&INPUT_TEXT=%{text}&{extraopts:s}']],
 	optionMeta={
 		url={ index=1, title="Server URL", default="http://127.0.0.1:59125/process" },
 		lang={ index=2, title="Language", default="en-US", unrestricted=true, values={
@@ -222,8 +222,9 @@ MaryTTSEngine = HTTPGetTTSEngine:new{
 						['es-es']="Spanish (Spanish)"
 			}
 		},
-		timeout={ title="Timeout (secs)", default=15 },
-		maxchunk={ title="Max Text Chunk", default=100 }
+		maxchunk={ index=3, title="Max Text Chunk", default=100 },
+		timeout={ index=4, title="Timeout (secs)", default=15 },
+		extraopts={ index=5, title="Extra Params" }
 	}
 }
 
@@ -572,9 +573,5 @@ function ConvertTTS(text, destFile, language, engineId, engineOptions)
 end
 
 function setup(language, engine, googleUrl, osxUrl, maryUrl, rvURL, clientId, clientSecret, option)
-	defaultEngine = engine or "RV"
-	engines.GOOGLE.optionMeta.url.default = googleUrl or "https://translate.google.com"
-	engines.MARY.optionMeta.url.default = maryUrl or "http://127.0.0.1:3510"
-	engines.RV.optionMeta.url.default = rvURL or "https://code.responsivevoice.org"
-	engines.OSX_TTS_SERVER.optionMeta.url.default = osxUrl or "http://127.0.0.1"
+	defaultEngine = engine or "MARY"
 end
