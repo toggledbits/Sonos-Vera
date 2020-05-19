@@ -578,7 +578,7 @@ var Sonos = (function(api, $) {
 
 		var $row = $( '<div class="row" />' );
 		$( '<div class="col-xs-6 col-md-3 col-lg-2 col-xl-1">Text to Speak:</div>' ).appendTo( $row );
-		$( '<div class="col-xs-6 col-md-9 col-lg-10 col-xl-11 form-inline"><textarea id="tts-text" wrap="off" class="form-control" /></div>' )
+		$( '<div class="col-xs-6 col-md-9 col-lg-10 col-xl-11 form-inline"><textarea id="tts-text" wrap="soft" class="form-control" /></div>' )
 			.appendTo( $row );
 		$row.appendTo( $container );
 
