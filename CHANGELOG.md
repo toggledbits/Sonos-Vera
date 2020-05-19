@@ -2,6 +2,12 @@
 
 **NOTAM (NOtice To All Music-lovers):** ResponsiveVoice is no longer supported. They removed the public URL/endpoint that was being used to create speech audio files by the plugin. The suggested alternative to RV is the Microsoft Azure Speech Service, which produces clear speech audio from a large variety of voices, and offers a usable/meaningful free tier level that is likely sufficient for most users.
 
+## Version 2.1 (development, 20140)
+
+* Support extra fields for MaryTTS, in case there's more that needs to be passed on the URL that isn't preconfigured/canned.
+* Remove bogus 1.x defaults from TTS initialization, masking real defaults now in effect.
+* Soft-wrap text input for TTS tab on Sonos device.
+
 ## Version 2.0 (released)
 
 **DEPRECATION ANNOUNCEMENT:** The "Language" parameter on `Say` actions is now deprecated; it will be removed in a future release. Since language is closely coupled to engine configuration, it isn't reasonable to allow language selection at the action.
