@@ -6,7 +6,7 @@
 
 module("L_SonosTTS", package.seeall)
 
-VERSION = 20140
+VERSION = 20143
 DEBUG_MODE = false
 
 local urllib = require("socket.url")
@@ -472,7 +472,7 @@ function AzureTTSEngine:say(text, destFile, engineOptions)
 					["Authorization"] = "Bearer " .. tostring(self.token)
 				},
 				source = ltn12.source.string(payload),
-				protocol = ( ssl._VERSION or "0.5" ):find( "^0%.5" ) and "tlsv1_2" or "any"
+				protocol = ( ssl._VERSION or "0.5" ):find( "^0%.[45]" ) and "tlsv1_2" or "any"
 			}
 		debug("AzureTTSEngine:say() LuaSec %1, using protocol %2 for request", ssl._VERSION, req.protocol)
 		local _, statusMsg = https.request( req )

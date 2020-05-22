@@ -4,6 +4,7 @@
 
 ## Version 2.1 (development, 20140)
 
+* Fix SSL protocol in Azure TTS fetch for Vera3/Lite.
 * Support extra fields for MaryTTS, in case there's more that needs to be passed on the URL that isn't preconfigured/canned.
 * Remove bogus 1.x defaults from TTS initialization, masking real defaults now in effect.
 * Soft-wrap text input for TTS tab on Sonos device.
