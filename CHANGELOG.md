@@ -2,9 +2,9 @@
 
 **NOTAM (NOtice To All Music-lovers):** ResponsiveVoice is no longer supported. They removed the public URL/endpoint that was being used to create speech audio files by the plugin. The suggested alternative to RV is the Microsoft Azure Speech Service, which produces clear speech audio from a large variety of voices, and offers a usable/meaningful free tier level that is likely sufficient for most users.
 
-## Version 2.1 (development, 20140)
+## Version 2.1 (development, 20143)
 
-* Fix SSL protocol in Azure TTS fetch for Vera3/Lite.
+* Azure TTS now works for Vera3/Lite. It is necessary to switch the "Requestor" in the TTS settings to "curl," and set "SSL Peer Verification" to "off". Note that these settings are **not secure**, and introduce the (likely remote but not zero) risk of undetected man-in-the-middle and other attacks on the connection/requests, so **you make these settings changes entirely at your own risk**. If cannot accept this risk, your only alternative is to upgrade your Vera to a modern unit that supports the higher levels of encryption and peer verification required, or not use Azure TTS.
 * Support extra fields for MaryTTS, in case there's more that needs to be passed on the URL that isn't preconfigured/canned.
 * Remove bogus 1.x defaults from TTS initialization, masking real defaults now in effect.
 * Soft-wrap text input for TTS tab on Sonos device.
@@ -13,7 +13,7 @@
 
 **DEPRECATION ANNOUNCEMENT:** The "Language" parameter on `Say` actions is now deprecated; it will be removed in a future release. Since language is closely coupled to engine configuration, it isn't reasonable to allow language selection at the action.
 
-**SUPPORT FOR VERA 3/LITE:** The Sonos plugin generally runs well on the Vera3 and Lite, but the SSL library on the device is unable to meet the encryption requirements of the Microsoft Azure services for TTS. As a result, MARY is the only supported TTS for these platforms. This is a limitation of the firmware on these systems, and since they are now off maintenance with Vera/eZLO, it is not expected that these will receive any further updates. Your only option is to move up to the newer Edge/Plus/Secure models.
+**SUPPORT FOR VERA 3/LITE:** The Sonos plugin 2.0 generally runs well on the Vera3 and Lite, but the SSL library on the device is unable to meet the encryption requirements of the Microsoft Azure services for TTS. As a result, MARY is the only supported TTS for these platforms. This is a limitation of the firmware on these systems, and since they are now off maintenance with Vera/eZLO, it is not expected that these will receive any further updates. Your only option is to move up to the newer Edge/Plus/Secure models.
 
 **OPENLUUP USERS:** If you plan on using TTS on openLuup, please see the README file for the latest instructions on special setup requirements.
 

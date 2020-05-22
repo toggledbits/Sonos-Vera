@@ -413,26 +413,28 @@ function AzureTTSEngine:new(o)
 			unrestricted=true,
 			infourl="https://docs.microsoft.com/en-us/azure/cognitive-services/speech-service/language-support#text-to-speech"
 		},
-		timeout={ title="Timeout (secs)", default="15" }
+		timeout={ title="Timeout (secs)", default="15" },
+		requestor={ title="Requestor", default="", values={ [""]="LuaSocket/LuaSec (recommended)", ["C"]="curl" } }
 	}
 	return o
 end
 function AzureTTSEngine:say(text, destFile, engineOptions)
 	assert( engineOptions.subkey, "Subscription key is required" )
-
 	local tries = 0
-	while tries < 2 do
+	while tries < 3 do
 		tries = tries + 1
 		if os.time() - self.lastToken >= self.maxTokenLife then
 			debug("AzureTTSEngine:say() token is expired, fetching new")
 			local url = string.format("https://%s.api.cognitive.microsoft.com/sts/v1.0/issueToken",
 				engineOptions.region or self.optionMeta.region.default)
-			local cmd = string.format([[curl -s -o - -m 15 -X POST %q -H "Content-length: 0" \
--H "Content-type: application/x-www-form-urlencoded" -H "Ocp-Apim-Subscription-Key: %s"]],
-				url, engineOptions.subkey or "undefined")
+			local cmd = string.format([[curl -s -k -o - -m 15 -X POST -H 'Content-length: 0' \
+-H 'Content-type: application/x-www-form-urlencoded' -H 'Ocp-Apim-Subscription-Key: %s' '%s']],
+				engineOptions.subkey or "undefined", url)
+			debug("AzureTTSEngine:say() %1", cmd)
 			local fp = io.popen( cmd )
 			local s = fp:read("*a") or ""
 			fp:close()
+			debug("AzureTTSEngine:say() response %1", s)
 			if s:match("error") then
 				warning("AzureTTSEngine:say() failed to fetch token: "..s)
 				local json = require "dkjson"
@@ -440,13 +442,20 @@ function AzureTTSEngine:say(text, destFile, engineOptions)
 				if not data then
 					debug("AzureTTSEngine:say() invalid response JSON: %1", s)
 					error("Invalid response JSON")
+					break
 				elseif data.error and data.error.code ~= 200 then
 					error("Can't get token, error %1 response, %2", data.error.code, data.error.message)
+					break
 				end
 				error("Unparseable token response")
+			elseif s == "" then
+				error("Empty response, likely failed to negotiate SSL or invalid URL")
 			end
 			self.token = s
 			self.lastToken = os.time()
+			debug("AzureTTSEngine:say() acquired new token %1", self.token)
+		else
+			debug("AzureTTSEngine:say() current token assumed valid")
 		end
 
 		local host = string.format("%s.tts.speech.microsoft.com", engineOptions.region or self.optionMeta.region.default )
@@ -456,44 +465,80 @@ function AzureTTSEngine:say(text, destFile, engineOptions)
 			lang, voice,
 			text:gsub("%s+"," "):gsub("^%s+",""):gsub("%s+$",""):gsub("%&","&amp;"):gsub("%>","&gt;"):gsub("%<","&lt;"))
 		debug("AzureTTSEngine:say() host %1 payload %2", host, payload)
+		debug("AzureTTSEngine:say() system LuaSec version is %1", ssl._VERSION)
 		os.remove( destFile )
-		local fp,ferr = io.open(destFile, "wb")
-		if not fp then error("Unable to open "..tostring(destFile)..": "..tostring(ferr)) end
-		http.TIMEOUT = engineOptions.timeout or self.optionMeta.timeout.default or 15
-		local req = {
-			url = "https://" .. host .. "/cognitiveservices/v1",
-				sink = ltn12.sink.file(fp, ferr),
-				method = "POST",
-				headers = {
-					["X-Microsoft-OutputFormat"] = self.format,
-					["Host"] = host,
-					["Content-Type"] = "application/ssml+xml",
-					["Content-Length"] = #payload,
-					["Authorization"] = "Bearer " .. tostring(self.token)
-				},
-				source = ltn12.source.string(payload),
-				protocol = ( ssl._VERSION or "0.5" ):find( "^0%.[45]" ) and "tlsv1_2" or "any"
-			}
-		debug("AzureTTSEngine:say() LuaSec %1, using protocol %2 for request", ssl._VERSION, req.protocol)
-		local _, statusMsg = https.request( req )
-		if statusMsg == 200 then
-			if io.type(fp) == "file" then fp:close() end
-			fp = io.open( destFile, "rb" )
-			local size = fp:seek("end") or 0
-			fp:close()
-			debug("AzureTTSEngine:say() received %1 byte response", size)
-			if size > 0 then
-				-- Convert bitrate in Kbps to Bps, and from that compute clip duration (aggressive rounding up)
-				return math.ceil( size / ( self.bitrate * 128 ) ) + 1, nil, size
+		if engineOptions.requestor == "C" then
+			-- Ancient LuaSec or curl specified
+			payload = payload:gsub( "'", "''" ) -- double-up single quotes for shell
+			local req = string.format("curl -s -k -m %s -k -o '%s'",
+				engineOptions.timeout or self.optionMeta.timeout.default or 15,
+				destFile)
+			req = req .. string.format(" -H 'Host: %s'", host)
+			req = req .. string.format(" -H 'Authorization: Bearer %s'", self.token)
+			req = req .. string.format(" -H 'X-Microsoft-OutputFormat: %s'", self.format)
+			req = req .. string.format(" -H 'Content-Type: %s'", "application/ssml+xml")
+			req = req .. string.format(" -H 'Content-Length: %s'", #payload)
+			req = req .. string.format(" -d '%s'", payload )
+			req = req .. string.format(" 'https://%s/cognitiveservices/v1'", host)
+			debug("AzureTTSEngine:say() curl request: %1", req)
+			if os.execute( req ) ~= 0 then
+				error("curl request failed: %1", req)
+				if tries == 1 then
+					-- Fail on first attempt will retry with a new token
+					debug("AzureTTSEngine:say() arming for new token and retry")
+					self.lastToken = 0
+				else
+					return nil, "curl request failed"
+				end
+			else
+				local fp = io.open( destFile, "rb" )
+				local size = fp:seek("end") or 0
+				fp:close()
+				debug("AzureTTSEngine:say() received %1 byte response via curl", size)
+				if size > 0 then
+					-- Convert bitrate in Kbps to Bps, and from that compute clip duration (aggressive rounding up)
+					return math.ceil( size / ( self.bitrate * 128 ) ) + 1, nil, size
+				end
+				return nil, "received zero-length file"
 			end
-			return nil, "received zero-length file"
-		elseif statusMsg == 401 then
-			-- Authorization error; assume token has expired. Arm to re-request.
-			debug("AzureTTSEngine:say() auth fail, arming for retry")
-			self.lastToken = 0
 		else
-			warning("AzureTTSEngine:say() conversion request failed, "..tostring(statusMsg))
-			return nil, "request failed "..tostring(statusMsg)
+			local fp,ferr = io.open(destFile, "wb")
+			if not fp then error("Unable to open "..tostring(destFile)..": "..tostring(ferr)) end
+			http.TIMEOUT = engineOptions.timeout or self.optionMeta.timeout.default or 15
+			local req = {
+				url = "https://" .. host .. "/cognitiveservices/v1",
+					sink = ltn12.sink.file(fp, ferr),
+					method = "POST",
+					headers = {
+						["X-Microsoft-OutputFormat"] = self.format,
+						["Host"] = host,
+						["Content-Type"] = "application/ssml+xml",
+						["Content-Length"] = #payload,
+						["Authorization"] = "Bearer " .. tostring(self.token)
+					},
+					source = ltn12.source.string(payload),
+					protocol = "any"
+			}
+			local _, statusMsg = https.request( req )
+			if statusMsg == 200 then
+				if io.type(fp) == "file" then fp:close() end
+				fp = io.open( destFile, "rb" )
+				local size = fp:seek("end") or 0
+				fp:close()
+				debug("AzureTTSEngine:say() received %1 byte response via socket.http", size)
+				if size > 0 then
+					-- Convert bitrate in Kbps to Bps, and from that compute clip duration (aggressive rounding up)
+					return math.ceil( size / ( self.bitrate * 128 ) ) + 1, nil, size
+				end
+				return nil, "received zero-length file"
+			elseif statusMsg == 401 then
+				-- Authorization error; assume token has expired. Arm to re-request.
+				debug("AzureTTSEngine:say() auth fail, arming for retry")
+				self.lastToken = 0
+			else
+				warning("AzureTTSEngine:say() conversion request failed, "..tostring(statusMsg))
+				return nil, "request failed "..tostring(statusMsg)
+			end
 		end
 	end
 	warning("AzureTTSEngine:say() authorization failed with Azure service")
@@ -517,7 +562,7 @@ function getEngine( ident )
 end
 
 function setDefaultEngine( ident )
-	ident = ident or DEFAULT_ENGINE
+	ident = ident or "MARY"
 	if not engines[ident] then base.error("Invalid/unregistered engine "..ident) end
 	defaultEngine = ident
 end
@@ -572,6 +617,6 @@ function ConvertTTS(text, destFile, language, engineId, engineOptions)
 	return generate(engines[engineId or defaultEngine], text, destFile, engineOptions)
 end
 
-function setup(language, engine, googleUrl, osxUrl, maryUrl, rvURL, clientId, clientSecret, option)
+function setup(language, engine, googleUrl, osxUrl, maryUrl, rvURL, clientId, clientSecret, option) -- luacheck: ignore 212
 	defaultEngine = engine or "MARY"
 end
