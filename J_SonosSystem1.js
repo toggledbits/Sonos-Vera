@@ -241,7 +241,10 @@ var SonosSystem = (function(api, $) {
 							{ actionArguments: { enable: val ? "1" : "0" } } );
 					}
 
-					alert("Settings saved!");
+					if ( confirm( "Settings saved. Luup needs to be reloaded for most changes to take effect. Reload now?" ) ) {
+						api.performActionOnDevice( 0, "urn:micasaverde-com:serviceId:HomeAutomationGateway1", "Reload",
+							{ actionArguments: { Reason: "Sonos settings changes" } } );
+					}
 				},
 				'onFailure' : function( a,b,c ) {
 					alert('There was a problem saving the configuration. Vera/Luup may have been restarting. Please wait a few seconds and try again.');
