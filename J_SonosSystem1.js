@@ -15,7 +15,7 @@ var SonosSystem = (function(api, $) {
 	/* unique identifier for this plugin... */
 	var uuid = '79bf9374-f989-11e9-884c-dbb32f3fa64a'; /* SonosSystem 2019-12-11 19345 */
 
-	var pluginVersion = '2.0-20136';
+	var pluginVersion = '2.1-20143';
 
 	var _UIVERSION = 20103;     /* must coincide with Lua core */
 
@@ -549,10 +549,9 @@ div.sonos-footer { margin: 16px 0px; } \
 		});
 
 		$row = $( '<div class="row"/>' );
-		$col = $( '<div class="col-xs-12 col-sm-12">Other Settings</div>' )
+		$col = $( '<div class="col-xs-12 col-sm-12">Other Plugin Settings</div>' )
 			.appendTo( $row );
 		$row.appendTo( $container );
-
 		if ( !isOpenLuup ) {
 			$col = makeSettingsRow( "UPnP Event Proxy:", $container );
 			$el = $( '<span id="proxy-state" />' );
