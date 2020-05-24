@@ -19,56 +19,7 @@ Please see CHANGELOG.md for release notes.
 
 ## Installation (New and Existing Users)
 
-![Caution: Read Instructions First](https://www.toggledbits.com/assets/rtfm.png)
-
-Please read the installation instructions through completely to get an idea of what you're going to be doing before you start doing it.
-
-## Uninstalling Sonos 1.4.x
-
-**This section only applies to those users that are currently running any 1.4.x (or earlier) version of the Sonos Plugin.** If you are not sure, you can run this part of the procedure safely anyway--it will not harm anything.
-
-Before installing 2.0, you **must** uninstall the existing Sonos plugin using the procedure described below. This procedure will decouple your Sonos devices, so that when you uninstall the plugin, your existing Sonos devices are preserved. They will be adopted by 2.0 as children, keeping their current device numbers, which will keep your scenes, Lua, Reactor, PLEG, etc. intact.
-
-1. Run the following Lua in *Apps > Develop apps > Test Luup code*.
-   ```
-   for n,d in pairs( luup.devices ) do
-       if d.device_type == "urn:schemas-micasaverde-com:device:Sonos:1" then
-           luup.attr_set( "plugin", "", n )
-       end
-   end
-   luup.reload()
-   ```
-2. When Luup finishes reloading, go to *Apps > My apps* and uninstall the existing Sonos plugin (if it's not listed there, no problem, just move on to the next step).
-3. Reload luup. I usually just to go *Apps > Develop apps > Test Luup code* and run `luup.reload()`
-
-## Install Sonos Plugin 2.0 (all users)
-
-1. Open the Github develop branch repository: https://github.com/toggledbits/Sonos-Vera/tree/develop
-2. Click the green "Clone or download" button and choose "Download ZIP"
-3. Save the ZIP file.
-4. Unzip the ZIP file
-5. In the Vera UI, go to *Apps > Develop apps > Luup files*
-6. Multi-select the files (not folders--ignore any folders) you unzipped and drag them as a group to the "Upload" button.
-7. When the upload completes, Luup will reload.
-8. When the reload completes, create the Sonos System master device:
-
-   1. Go to *Apps > Develop apps > Create device*
-   2. In the "Description" field, enter `Sonos System`
-   3. In the "UPnP Device Filename" field, enter `D_SonosSystem1.xml`
-   4. In the "UPnP Implementation Filename" field, enter `I_SonosSystem1.xml`
-   5. You may choose a room assignment if you wish.
-   6. Click "Create device"
-9. Go to *Apps > Develop apps > Test luup code* and reload luup by running `luup.reload()`
-10. Wait about five minutes. Your Vera may reload several times during this time.
-11. [Hard refresh your browser](https://www.getfilecloud.com/blog/2015/03/tech-tip-how-to-do-hard-refresh-in-browsers/). Do not skip this step. You should now see your Sonos devices, and the Sonos System master device should report the number of zone players it is managing.
-
-If anything appears out of whack and it doesn't resolve in 5-10 minutes, repeat steps 9-11. Sometimes it takes a couple of reloads and hard refreshes to get everything sorted.
-
-The new Sonos System master device will adopt your previous/existing Sonos devices as its children (with the same device number they've always had), and create new child devices for any other zone players discovered on the network. There is usually no need to run discovery manually in this version.
-
-### Installation using AltAppStore
-
-Once published to the AltAppStore, you'll be able to install this plugin on Vera or openLuup from the AltAppStore in the usual way. Working on it...
+You can install the Sonos plugin through the Vera App Marketplace (in your Vera, go to *Apps > Install apps*), or the AltAppStore.
 
 **openLuup Users:** Please note that additional configuration is required to use TTS. Please see "Special TTS Configuration for openLuup" below.
 
@@ -337,25 +288,6 @@ Be sure to check the Apache error log for errors, in addition the LuaUPnP.log fi
 ### `PollDelays`
 
 If the UPnP Event Proxy is not installed or cannot be contacted, the Sonos plugin will poll players for status. As of 1.4.3-19188, the `PollDelays` state variable contains a pair of numbers, which are the delays to be used for polling when active and inactive (player stopped), respectively. The default is 15 seconds for active players, and 60 seconds on stopped players. This reduces network traffic somewhat, but it's still not as good as using the UPnP Event Proxy, so the proxy remains the recommended solution.
-
-## Uninstalling the Last Released Version
-
-These instructions are only to be used to uninstall the plugin if it was previously installed from the Vera App/Plugin Marketplace. If you are not sure, go to *Apps > My apps* and page through your officially-installed plugins. If Sonos is listed there, **you must uninstall it using the instructions below** before installing the Github version of the plugin.
-
-1. Copy-paste the following into *Apps > Develop apps > Test Luup code (Lua)*:
-```
-for n,d in pairs( luup.devices ) do
-    if luup.attr_get( 'plugin', n ) == "4226" then
-        luup.attr_set( "plugin", "", n )
-    end
-end
-luup.reload()
-```
-2. Run the above code by hitting the "GO" button (if you've already hit GO in the previous step, fine, but once is enough and a second click might generate a harmless error). The code performs a Luup reload, so wait a minute before continuing.
-3. Uninstall the Sonos plugin by going to *Apps > My apps*, locating the plugin, going into "Details", and hitting "Uninstall".
-4. Install the Github version of the plugin per the instructions above. 
-
-The first two steps detach your existing Sonos devices from the plugin, so that they are not deleted when the Sonos plugin is uninstalled. They will become invisible, but should re-appear after you install the Github version.
 
 ## User Support
 
