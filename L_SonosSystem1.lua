@@ -3202,7 +3202,8 @@ function startup( lul_device )
 
 	D("startup() UPnP module version is %1", upnp.VERSION)
 	if ( upnp.VERSION or 0 ) < MIN_UPNP_VERSION then
-		E"The L_SonosUPNP module installed is not compatible with this version of the plugin core."
+		E("The L_SonosUPNP module installed (%1) is not compatible with this version of the plugin core.",
+			upnp.VERSION)
 		return false, "Invalid installation", MSG_CLASS
 	end
 	if not tts then
@@ -3210,7 +3211,8 @@ function startup( lul_device )
 	else
 		D("startup() TTS module version is %1", tts.VERSION)
 		if ( tts.VERSION or 0 ) < MIN_TTS_VERSION then
-			W("The L_SonosTTS module installed may not be compatible with this version of the plugin core.")
+			W("The L_SonosTTS module installed (%1) may not be compatible with this version of the plugin core.",
+				tts.VERSION)
 		end
 	end
 
