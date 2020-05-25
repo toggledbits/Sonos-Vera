@@ -116,7 +116,7 @@ This functionality is exposed declaratively through the PlayURI action under Adv
 ```
 luup.call_action("urn:micasaverde-com:serviceId:Sonos1", "PlayURI",
                  {URIToPlay="x-file-cifs:...", Volume=50},
-                 666)
+                 252)
 ```
 
 This action will play what is defined by the URIToPlay parameter. To know how to set this parameter, you can open the Help tab of the Vera Sonos device, you will discover a list of example usages with your current own context. Here are examples:
@@ -137,115 +137,126 @@ This action will play what is defined by the URIToPlay parameter. To know how to
 Notes:
 * Parameters not specified will default internally. (Volume=nil) By default, the volume is not set.
 
-### Making a Sonos say something
-The Sonos plugin exposes Text to Speech capability through Google's service. The functionality is exposed declaratively through the Say action under Advanced Scenes. The functionality is also exposed programmatically via Lua code.
+### Making a Sonos Say Something
 
-Suppose you have 4 Sonos zones named Bedroom, Bathroom, Living-room and Kitchen. Your bedroom Sonos is linked to device 666 in your Vera.
+**As of version 2.0, the only supported TTS engines are Azure (Microsoft Azure Cognitive Service Voice) and MaryTTS.** All other engines are deprecated. They have been left in case they are still working for some users, but new users are advised not to use them.
+
+The Sonos plugin exposes Text to Speech capability through a variety of conversion engines. These engines are third-party products, some of which require registration and fees. The functionality is exposed declaratively through the `Say` UPnP action in the advanced scene editor, Reactor, PLEG, etc. The functionality is also exposed programmatically via Lua code.
+
+> Before using text-to-speech, you need to configure a TTS engine that will convert text to speech audio. See "Configuring TTS" below.
+
+Using the `Say` action is easy in its most basic form. Suppose you have 4 Sonos zones named Bedroom, Bathroom, Living Room and Kitchen. Your bedroom Sonos is linked to device 252 in your Vera.
 
 To play a message only in the bedroom, use this lua code:
 
 ```
 luup.call_action("urn:micasaverde-com:serviceId:Sonos1", "Say",
-                 {Text="The sun shines outside", Language="en"},
-                 666)
+                 {Text="The sun shines outside"},
+                 252)
 ```
 
 This action will pause the current playback, say the text, and then the playback will be resumed.
-
-Language is either a string of 2 characters, like en, fr ... or a string of 5 characters like en-US, en-GB, fr-FR, fr-CA, ... You will need to determine which works for the TTS engine you are using. Generally speaking, the most common TTS engine, ResponsiveVoice, requires the two-part language codes (e.g. en-US).
 
 To play a message in the bedroom setting the volume for the message at level 60:
 
 ```
 luup.call_action("urn:micasaverde-com:serviceId:Sonos1", "Say",
-                 {Text="The sun shines outside", Language="en", Volume=60},
-                 666)
+                 {Text="The sun shines outside", Volume=60},
+                 252)
 ```
 
-The volume will be adjusted to play the message, and finally restored to its previous level. When the Volume parameter is not used, the volume is not adjusted and the message is played with the current volume.
+The volume will be adjusted to play the message, and then restored to its previous level. When the Volume parameter is not used, the volume is not adjusted and the message is played with the current volume.
 
-To play a synchronized message in the bedroom, the bathroom and the kitchen:
-
-```
-luup.call_action("urn:micasaverde-com:serviceId:Sonos1", "Say",
-                 {Text="The sun shines outside", Language="en", GroupZones="Bathroom,Kitchen"},
-                 666)
-```
-
-After the text is said, the playback will be resumed on the 3 zones.
-
-To play a synchronized message in all rooms setting the volume for the message at level 60 in all rooms:
+To play a synchronized message in the bedroom (the target device number 252), and the Bathroom and Kitchen:
 
 ```
 luup.call_action("urn:micasaverde-com:serviceId:Sonos1", "Say",
-                 {Text="The sun shines outside", Language="en", GroupZones="ALL",
-                  Volume=60, SameVolumeForAll="true"},
-                 666)
+                 {Text="The sun shines outside", GroupZones="Bathroom,Kitchen"},
+                 252)
 ```
 
-When the parameter SameVolumeForAll is set to false or not set, the volume is adjusted only on the main zone, that is the bedroom in our example.
+After the text is spoken, the playback will be resumed on the three zones. The parameter *GroupZones* can be "ALL", "CURRENT", or a comma-separated list of zone player names. If "ALL", the announcement is made on all known zone players; if "CURRENT", the target zone player and any player currently joined to it (i.e. its current group) is used for the announcement. If *GroupZones* is blank, the announcement is played only on the target player (the device on which the `Say` action is invoked). Otherwise, a temporary group is created with the target zone player as the group coordinator and the other specified zones as members. Zones can also be specified by adding *GroupDevices*, a comma-separated list of Vera device numbers for zone players.
 
-To play a message in the bedroom using your personal OSX TTS server rather than using Google Internet service:
+To play a synchronized message on all zone players setting the volume for the message at level 60 in all rooms:
 
 ```
 luup.call_action("urn:micasaverde-com:serviceId:Sonos1", "Say",
-                 {Text="The sun shines outside", Language="en", Engine="OSX_TTS_SERVER"},
-                 666)
+                 {Text="The sun shines outside", GroupZones="ALL",
+                  Volume=60, SameVolumeForAll="1"},
+                 252)
+```
+
+When the parameter *SameVolumeForAll* is set to false or not set, the volume is adjusted only on the main zone, that is the bedroom in our example.
+
+If necessary (though rarely useful), you can make an announcement using a configured TTS engine other than the default by specifying the *Engine* parameter:
+
+```
+luup.call_action("urn:micasaverde-com:serviceId:Sonos1", "Say",
+                 {Text="The sun shines outside", Engine="OSX_TTS_SERVER"},
+                 252)
 ```
 
 Accepted values for the engine:
 
+* `MARY` for a personal MaryTTS server
+* `AZURE` for Microsoft Azure Cognitive Services Voice
 * `GOOGLE` for the Google TTS Internet service
 * `MICROSOFT` for the Microsoft Translator Internet service
 * `OSX_TTS_SERVER` for a personal OSX TTS server
-* `MARY` for a personal MaryTTS server
 * `RV` for ResponsiveVoice.org
 
-In addition, the Text to Speech capability can be setup with the following variables (use the TTS tab to adjust the values):
-
-* `DefaultLanguageTTS` - default language used when calling the Say action; must be either a string of 2 characters like "en" for example or a string of 5 characters like "en-US" or "en-GB" for example. Generally, the two-element (five character) is preferred, and some TTS engines require it.
-* `DefaultEngineTTS` - default engine used when calling the Say action; must be either GOOGLE, MICROSOFT, OSX_TTS_SERVER or MARY
-* `GoogleTTSServerURL` - the Google URL to be used (default: `http://translate.google.com`) **see Configuring TTS below**
-* `OSXTTSServerURL` - defines the location of your OSX TTS server; something like ​http://www.mypersonaltts.org:80
-* `MaryTTSServerURL` - defines the location of your MaryTTS server; something like ​http://192.168.0.50:59125 assuming 192.168.0.50 is the IP address of your server running MaryTTS
-* `ResponsiveVoiceTTSServerURL` - URL for ResponsiveVoice (default: `https://code.responsivevoice.org`)
-* `MicrosoftClientId` - Client ID you got when you regisered your application on the Microsoft Azure Marketplace
-* `MicrosoftClientSecret` - Client Secret you got when you regisered your application on the Microsoft Azure Marketplace
-
 Notes:
+
 * Explanations on how to get Microsoft Translator credentials: ​https://msdn.microsoft.com/en-us/library/mt146806.aspx ; don't forget to get the free 2 Million characters per month subscription; finally set your Client ID and Client Secret in the TTS tab of the plugin (and push the Set button to save)
 * Explanations on how to setup the OSX TTS server: ​http://wolfpaulus.com/jounal/mac/ttsserver/
 * For GroupZones, you have to use room names (zone names defined with your Sonos application), not the name of your Vera device
 * It is possible to use the parameter named GroupDevices in place of GroupZones. In this case, you must have a device in the Vera for all the Sonos zones you want to address. The value is a CSV list of device ids. For example, if your living-room and kitchen Sonos are linked respectively to devices 667 and 668 in your Vera, you will use GroupDevices="667,668". The GroupDevices has been kept for compatibility reasons with old versions but the use of GroupZones is now recommended.
-* Parameters not specified will default internally. (Language=en, Engine=GOOGLE, GroupDevices="", GroupZones="", Volume=nil, SameVolumeForAll=false)
+* Parameters not specified will default internally.
+
+Other parameters available on the `Say` action:
+
+* `Chime` (boolean 0 or 1, default 1): Control whether or not the TTS chime (below) is played before the announcement;
+* `Repeat` (integer, default 1): Number of times to repeat the announcement;
+* `UseCache` (boolean 0 or 1, default 1): Control whether the converted speech audio is cached (see below) to speed future repeat playback of the same announcement;
+* `UnMute` (boolean 0 or 1, default 1): Control whether currently-muted zones are unmuted to play the announcement.
+
+### TTS Chime
+
+The TTS service will, by default, play a chime before making the announcement. This helps get attention before the speech audio begins. You can change the chime sound, or disable it.
+
+To change the chime sound, upload an MP3 to your Vera and place it in `/etc/cmh-ludl` (openLuup users, place the file in the same directory as the plugin files). Then set the `TTSChime` state variable on the Sonos System master device to *filename,duration*, where *filename* is the name of your chime file, and *duration* is the (integer) number of seconds (round up if necessary) of the audio playback.
+
+To disable the TTS chime, place a comma (,) alone in the `TTSChime` state variable of the Sonos System master device. If you wish to disable the chime only for a single announcement, you can add the *UseChime* parameter to your `Say` action with a value of zero.
 
 ### TTS Caching
 
-Version 1.5 introduced TTS caching--the first time a phrase is spoken, its audio is saved; when that phrase is spoken again, the saved audio file is used rather hitting the TTS Engine again to generate a new audio file. This makes TTS quicker and more reliable (e.g. when using ResponsiveVoice, a phrase that is spoken once no longer requires Internet access to be spoken again).
+TTS caching saves the converted speech audio file on the Vera for later replay. This is useful when fixed phrases may be spoken often, or when it is desirable or necessary to speak previously-stored phrases when Internet access (and thus most of the available engines) is not available.
 
 This has some side-effects. Among them:
-1. Any changes in pronunciation as a result of upgrades to the TTS Engine will not be picked up, because the Engine is not being hit for the repeated phrase.
+1. Any changes in pronunciation as a result of upgrades to the TTS Engine will not be picked up, because the engine is not being hit for the repeated phrase.
 1. The matching of phrases is cached by engine, language, and text. If any of these changes, however trivially (e.g. addition of punctuation to speech text), the speech audio is regenerated.
-1. Since only engine, language, and text are used as keys in the cache, other changes affecting TTS, such as rate and pitch, do not invalidate cache entries and cause regeneration of the audio. Thus a `Say` action with the phrase "Hello there" spoken first at rate 1.0 and then at rate 0.5 will both play the rate 1.0 audio.
+
+It may not be desirable to cache all phrases, however. In particular, caching dynamically-generated phrases, such as an announcement of the current time or weather, is probably a waste of space as that exact phrase is unlikely to be reused. When speaking dynamic phrases, it is recommended that you include the *UseCache* parameter on your `Say` action with a value of 0 (zero). This will disable caching of that particular text.
+
+You can also disable caching system-wide. This is recommended on systems with tight disk space, and for users using the Mary TTS engine running on a reliable local server. To disable TTS caching, set the `UseTTSCache` state variable on the Sonos System master device to 0.
+
+Cached speech is kept until it is unused for a default 90 days. You can change this by setting the `TTSCacheMaxAge` to the number of days a cache entry should be allowed to live. Every time a cached phrase is spoken, its expiration date is reset. When a cache entry expires, it is removed from the cache. Setting `TTSCacheMaxAge` to 0 disables cache pruning, and you will need to manage the cache yourself.
 
 The TTS cache is flushed any time the TTS default settings are saved. If you need to flush the cache, go the Sonos plugin device's Settings tab and hit the "Save Changes" button. Flushing the cache discards all previously-generated audio.
 
-### Changing the TTS Chime
+### Making a Sonos Play an Alert Sound
 
-Version 2.0 introduced a chime prior to TTS announcements, with a default sound. The chime can be disabled on individual `Say` actions by including the `Chime` parameter in the action arguments, set to zero (0). The chime can be changed by setting the `TTSChime` state variable on the Sonos plugin device to a two-part, comma-separated value: the name of the chime WAV file, and its duration in seconds (e.g. the default is "Sonos_chime.wav,3"). Setting `TTSChime` to simply "," disables the chime for all `Say` actions. The chime file is located in the same directory as the plugin install/runtime files (e.g. `/etc/cmh-ludl` for Vera). If you wish to change the chime sound, the correct procedure is to upload a new WAV file that is *not* named `Sonos_chime.wav` (this is a plugin file that should not be modified), and modify the `TTSChime` variable to specify that name and the file's play duration.
-
-### Making a Sonos play an alert sound
 This functionality is exposed declaratively through the Alert action under Advanced Scenes. The functionality is also exposed programmatically via Lua code:
 
 ```
 luup.call_action("urn:micasaverde-com:serviceId:Sonos1", "Alert",
                  {URI="x-file-cifs:...", Duration=15},
-                 666)
+                 252)
 ```
 
 If Duration parameter is set to a greater value than 0, this action will pause the current playback, play the alert, and the previous playback will be resumed when the delay defined by Duration expires. If Duration parameter is unset or set to 0, this action will pause the current playback, play the alert, but then the previous playback will not be resumed.
 
-You can use the optional parameters Volume, SameVolumeForAll, GroupZones and GroupDevices. The usage is exactly the same as for the Say action.
+You can use the optional parameters *Volume*, *SameVolumeForAll*, *GroupZones*, *GroupDevices*, and *UnMute*. The usage is exactly the same as for the Say action.
 
 Notes:
 * For URI parameter, you can use the same syntax as for the !URIToPlay parameter of the action !PlayURI
@@ -255,11 +266,13 @@ Notes:
 
 ## Configuring TTS (Text-to-Speech)
 
-As of this writing, the only reliably-working TTS services are [MaryTTS](http://mary.dfki.de/) and ResponsiveVoice, and the latter is potentially going away. 
+> As of this writing, the only reliably-working TTS services are [MaryTTS](http://mary.dfki.de/) and Microsoft Azure Cognitive Services Voice (aka "Azure"). ResponsiveVoice is not longer available or supported. 
 
-If you are using any of the other services *successfully*, [please let us know](https://community.getvera.com/c/plugins-and-plugin-development/sonos-plugin):
-* GoogleTTS, which has long been the default, is now being restricted by Google and attempts to use it result in "suspicious activity" blocks from their servers pretty quickly--this is why it works for a while and then suddenly stops working. To be fair to Google, it's because this "service" is actually borrowing a subfeature of Google Translate that was probably never intended to be used in this way (by us and many others, I'm sure), and Google has gotten wise to it. It's possible we may provide a replacement engine/service to Google's newer "official" TTS cloud service at some point (requires account/API registration), but at the moment, this GoogleTTS engine is basically dead and should not be used.
-* Both OSX and Microsoft engines are unknown, rumored to be dead.
+> If you are using any of the other services *successfully*, [please let us know](https://community.getvera.com/c/plugins-and-plugin-development/sonos-plugin):
+> * GoogleTTS, which has long been the default, is now being restricted by Google and attempts to use it result in "suspicious activity" blocks from their servers pretty quickly--this is why it works for a while and then suddenly stops working. To be fair to Google, it's because this "service" is actually borrowing a subfeature of Google Translate that was probably never intended to be used in this way (by us and many others, I'm sure), and Google has gotten wise to it. It's possible we may provide a replacement engine/service to Google's newer "official" TTS cloud service at some point (requires account/API registration), but at the moment, this GoogleTTS engine is basically dead and should not be used.
+> * Both OSX and Microsoft engines are unknown, rumored to be dead.
+
+Before using the `Say` action, you must set up TTS on the Sonos System master device (Settings tab). There you will set the default engine and its parameters. You can configure multiple engines, and the settings will be saved for all engines configured. The default engine will be one selected when you hit save. So, for example, to configure both Mary and Azure, but have Azure as the default, select Mary, add its configuration values, the select Azure, input its configuration and then hit Save. Because Azure was the last selected engine, it will be the default engine.
 
 ### Special TTS Configuration for openLuup
 
