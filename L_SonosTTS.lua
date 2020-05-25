@@ -383,6 +383,7 @@ function AzureTTSEngine:new(o)
 				["ko-KR-HeamiRUS"]="Korean, female",
 				["ms-MY-Rizwan"]="Malay, male",
 				["nb-NO-HuldaRUS"]="Norwegian, female",
+				["nl-NL-HannaRUS"]="Dutch, female",
 				["pl-PL-PaulinaRUS"]="Polish, female",
 				["pt-BR-HeloisaRUS"]="Portugese (Brazil), female",
 				["pt-BR-Daniel-Apollo"]="Portugese (Brazil), male",
