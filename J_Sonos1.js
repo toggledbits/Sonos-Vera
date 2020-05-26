@@ -749,7 +749,7 @@ input#language { width: 6em; } \
 
 	function Sonos_refreshPlayer(device)
 	{
-		var html, pos1, pos2;
+		var $el, html, pos1, pos2;
 		var uuid = api.getDeviceState(device, DEVICE_PROPERTIES_SID, "SonosID", 1) || "";
 
 		var groups = getParentState( "zoneInfo", device ) || "";
@@ -772,8 +772,8 @@ input#language { width: 6em; } \
 		}
 
 		var savedQueues = getParentState( "SavedQueues", device ) || "";
-		if ( ! isEmpty( savedQueues ) && savedQueues != prevSavedQueues) {
-			html = "";
+		if ( savedQueues != prevSavedQueues) {
+			$el = jQuery('#savedQueues').empty();
 			pos1 = 0;
 			pos2 = savedQueues.indexOf('\n', pos1);
 			while (pos2 >= 0) {
@@ -785,36 +785,35 @@ input#language { width: 6em; } \
 					if (title.length > 60) {
 						title = title.substr(0, 60) + '...';
 					}
-					html += '<option value="' + value + '">' + title + '</option>';
+					jQuery( '<option/>' ).val(value).text(title).appendTo( $el );
 				}
 				pos1 = pos2+1;
 				pos2 = savedQueues.indexOf('\n', pos1);
 			}
-			jQuery('#savedQueues').html(html);
 			prevSavedQueues = savedQueues;
 		}
 
-		var queue = api.getDeviceState(device, CONTENT_DIRECTORY_SID, "Queue", 1) || "";
-		if ( ! isEmpty( queue ) && queue != prevQueue) {
-			html = "";
+		var queue = api.getDeviceState(device, CONTENT_DIRECTORY_SID, "Queue") || "";
+		if ( queue != prevQueue ) {
+			$el = jQuery('#queue').empty();
 			pos1 = 0;
 			pos2 = queue.indexOf('\n', pos1);
+			var ix = 0;
 			while (pos2 >= 0) {
 				var title = queue.substring(pos1, pos2);
 				if (title.length > 50) {
 					title = title.substr(0, 50) + '...';
 				}
-				html += '<option>' + title + '</option>';
+				jQuery( '<option/>' ).val( ++ix ).text( title ).appendTo( $el );
 				pos1 = pos2+1;
 				pos2 = queue.indexOf('\n', pos1);
 			}
-			jQuery('#queue').html(html);
 			prevQueue = queue;
 		}
 
 		var favRadios = getParentState( "FavoritesRadios", device ) || "";
-		if ( ! isEmpty( favRadios ) && favRadios != prevFavRadios) {
-			html = "";
+		if ( favRadios != prevFavRadios ) {
+			$el = jQuery('#favRadios').empty();
 			pos1 = 0;
 			pos2 = favRadios.indexOf('\n', pos1);
 			while (pos2 >= 0) {
@@ -826,18 +825,17 @@ input#language { width: 6em; } \
 					if (title.length > 60) {
 						title = title.substr(0, 60) + '...';
 					}
-					html += '<option value="' + value + '">' + title + '</option>';
+					jQuery( '<option/>' ).val( value ).text( title ).appendTo( $el );
 				}
 				pos1 = pos2+1;
 				pos2 = favRadios.indexOf('\n', pos1);
 			}
-			jQuery('#favRadios').html(html);
 			prevFavRadios = favRadios;
 		}
 
 		var favorites = getParentState( "Favorites", device ) || "";
-		if ( ! isEmpty( favorites ) && favorites != prevFavorites) {
-			html = "";
+		if ( favorites != prevFavorites ) {
+			$el = jQuery('#favorites').empty();
 			pos1 = 0;
 			pos2 = favorites.indexOf('\n', pos1);
 			while (pos2 >= 0) {
@@ -849,12 +847,11 @@ input#language { width: 6em; } \
 					if (title.length > 60) {
 						title = title.substr(0, 60) + '...';
 					}
-					html += '<option value="' + value + '">' + title + '</option>';
+					jQuery( '<option/>' ).val( value ).text( title ).appendTo( $el );
 				}
 				pos1 = pos2+1;
 				pos2 = favorites.indexOf('\n', pos1);
 			}
-			jQuery('#favorites').html(html);
 			prevFavorites = favorites;
 		}
 
