@@ -65,48 +65,7 @@
 	<actionList>
 		<action>
 			<name>SetupTTS</name>
-			<argumentList>
-				<argument>
-					<name>DefaultLanguage</name>
-					<direction>in</direction>
-					<relatedStateVariable>A_ARG_TYPE_Language</relatedStateVariable>
-				</argument>
-				<argument>
-					<name>DefaultEngine</name>
-					<direction>in</direction>
-					<relatedStateVariable>A_ARG_TYPE_Engine</relatedStateVariable>
-				</argument>
-				<argument>
-					<name>GoogleTTSServerURL</name>
-					<direction>in</direction>
-					<relatedStateVariable>A_ARG_TYPE_URI</relatedStateVariable>
-				</argument>
-				<argument>
-					<name>OSXTTSServerURL</name>
-					<direction>in</direction>
-					<relatedStateVariable>A_ARG_TYPE_URI</relatedStateVariable>
-				</argument>
-				<argument>
-					<name>MaryTTSServerURL</name>
-					<direction>in</direction>
-					<relatedStateVariable>A_ARG_TYPE_URI</relatedStateVariable>
-				</argument>
-				<argument>
-					<name>ResponsiveVoiceTTSServerURL</name>
-					<direction>in</direction>
-					<relatedStateVariable>A_ARG_TYPE_URI</relatedStateVariable>
-				</argument>
-				<argument>
-					<name>MicrosoftClientId</name>
-					<direction>in</direction>
-					<relatedStateVariable>A_ARG_TYPE_clientId</relatedStateVariable>
-				</argument>
-				<argument>
-					<name>MicrosoftClientSecret</name>
-					<direction>in</direction>
-					<relatedStateVariable>A_ARG_TYPE_clientSecret</relatedStateVariable>
-				</argument>
-			</argumentList>
+			<argumentList/>
 		</action>
 		<action>
 			<name>ResetTTS</name>
