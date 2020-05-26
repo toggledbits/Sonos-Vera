@@ -8,7 +8,7 @@
 module( "L_SonosSystem1", package.seeall )
 
 PLUGIN_NAME = "Sonos"
-PLUGIN_VERSION = "2.0-20136"
+PLUGIN_VERSION = "2.0-hotfix20147"
 PLUGIN_ID = 4226
 PLUGIN_URL = "https://github.com/toggledbits/Sonos-Vera"
 
@@ -315,6 +315,8 @@ local function map( sourceTable, func, destMap )
 	end
 	return destMap
 end
+
+local function xmlescape( t ) return ( t:gsub( '"', "&quot;" ):gsub( "'", "&apos;" ):gsub( "%&", "&amp;" ):gsub( "%<", "&lt;" ):gsub( "%>", "&gt;" ) ) end
 
 local Zones = {}
 local function findDeviceByUUID( zoneUUID )
@@ -1045,7 +1047,7 @@ end
 
 local function updateServicesMetaDataKeys(id, key)
 	if (id or "" ) ~= "" and ( key or "" ) ~= "" and metaDataKeys[id] ~= key then
-		metaDataKeys[id] = key
+		metaDataKeys[tostring(id)] = key
 		local data = {}
 		for k, v in pairs(metaDataKeys) do
 			table.insert( data, string.format('%s=%s', k, v) )
@@ -1058,9 +1060,8 @@ local function loadServicesMetaDataKeys()
 	local k = {}
 	local elts = getVar("SonosServicesKeys", "", pluginDevice, SONOS_SYS_SID)
 	for line in elts:gmatch( "[^\n]+" ) do
-		for token, value in line:gmatch("^([^=]+)=(.*)") do
-			k[token] = value
-		end
+		local s,d = line:match("^([^=]+)=(.*)")
+		if s and d then k[tostring(s)] = d end
 	end
 	D("loadServicesMetaDataKeys() result %1", k)
 	return k
@@ -1074,7 +1075,7 @@ local function extractDataFromMetaData(zoneUUID, currentUri, currentUriMetaData,
 	local service, serviceId = getServiceFromURI(currentUri, trackUri)
 	updateServicesMetaDataKeys(serviceId, desc)
 	statusString = ""
-	if (service ~= "") then
+	if (service or "") ~= "" then
 		statusString = statusString .. service
 	end
 	if (title ~= "") then
@@ -1584,17 +1585,17 @@ local function decodeURI(localUUID, coordinator, uri)
 			if serviceId and metaDataKeys[serviceId] ~= nil then
 				if title == nil then
 					uriMetaData = '<DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/">'
-								  .. '<item><desc>' .. metaDataKeys[serviceId] .. '</desc>'
+								  .. '<item><desc>' .. xmlescape(metaDataKeys[serviceId]) .. '</desc>'
 								  .. '</item></DIDL-Lite>'
 				else
 					uriMetaData = '<DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/">'
-								  .. '<item><dc:title>' .. title .. '</dc:title>'
-								  .. '<desc>' .. metaDataKeys[serviceId] .. '</desc>'
+								  .. '<item><dc:title>' .. xmlescape(title) .. '</dc:title>'
+								  .. '<desc>' .. xmlescape(metaDataKeys[serviceId]) .. '</desc>'
 								  .. '</item></DIDL-Lite>'
 				end
 			elseif title ~= nil then
 				uriMetaData = '<DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/">'
-							  .. '<item><dc:title>' .. title .. '</dc:title>'
+							  .. '<item><dc:title>' .. xmlescape(title) .. '</dc:title>'
 							  .. '<upnp:class>object.item.audioItem.audioBroadcast</upnp:class>'
 							  .. '</item></DIDL-Lite>'
 			end
@@ -3260,7 +3261,7 @@ function startup( lul_device )
 		VERA_WEB_PORT = tonumber(routerPort)
 	end
 
-	ip, playbackCxt, sayPlayback, UUIDs, metaDataKeys, dataTable = upnp.initialize(L, W, E)
+	upnp.initialize(L, W, E)
 
 	if tts then
 		tts.initialize(L, W, E)
