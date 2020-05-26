@@ -116,11 +116,11 @@ This functionality is exposed declaratively through the `PlayURI` action in the 
 
 ```
 luup.call_action("urn:micasaverde-com:serviceId:Sonos1", "PlayURI",
-                 {URIToPlay="x-file-cifs:...", Volume=50},
+                 {URI="x-file-cifs:...", Volume=50},
                  252)
 ```
 
-This action will play what is defined by the URIToPlay parameter. To know how to set this parameter, you can open the Help tab of the Vera Sonos device, you will discover a list of example usages with your current own context. Here are examples:
+This action will play what is defined by the *URI* parameter. To know how to set this parameter, you can open the Help tab of the Vera Sonos device, you will discover a list of example usages with your current own context. Here are examples:
 
 * `x-file-cifs:path` - Play the music file defined by "path"
 * `x-rincon-mp3radio:url` - Play the MP3 WEB radio defined by "url"
@@ -260,10 +260,10 @@ If Duration parameter is set to a greater value than 0, this action will pause t
 You can use the optional parameters *Volume*, *SameVolumeForAll*, *GroupZones*, *GroupDevices*, and *UnMute*. The usage is exactly the same as for the Say action.
 
 Notes:
-* For URI parameter, you can use the same syntax as for the !URIToPlay parameter of the action !PlayURI
-* For GroupZones, you have to use room names (zone names defined with your Sonos application), not the name of your Vera device
-* It is possible to use the parameter named GroupDevices in place of GroupZones. In this case, you must have a device in the Vera for all the Sonos zones you want to address. The value is a CSV list of device ids. For example, if your living-room and kitchen Sonos are linked respectively to devices 667 and 668 in your Vera, you will use GroupDevices="667,668". The GroupDevices has been kept for compatibility reasons with old versions but the use of GroupZones is now recommended.
-* Parameters not specified will default internally. (Duration=0, GroupDevices="", GroupZones="", Volume=nil, SameVolumeForAll=false) By default, the volume is not set.
+* For the *URI* parameter, you can use the same syntax as for the *URI* parameter of the action *PlayURI*.
+* For *GroupZones*, you have to use room names (zone names defined with your Sonos application), not the name of your Vera device.
+* It is possible to use the parameter named *GroupDevices* in addition to (or instead of) *GroupZones*. The value is a comma-separated list of Vera device numbers. For example, if your Living Room and Kitchen zone players are linked respectively to devices 667 and 668 in your Vera, you will use `GroupDevices="667,668"`.
+* Parameters not specified will default internally. (*Duration*=0, *GroupDevices*="", *GroupZones*="", *Volume*=`nil`, *SameVolumeForAll*=`false`) By default, the volume is not set.
 
 ## Configuring TTS (Text-to-Speech)
 

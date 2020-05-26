@@ -2903,7 +2903,6 @@ local function deferredStartup(device)
 				W("Adopting v1.x device %2 (#%3) %4 by new parent %1", device, v.description, k, zid)
 				luup.attr_set( "altid", zid, k )
 				luup.attr_set( "id_parent", device, k )
-				setVar( SONOS_ZONE_SID, "SonosIP", ip, k )
 				setVar( UPNP_AVTRANSPORT_SID, "CurrentStatus", "Upgrade in progress...", k )
 				reload = true
 			else
@@ -3841,9 +3840,7 @@ end
 function actionSonosSetURIToPlay( lul_device, lul_settings )
 	assert(luup.devices[lul_device].device_type == SONOS_ZONE_DEVICE_TYPE)
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
-	local uri = defaultValue(lul_settings, "URIToPlay", "") -- deprecated
-	if lul_settings.URIToPlay then W("The parameter URIToPlay on the SetURIToPlay action is now deprecated; please use URI instead.") end
-	uri = defaultValue(lul_settings, "URI", uri) -- new ultimate replacement
+	local uri = defaultValue(lul_settings, "URIToPlay", "")
 
 	playURI(findZoneByDevice( lul_device ), instanceId, uri, nil, nil, nil, false, nil, false, true)
 
@@ -3864,9 +3861,7 @@ end
 function actionSonosPlayURI( lul_device, lul_settings )
 	assert(luup.devices[lul_device].device_type == SONOS_ZONE_DEVICE_TYPE)
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
-	local uri = defaultValue(lul_settings, "URIToPlay", "") -- deprecated
-	if lul_settings.URIToPlay then W("The parameter URIToPlay on the PlayURI action is now deprecated; please use URI instead.") end
-	uri = defaultValue(lul_settings, "URI", uri) -- new ultimate replacement
+	local uri = defaultValue(lul_settings, "URIToPlay", "")
 	local volume = defaultValue(lul_settings, "Volume", nil)
 	local speed = defaultValue(lul_settings, "Speed", "1")
 
@@ -3892,10 +3887,8 @@ end
 function actionSonosEnqueueURI( lul_device, lul_settings )
 	assert(luup.devices[lul_device].device_type == SONOS_ZONE_DEVICE_TYPE)
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
-	local uri = defaultValue(lul_settings, "URIToEnqueue", "") -- deprecated
-	if lul_settings.URIToPlay then W("The parameter URIToEnqueue on the EnqueueURI action is now deprecated; please use URI instead.") end
-	uri = defaultValue(lul_settings, "URI", uri) -- new ultimate replacement
-	local enqueueMode = defaultValue(lul_settings, "EnqueueMode", "ENQUEUE_AND_PLAY")
+	local uri = defaultValue(lul_settings, "URIToEnqueue", "")
+	local enqueueMode = defaultValue(lul_settings, "EnqueueMode", "ENQUEUE_AND_PLAY"):upper()
 
 	playURI(findZoneByDevice( lul_device ), instanceId, uri, "1", nil, nil, false, enqueueMode, false, true)
 
@@ -3941,15 +3934,14 @@ function actionSonosSavePlaybackContext( lul_device, lul_settings )
 	local devices = defaultValue(lul_settings, "GroupDevices", "")
 	local zones = defaultValue(lul_settings, "GroupZones", "")
 
-	local targets = { findZoneByDevice( lul_device ) }
-
-	if (zones:upper() == "ALL") then
+	local targets = {}
+	if zones:upper() == "ALL" or ( zones == "" and devices == "" ) then
 		_, targets = getAllUUIDs()
 	else
 		for id in devices:gmatch("[^,]+") do
 			local nid = tonumber(id)
 			local uuid = nil
-			if not ( nid and findZoneByDevice( nid ) ) then
+			if not ( nid and findZoneByDevice( nid ) ) then -- ??? needs restructure
 				W("SavePlaybackContext action GroupDevices element %1 invalid or unknown device", id)
 			else
 				uuid = findZoneByDevice( nid )
@@ -3960,7 +3952,7 @@ function actionSonosSavePlaybackContext( lul_device, lul_settings )
 		end
 		for zone in zones:gmatch("[^,]+") do
 			if zone:match("RINCON_%x+") then
-				targets[zone] = true
+				targets[zone] = true -- ??? but does it exist?
 			else
 				local uuid = getUUIDFromZoneName(zone)
 				if (uuid or "") ~= "" then
@@ -3968,6 +3960,10 @@ function actionSonosSavePlaybackContext( lul_device, lul_settings )
 				end
 			end
 		end
+	end
+	if #targets == 0 then
+		E("Parameters didn't match any zones!")
+		return 2,0
 	end
 
 	playbackCxt[lul_device] = savePlaybackContexts(lul_device, targets)
@@ -4147,45 +4143,6 @@ function actionSonosSystemIncludeIP( lul_device, lul_settings )
 	return 4,0
 end
 
-function actionSonosSelectDevice( lul_device, lul_settings )
-	assert(luup.devices[lul_device].device_type == SONOS_ZONE_DEVICE_TYPE)
-	local newDescrURL = url.unescape( lul_settings.URL or "" )
-	local newIP, newPort = newDescrURL:match("http://([%d%.]-):(%d+)/.-")
-	if (newIP ~= nil and newPort ~= nil) then
-		luup.attr_set("ip", "", lul_device)
-		luup.attr_set("mac", "", lul_device)
-		setVar( SONOS_ZONE_SID, "SonosIP", newIP, lul_device )
-		setup(lul_device, false)
-	end
-	return 4,0
-end
-
-function actionSonosSearchAndSelect( lul_device, lul_settings )
-	assert(luup.devices[lul_device].device_type == SONOS_ZONE_DEVICE_TYPE)
-	if (lul_settings.Name == nil or lul_settings.Name == "") then
-		return 2,0
-	end
-
-	local descrURL = upnp.searchUPnPDevices("urn:schemas-upnp-org:device:ZonePlayer:1",
-											lul_settings.Name,
-											lul_settings.IP)
-	if (descrURL ~= nil) then
-		local newIP, newPort = descrURL:match("http://([%d%.]-):(%d+)/.-")
-	    if (newIP ~= nil and newPort ~= nil) then
-			luup.attr_set("ip", "", lul_device)
-			luup.attr_set("mac", "", lul_device)
-			setVar( SONOS_ZONE_SID, "SonosIP", newIP, lul_device )
-			setup(lul_device, false)
-		end
-	end
-	return 4,0
-end
-
-function actionSonosSetCheckStateRate( lul_device, lul_settings )
-	setCheckStateRate(lul_device, lul_settings.rate)
-	return 4,0
-end
-
 function actionSonosSetDebugLogs( lul_device, lul_settings )
 	assert(luup.devices[lul_device].device_type == SONOS_SYS_DEVICE_TYPE)
 	local val = tonumber(lul_settings.enable)
@@ -4195,11 +4152,6 @@ function actionSonosSetDebugLogs( lul_device, lul_settings )
 	luup.variable_set(SONOS_SYS_SID, "DebugLogs", val, lul_device)
 	setDebugLogs(val)
 	return true
-end
-
-function actionSonosSetReadQueueContent( lul_device, lul_settings )
-	setReadQueueContent(lul_device, lul_settings.enable)
-	return 4,0
 end
 
 function actionSonosInstallDiscoveryPatch( lul_device, lul_settings ) -- luacheck: ignore 212

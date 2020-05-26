@@ -177,34 +177,6 @@
 		</action>
 		<action>
 			<serviceId>urn:micasaverde-com:serviceId:Sonos1</serviceId>
-			<name>SelectSonosDevice</name>
-			<job>
-				return L_SonosSystem1.actionSonosSelectDevice( lul_device, lul_settings )
-			</job>
-		</action>
-		<action>
-			<serviceId>urn:micasaverde-com:serviceId:Sonos1</serviceId>
-			<name>SearchAndSelectSonosDevice</name>
-			<job>
-				return L_SonosSystem1.actionSonosSearchAndSelect( lul_device, lul_settings )
-			</job>
-		</action>
-		<action>
-			<serviceId>urn:micasaverde-com:serviceId:Sonos1</serviceId>
-			<name>SetCheckStateRate</name>
-			<job>
-				return L_SonosSystem1.actionSonosSetCheckStateRate( lul_device, lul_settings )
-			</job>
-		</action>
-		<action>
-			<serviceId>urn:micasaverde-com:serviceId:Sonos1</serviceId>
-			<name>SetReadQueueContent</name>
-			<job>
-				return L_SonosSystem1.actionSonosSetReadQueueContent( lul_device, lul_settings )
-			</job>
-		</action>
-		<action>
-			<serviceId>urn:micasaverde-com:serviceId:Sonos1</serviceId>
 			<name>NotifyRenderingChange</name>
 			<job>
 				return L_SonosSystem1.actionSonosNotifyRenderingChange( lul_device, lul_settings )

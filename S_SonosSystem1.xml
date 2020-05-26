@@ -7,43 +7,12 @@
 	</specVersion>
 	<serviceStateTable>
 		<stateVariable sendEvents="no">
-			<name>A_ARG_TYPE_URI</name>
-			<dataType>string</dataType>
-		</stateVariable>
-		<stateVariable sendEvents="no">
 			<name>A_ARG_TYPE_Devices</name>
 			<dataType>string</dataType>
 		</stateVariable>
 		<stateVariable sendEvents="no">
 			<name>A_ARG_TYPE_Zones</name>
 			<dataType>string</dataType>
-		</stateVariable>
-		<stateVariable sendEvents="no">
-			<name>A_ARG_TYPE_Language</name>
-			<dataType>string</dataType>
-		</stateVariable>
-		<stateVariable sendEvents="no">
-			<name>A_ARG_TYPE_LastChange</name>
-			<dataType>string</dataType>
-		</stateVariable>
-		<stateVariable sendEvents="no">
-			<name>A_ARG_TYPE_ZoneGroupState</name>
-			<dataType>string</dataType>
-		</stateVariable>
-		<stateVariable sendEvents="no">
-			<name>A_ARG_TYPE_ContainerUpdateIDs</name>
-			<dataType>string</dataType>
-		</stateVariable>
-		<stateVariable sendEvents="no">
-			<name>A_ARG_TYPE_Engine</name>
-			<dataType>string</dataType>
-			<allowedValueList>
-				<allowedValue>GOOGLE</allowedValue>
-				<allowedValue>OSX_TTS_SERVER</allowedValue>
-				<allowedValue>MICROSOFT</allowedValue>
-				<allowedValue>MARY</allowedValue>
-				<allowedValue>RV</allowedValue>
-			</allowedValueList>
 		</stateVariable>
 		<stateVariable sendEvents="no">
 			<name>A_ARG_TYPE_ipaddr</name>
@@ -53,24 +22,8 @@
 			<name>A_ARG_TYPE_enable</name>
 			<dataType>boolean</dataType>
 		</stateVariable>
-		<stateVariable sendEvents="no">
-			<name>A_ARG_TYPE_clientId</name>
-			<dataType>string</dataType>
-		</stateVariable>
-		<stateVariable sendEvents="no">
-			<name>A_ARG_TYPE_clientSecret</name>
-			<dataType>string</dataType>
-		</stateVariable>
 	</serviceStateTable>
 	<actionList>
-		<action>
-			<name>SetupTTS</name>
-			<argumentList/>
-		</action>
-		<action>
-			<name>ResetTTS</name>
-			<argumentList />
-		</action>
 		<action>
 			<name>PauseAll</name>
 		</action>
@@ -93,8 +46,12 @@
 			<name>RestorePlaybackContext</name>
 		</action>
 		<action>
-			<name>StartSonosDiscovery</name>
+			<name>SetupTTS</name>
 			<argumentList/>
+		</action>
+		<action>
+			<name>ResetTTS</name>
+			<argumentList />
 		</action>
 		<action>
 			<name>IncludeIP</name>
@@ -121,6 +78,10 @@
 		</action>
 		<action>
 			<name>UninstallDiscoveryPatch</name>
+		</action>
+		<action>
+			<name>StartSonosDiscovery</name>
+			<argumentList/>
 		</action>
 	</actionList>
 </scpd>
