@@ -8,7 +8,7 @@
 module( "L_SonosSystem1", package.seeall )
 
 PLUGIN_NAME = "Sonos"
-PLUGIN_VERSION = "2.1-20143"
+PLUGIN_VERSION = "2.1-20147"
 PLUGIN_ID = 4226
 PLUGIN_URL = "https://github.com/toggledbits/Sonos-Vera"
 
@@ -17,7 +17,7 @@ local _UIVERSION = 20103
 
 local DEBUG_MODE = false	-- Don't hardcode true--use state variable config
 
-local DEVELOPMENT = false	-- ??? Dev: false for production
+local DEVELOPMENT = true	-- ??? Dev: false for production
 
 local MIN_UPNP_VERSION = 20103	-- Minimum version of L_SonosUPnP that works
 local MIN_TTS_VERSION = 20140	-- Minimum version of L_SonosTTS that works
@@ -195,6 +195,21 @@ local TTSChime
 
 local scheduler
 
+if DEVELOPMENT then
+	local mt = getmetatable(_G) or {}
+	mt.__index = function(t,n)
+			luup.log("Attempt to read unset global variable "..tostring(n), 2)
+			if debug and debug.traceback then luup.log(debug.traceback()) end
+			return rawget(t, n)
+		end
+	mt.__newindex = function(t, n, v)
+			luup.log("Setting/creating global variable "..tostring(n).."="..tostring(v), 2)
+			if debug and debug.traceback then luup.log(debug.traceback()) end
+			return rawset(t, n, v)
+		end
+	setmetatable(_G, mt)
+end
+
 local function Q(...) return "'" .. string.gsub(table.concat( arg, "" ), "(')", "\\%1") .. "'" end -- luacheck: ignore 212
 
 local function dump(t, seen)
@@ -316,6 +331,8 @@ local function map( sourceTable, func, destMap )
 	return destMap
 end
 
+local function xmlescape( t ) return ( t:gsub( '"', "&quot;" ):gsub( "'", "&apos;" ):gsub( "%&", "&amp;" ):gsub( "%<", "&lt;" ):gsub( "%>", "&gt;" ) ) end
+
 local Zones = {}
 local function findDeviceByUUID( zoneUUID )
 	if not Zones[zoneUUID] then
@@ -422,7 +439,7 @@ local function getInstallPath()
 			W("This version of the Sonos plugin requires openLuup 2018.11.21 or higher")
 			return "./" -- punt
 		end
-		return loader.find_file( "L_SonosSystem1.lua" ):gsub( "L_SonosSystem1.lua$", "" )
+		return ( loader.find_file( "L_SonosSystem1.lua" ):gsub( "L_SonosSystem1.lua$", "" ) ) -- only return 1 value
 	end
 	return "/etc/cmh-ludl/"
 end
@@ -1011,41 +1028,48 @@ local function getSonosServiceId(serviceName)
 end
 
 local function getServiceFromURI(transportUri, trackUri)
-	local serviceName = ""
-	local serviceId
-	local serviceCmd
-	if (transportUri == nil) then
-		serviceId = "-1"
-	elseif (transportUri:find("pndrradio:") == 1) then
+	D("getServiceFromURI(%1,%2)", transportUri, trackUri)
+	local serviceName, serviceId
+	trackUri = trackUri or ""
+	if not transportUri then
+		return nil, nil
+	elseif transportUri:match("^pndrradio%:") then
 		serviceName = "Pandora"
-		serviceId = getSonosServiceId(serviceName)
-		if (serviceId == nil) then
-			serviceId = "-1"
+		serviceId = getSonosServiceId(serviceName) or "-1" -- ??? nil OK?
+	elseif transportUri:match("^x%-sonos") or trackUri:match("^x%-sonos") then
+		local scheme, path, qs = transportUri:match("^(x%-sonos[^:]+):([^%?]+)%??(.*)")
+		D("getServiceFromURI() parsed transportUri=%1 to scheme=%2, path=%3, qs=%4", transportUri,
+			scheme, path, qs)
+		if not scheme or not (qs or ""):find("sid=") then
+			-- Try track pattern
+			scheme, path, qs = trackUri:match("^(x%-sonos[^:]+):([^%?]+)%??(.*)")
+			D("getServiceFromURI() parsed trackUri=%1 to scheme=%2, path=%3, qs=%4", trackUri,
+				scheme, path, qs)
+		end
+		if scheme and qs then
+			for k in qs:gmatch("[^%&]+") do
+				local p,v = k:match("^([^=]+)=(.*)")
+				if p == "sid" then
+					serviceId = v
+					break
+				end
+			end
+			serviceName = (sonosServices or {})[serviceId] or serviceId
+		else
+			W("Unrecognized service for transport %1 track %2", transportUri, trackUri)
 		end
 	else
-		serviceCmd, serviceId = transportUri:match("x%-sonosapi%-stream:([^%?]+%?sid=(%d+).*)")
-		if (serviceCmd == nil) then
-			serviceCmd, serviceId = transportUri:match("x%-sonosapi%-radio:([^%?]+%?sid=(%d+).*)")
-		end
-		if (serviceCmd == nil) then
-			serviceCmd, serviceId = transportUri:match("x%-sonosapi%-hls:([^%?]+%?sid=(%d+).*)")
-		end
-		if (serviceCmd == nil and trackUri ~= nil) then
-			serviceCmd, serviceId = trackUri:match("x%-sonosprog%-http:([^%?]+%?sid=(%d+).*)")
-		end
-		if (serviceCmd == nil and trackUri ~= nil) then
-			serviceCmd, serviceId = trackUri:match("x%-sonos%-http:([^%?]+%?sid=(%d+).*)")
-		end
-		if (serviceCmd ~= nil and serviceId ~= nil) then
-			serviceName = (sonosServices or {})[serviceId] or ""
-		end
+		D("getServiceFromURI() no service for scheme in %1", transportUri)
+		return nil, nil
 	end
+	D("getServiceFromURI(%1,%2) => %3,%4", transportUri, trackUri, serviceName, serviceId)
 	return serviceName, serviceId
 end
 
 local function updateServicesMetaDataKeys(id, key)
-	if (id or "" ) ~= "" and ( key or "" ) ~= "" and metaDataKeys[id] ~= key then
-		metaDataKeys[id] = key
+	D("updateServicesMetaDataKeys(%1,%2)", id, key)
+	if (id or "" ) ~= "" and id ~= "-1" and ( key or "" ) ~= "" and metaDataKeys[id] ~= key then
+		metaDataKeys[tostring(id)] = key
 		local data = {}
 		for k, v in pairs(metaDataKeys) do
 			table.insert( data, string.format('%s=%s', k, v) )
@@ -1055,12 +1079,14 @@ local function updateServicesMetaDataKeys(id, key)
 end
 
 local function loadServicesMetaDataKeys()
+	D("loadServicesMetaDataKeys()")
 	local k = {}
 	local elts = getVar("SonosServicesKeys", "", pluginDevice, SONOS_SYS_SID)
 	for line in elts:gmatch( "[^\n]+" ) do
-		for token, value in line:gmatch("^([^=]+)=(.*)") do
-			k[token] = value
-		end
+		local s, d = line:match("^([^=]+)=(.*)")
+		D("loadServicesMetaDataKeys() service=%1 metaDataDesc=%2", s, d)
+		if s and d then k[tostring(s)] = d end
+D("loadServicesMetaDataKeys() k=%1", k)
 	end
 	D("loadServicesMetaDataKeys() result %1", k)
 	return k
@@ -1074,7 +1100,7 @@ local function extractDataFromMetaData(zoneUUID, currentUri, currentUriMetaData,
 	local service, serviceId = getServiceFromURI(currentUri, trackUri)
 	updateServicesMetaDataKeys(serviceId, desc)
 	statusString = ""
-	if (service ~= "") then
+	if (service or "") ~= "" then
 		statusString = statusString .. service
 	end
 	if (title ~= "") then
@@ -1455,6 +1481,7 @@ local function decodeURI(localUUID, coordinator, uri)
 	local title = nil
 	local controlByGroup = true
 	local requireQueueing = false
+	local origURI = uri
 
 	-- Handle URI shortcuts (plugin-specific, not Sonos)
 	if uri:sub(1, 2) == "Q:" then
@@ -1518,6 +1545,7 @@ local function decodeURI(localUUID, coordinator, uri)
 			if (id ~= nil and t == uri:sub(4)) then
 				found = true
 				uri = "ID:" .. id
+				D("decodeURI() favorite radio %1 found %2", uri, id)
 				break
 			end
 		end
@@ -1555,11 +1583,12 @@ local function decodeURI(localUUID, coordinator, uri)
 	if uri then
 		if uri:sub(1, 3) == "ID:" then
 			local xml = upnp.browseContent(localUUID, UPNP_MR_CONTENT_DIRECTORY_SERVICE, uri:sub(4), true, nil, nil, nil)
-			D("data from server:\r\n%1", xml)
+			D("decodeURI() data from server for %2:\r\n%1", xml, uri)
 			if xml == "" then
 				uri = nil
 			else
 				title, uri = xml:match("<DIDL%-Lite%s?[^>]-><item%s?[^>]->.-<dc:title%s?[^>]->(.-)</dc:title>.-<res%s?[^>]->(.*)</res>.-</item></DIDL%-Lite>")
+				D("decodeURI() 2 %1,%2", title, uri)
 				if uri then
 					uriMetaData = upnp.decode(xml:match("<DIDL%-Lite%s?[^>]-><item%s?[^>]->.-<r:resMD%s?[^>]->(.*)</r:resMD>.-</item></DIDL%-Lite>") or "")
 				else
@@ -1569,6 +1598,7 @@ local function decodeURI(localUUID, coordinator, uri)
 					end
 				end
 			end
+			D("decodeURI() 3 title=%2, uri=%3, metadata is\r\n%1", uriMetaData, title, uri)
 		end
 
 		if uri:sub(1, 38) == "file:///jffs/settings/savedqueues.rsq#" or
@@ -1581,20 +1611,26 @@ local function decodeURI(localUUID, coordinator, uri)
 			-- Metadata still empty. Build it.
 			_, serviceId = getServiceFromURI(uri, nil)
 			D("decodeURI() url %1 serviceId %2 title %3", uri, serviceId, title)
-			if serviceId and metaDataKeys[serviceId] ~= nil then
+			if serviceId and metaDataKeys[serviceId] then
 				if title == nil then
+					D("decodeURI() 4 building metadata no title sid %2 desc %1", metaDataKeys[serviceId], serviceId)
 					uriMetaData = '<DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/">'
-								  .. '<item><desc>' .. metaDataKeys[serviceId] .. '</desc>'
+								  .. '<item><desc>' .. xmlescape(metaDataKeys[serviceId]) .. '</desc>'
 								  .. '</item></DIDL-Lite>'
 				else
+					D("decodeURI() 5 building metadata title %3 sid %2 desc %1", metaDataKeys[serviceId], serviceId, title)
 					uriMetaData = '<DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/">'
-								  .. '<item><dc:title>' .. title .. '</dc:title>'
-								  .. '<desc>' .. metaDataKeys[serviceId] .. '</desc>'
+								  .. '<item><dc:title>' .. xmlescape(title) .. '</dc:title>'
+								  .. '<desc>' .. xmlescape(metaDataKeys[serviceId]) .. '</desc>'
 								  .. '</item></DIDL-Lite>'
 				end
 			elseif title ~= nil then
+				if serviceId then
+					W("No metadata for service %2; it may be necessary to play a resource in this service from the Sonos app so that the metadata can be learned and stored: %1", origURI, serviceId)
+				end
+				D("decodeURI() 6 building metadata title %1 no sid/keys", title)
 				uriMetaData = '<DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/">'
-							  .. '<item><dc:title>' .. title .. '</dc:title>'
+							  .. '<item><dc:title>' .. xmlescape(title) .. '</dc:title>'
 							  .. '<upnp:class>object.item.audioItem.audioBroadcast</upnp:class>'
 							  .. '</item></DIDL-Lite>'
 			end
@@ -1991,7 +2027,7 @@ end
 local function setupTTSSettings(device)
 	D("setupTTSSettings(%1)", device)
 	TTSConfig = nil
-	if not tts then return end
+	if not tts then return false end
 	local s = getVar("TTSConfig", "", device, SONOS_SYS_SID)
 	if s ~= "" then
 		TTSConfig = json.decode( s )
@@ -2073,6 +2109,16 @@ local function setupTTSSettings(device)
 		W("The specified TTS chime file %1 does not exist", chimefile)
 	end
 	D("setupTTSSettings() TTSChime=%1", TTSChime)
+	return true
+end
+
+-- Callback for variable_watch
+function sonosWatch( dev, svc, var, oldVal, newVal )
+	D("sonosWatch(%1,%2,%3,%4,%5)", dev, svc, var, oldVal, newVal )
+	if svc == SONOS_SYS_SID and ( var == "TTSConfig" or var == "TTSChime" ) then
+		L("Reconfiguring TTS (settings change detected)")
+		setupTTSSettings(dev)
+	end
 end
 
 local function getAvailableServices(uuid)
@@ -2084,6 +2130,7 @@ local function getAvailableServices(uuid)
 	end
 	local tag = "Service"
 	local status, tmp = MusicServices.ListAvailableServices({})
+	D("getAvailableServices() status=%1, tmp=%2", status, tmp)
 	if status == true then
 		tmp = upnp.extractElement("AvailableServiceDescriptorList", tmp, "")
 		for item in tmp:gmatch("(<"..tag.."%s.-</"..tag..">)") do
@@ -2095,6 +2142,7 @@ local function getAvailableServices(uuid)
 			end
 		end
 	end
+	D("getAvailableService() result services=%1", services)
 	return services
 end
 
@@ -2165,7 +2213,7 @@ local function setDeviceIcon( device, icon, model, uuid )
 	-- See if we've already created a custom static JSON for this UUID or model.
 	local staticJSONFile
 	if ( uuid or "") ~= "" then
-		staticJSONFile = string.format( "D_Sonos1_%s.json", ( tostring( uuid ):lower():gsub( "[^a-z0-9_]", "_" ) ) )
+		staticJSONFile = string.format( "D_Sonos1_%s.json", ( tostring( uuid ):lower():gsub( "[^a-z0-9_]", "_" ) ) ) -- gsub returns 2 values, we only need 1
 		if file_exists_LZO( installPath .. staticJSONFile ) then
 			L("Using device-specific UI %s", staticJSONFile )
 		else
@@ -3190,8 +3238,6 @@ function startup( lul_device )
 		end
 	end
 
-	metaDataKeys = loadServicesMetaDataKeys()
-
 	scheduler = TaskManager( 'sonosTick' )
 
 	if not isOpenLuup then
@@ -3262,17 +3308,25 @@ function startup( lul_device )
 		VERA_WEB_PORT = tonumber(routerPort)
 	end
 
-	ip, playbackCxt, sayPlayback, UUIDs, metaDataKeys, dataTable = upnp.initialize(L, W, E)
+	-- ??? cleanup: we actually don't use the shared tables/arguments.
+	upnp.initialize(L, W, E)
 
 	if tts then
 		tts.initialize(L, W, E)
-		setupTTSSettings(lul_device)
+		if setupTTSSettings(lul_device) then
+			luup.variable_watch( 'sonosWatch', SONOS_SYS_SID, "TTSConfig", lul_device )
+			luup.variable_watch( 'sonosWatch', SONOS_SYS_SID, "TTSChime", lul_device )
+		end
 	end
 
 	port = 1400
 
 	setVar(SONOS_SYS_SID, "DiscoveryPatchInstalled",
 		upnp.isDiscoveryPatchInstalled(VERA_LOCAL_IP) and "1" or "0", lul_device)
+
+	-- After upnp.initialize
+	metaDataKeys = loadServicesMetaDataKeys()
+	D("startup() loaded metaDataKeys=%1", metaDataKeys)
 
 	-- Reload zoneInfo from last known
 	zoneInfo = { zones={}, groups={} }
@@ -3773,19 +3827,23 @@ end
 
 function actionSonosSetupTTS( lul_device, lul_settings )
 	D("actionSonosSetupTTS(%1,%2)", lul_device, lul_settings )
+	setupTTSSettings( lul_device )
 	return true
 end
 
 function actionSonosResetTTS( lul_device )
 	assert(luup.devices[lul_device].device_type == SONOS_SYS_DEVICE_TYPE)
 	os.execute( "rm -rf -- " .. Q(TTSBasePath, "ttscache") )
+	setupTTSSettings( lul_device )
 	return true
 end
 
 function actionSonosSetURIToPlay( lul_device, lul_settings )
 	assert(luup.devices[lul_device].device_type == SONOS_ZONE_DEVICE_TYPE)
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
-	local uri = defaultValue(lul_settings, "URIToPlay", "")
+	local uri = defaultValue(lul_settings, "URIToPlay", "") -- deprecated
+	if lul_settings.URIToPlay then W("The parameter URIToPlay on the SetURIToPlay action is now deprecated; please use URI instead.") end
+	uri = defaultValue(lul_settings, "URI", uri) -- new ultimate replacement
 
 	playURI(findZoneByDevice( lul_device ), instanceId, uri, nil, nil, nil, false, nil, false, true)
 
@@ -3806,10 +3864,15 @@ end
 function actionSonosPlayURI( lul_device, lul_settings )
 	assert(luup.devices[lul_device].device_type == SONOS_ZONE_DEVICE_TYPE)
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
-	local uri = defaultValue(lul_settings, "URIToPlay", "")
+	local uri = defaultValue(lul_settings, "URIToPlay", "") -- deprecated
+	if lul_settings.URIToPlay then W("The parameter URIToPlay on the PlayURI action is now deprecated; please use URI instead.") end
+	uri = defaultValue(lul_settings, "URI", uri) -- new ultimate replacement
 	local volume = defaultValue(lul_settings, "Volume", nil)
 	local speed = defaultValue(lul_settings, "Speed", "1")
 
+	uri = uri:gsub("^%s+", ""):gsub("%s+$", "")
+	if volume then volume = tonumber(volume) end
+	if speed then speed = tonumber(speed) end
 	playURI(findZoneByDevice( lul_device ), instanceId, uri, speed, volume, nil, false, nil, false, true)
 
 	updateNow( lul_device )
@@ -3829,7 +3892,9 @@ end
 function actionSonosEnqueueURI( lul_device, lul_settings )
 	assert(luup.devices[lul_device].device_type == SONOS_ZONE_DEVICE_TYPE)
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
-	local uri = defaultValue(lul_settings, "URIToEnqueue", "")
+	local uri = defaultValue(lul_settings, "URIToEnqueue", "") -- deprecated
+	if lul_settings.URIToPlay then W("The parameter URIToEnqueue on the EnqueueURI action is now deprecated; please use URI instead.") end
+	uri = defaultValue(lul_settings, "URI", uri) -- new ultimate replacement
 	local enqueueMode = defaultValue(lul_settings, "EnqueueMode", "ENQUEUE_AND_PLAY")
 
 	playURI(findZoneByDevice( lul_device ), instanceId, uri, "1", nil, nil, false, enqueueMode, false, true)
@@ -4201,7 +4266,7 @@ end
 
 function actionSonosNotifyMusicServicesChange( lul_device, lul_settings ) -- luacheck: ignore 212
 	local uuid = findZoneByDevice( lul_device )
-	-- D("actionSonosNotifyMusicServicesChange(%1,%2)", lul_device, lul_settings)
+	D("actionSonosNotifyMusicServicesChange(%1,%2)", lul_device, lul_settings)
 	D("actionSonosNotifyMusicServicesChange(%1, lul_settings) uuid %2", lul_device, uuid)
 	assert(luup.devices[lul_device].device_type == SONOS_ZONE_DEVICE_TYPE)
 	assert( uuid ~= nil )
@@ -4209,6 +4274,7 @@ function actionSonosNotifyMusicServicesChange( lul_device, lul_settings ) -- lua
 	if (upnp.isValidNotification("NotifyMusicServicesChange", lul_settings.sid, EventSubscriptions[uuid])) then
 		-- log("NotifyMusicServicesChange for device " .. lul_device .. " SID " .. lul_settings.sid .. " with value " .. (lul_settings.LastChange or "nil"))
 		sonosServices = getAvailableServices(uuid)
+		D("actionNotifyMusicServiceChange() sonosServices=%1", sonosServices)
 		metaDataKeys = loadServicesMetaDataKeys()
 		return 4,0
 	end
