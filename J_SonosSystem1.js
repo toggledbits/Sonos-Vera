@@ -15,7 +15,7 @@ var SonosSystem = (function(api, $) {
 	/* unique identifier for this plugin... */
 	var uuid = '79bf9374-f989-11e9-884c-dbb32f3fa64a'; /* SonosSystem 2019-12-11 19345 */
 
-	var pluginVersion = '2.1-20143';
+	var pluginVersion = '2.1-20147';
 
 	var _UIVERSION = 20103;     /* must coincide with Lua core */
 
@@ -239,11 +239,6 @@ var SonosSystem = (function(api, $) {
 						val = $( 'input#read-queue' ).is( 'checked ' );
 						api.performActionOnDevice( device, Sonos.SONOS_SYS_SID, "SetReadQueueContent",
 							{ actionArguments: { enable: val ? "1" : "0" } } );
-					}
-
-					if ( confirm( "Settings saved. Luup needs to be reloaded for most changes to take effect. Reload now?" ) ) {
-						api.performActionOnDevice( 0, "urn:micasaverde-com:serviceId:HomeAutomationGateway1", "Reload",
-							{ actionArguments: { Reason: "Sonos settings changes" } } );
 					}
 				},
 				'onFailure' : function( a,b,c ) {

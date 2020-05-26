@@ -65,6 +65,7 @@ local function debug( stuff, ... )
     if DEBUG_MODE then log( "(UPnP) "..tostring(stuff), ... ) end
 end
 
+-- ??? cleanup: shared table use? 
 function initialize(logger, warningLogger, errorLogger, ct)
   log = logger
   warning = warningLogger

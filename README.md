@@ -110,8 +110,9 @@ You can install the Sonos plugin through the Vera App Marketplace (in your Vera,
 
 ## Actions
 
-### Making a Sonos play something
-This functionality is exposed declaratively through the PlayURI action under Advanced Scenes. The functionality is also exposed programmatically via Lua code:
+### Making a Sonos Play Something
+
+This functionality is exposed declaratively through the `PlayURI` action in the advanced editor for scenes. The functionality is also exposed programmatically via Lua code:
 
 ```
 luup.call_action("urn:micasaverde-com:serviceId:Sonos1", "PlayURI",

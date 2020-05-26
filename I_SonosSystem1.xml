@@ -19,6 +19,7 @@
 			end
 			-- Promote callbacks to global
 			sonosTick = L_SonosSystem1.sonosTick
+			sonosWatch = L_SonosSystem1.sonosWatch
 			sonosRequestHandler = L_SonosSystem1.handleRequest
 			luup.register_handler("sonosRequestHandler", "SonosSystem")
 			luup.register_handler("sonosRequestHandler", "Sonos")
