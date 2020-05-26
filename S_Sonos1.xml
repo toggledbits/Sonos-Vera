@@ -128,6 +128,11 @@
 			<name>SetURIToPlay</name>
 			<argumentList>
 				<argument>
+					<name>InstanceID</name>
+					<direction>in</direction>
+					<relatedStateVariable>A_ARG_TYPE_instance</relatedStateVariable>
+				</argument>
+				<argument>
 					<name>URIToPlay</name>
 					<direction>in</direction>
 					<relatedStateVariable>A_ARG_TYPE_URI</relatedStateVariable>
@@ -280,9 +285,6 @@
 			</argumentList>
 		</action>
 		<action>
-			<name>PauseAll</name>
-		</action>
-		<action>
 			<name>JoinGroup</name>
 			<argumentList>
 				<argument>
@@ -302,26 +304,6 @@
 					<name>Zones</name>
 					<direction>in</direction>
 					<relatedStateVariable>A_ARG_TYPE_Zone</relatedStateVariable>
-				</argument>
-			</argumentList>
-		</action>
-		<action>
-			<name>SelectSonosDevice</name>
-			<argumentList>
-				<argument>
-					<name>URL</name>
-					<direction>in</direction>
-					<relatedStateVariable>A_ARG_TYPE_URI</relatedStateVariable>
-				</argument>
-			</argumentList>
-		</action>
-		<action>
-			<name>SetCheckStateRate</name>
-			<argumentList>
-				<argument>
-					<name>rate</name>
-					<direction>in</direction>
-					<relatedStateVariable>A_ARG_TYPE_Duration</relatedStateVariable>
 				</argument>
 			</argumentList>
 		</action>
@@ -372,16 +354,6 @@
 					<name>ContainerUpdateIDs</name>
 					<direction>in</direction>
 					<relatedStateVariable>A_ARG_TYPE_ContainerUpdateIDs</relatedStateVariable>
-				</argument>
-			</argumentList>
-		</action>
-		<action>
-			<name>SetReadQueueContent</name>
-			<argumentList>
-				<argument>
-					<name>enable</name>
-					<direction>in</direction>
-					<relatedStateVariable>A_ARG_TYPE_boolean</relatedStateVariable>
 				</argument>
 			</argumentList>
 		</action>
