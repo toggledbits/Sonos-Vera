@@ -8,6 +8,8 @@
 * Support extra fields for MaryTTS, in case there's more that needs to be passed on the URL that isn't preconfigured/canned.
 * Remove bogus 1.x defaults from TTS initialization, masking real defaults now in effect.
 * Soft-wrap text input for TTS tab on Sonos device.
+* Improve player display and queue contents accuracy.
+* Hotfix 20147-01: Fix for service metadata not being correctly reloaded (affects streaming/radio playback).
 
 ## Version 2.0 (released)
 
