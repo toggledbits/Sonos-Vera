@@ -6,7 +6,7 @@
 
 module("L_SonosTTS", package.seeall)
 
-VERSION = 20143
+VERSION = 20148
 DEBUG_MODE = false
 
 local urllib = require("socket.url")
@@ -48,6 +48,8 @@ local function cut_text( text, cutSize )
 		remaining = string.sub( remaining, cutSize+3-pos )
 	end
 end
+
+local function xmlescape( t ) return ( t:gsub( '"', "&quot;" ):gsub( "'", "&apos;" ):gsub( "%&", "&amp;" ):gsub( "%<", "&lt;" ):gsub( "%>", "&gt;" ) ) end
 
 -- Abstract base class for TTS engine for this module. Although its abstract-ness is not strictly
 -- enforced and this class can be instantiated directly to use for any HTTP-GET-method engine, the
@@ -462,15 +464,13 @@ function AzureTTSEngine:say(text, destFile, engineOptions)
 		local host = string.format("%s.tts.speech.microsoft.com", engineOptions.region or self.optionMeta.region.default )
 		local voice = engineOptions.voice or self.optionMeta.voice.default
 		local lang = voice:gsub( "^(%w+%-%w+)%-.*", "%1" )
-		local payload = string.format([[<speak version="1.0" xml:lang="%s"><voice name="%s">%s</voice></speak>]],
-			lang, voice,
-			text:gsub("%s+"," "):gsub("^%s+",""):gsub("%s+$",""):gsub("%&","&amp;"):gsub("%>","&gt;"):gsub("%<","&lt;"))
+		local payload = string.format('<speak version="1.0" xml:lang="%s"><voice name="%s"><![CDATA[%s]]></voice></speak>',
+			lang, voice, text:gsub("'", "''"))
 		debug("AzureTTSEngine:say() host %1 payload %2", host, payload)
 		debug("AzureTTSEngine:say() system LuaSec version is %1", ssl._VERSION)
 		os.remove( destFile )
 		if engineOptions.requestor == "C" then
 			-- Ancient LuaSec or curl specified
-			payload = payload:gsub( "'", "''" ) -- double-up single quotes for shell
 			local req = string.format("curl -s -k -m %s -k -o '%s'",
 				engineOptions.timeout or self.optionMeta.timeout.default or 15,
 				destFile)
@@ -478,7 +478,7 @@ function AzureTTSEngine:say(text, destFile, engineOptions)
 			req = req .. string.format(" -H 'Authorization: Bearer %s'", self.token)
 			req = req .. string.format(" -H 'X-Microsoft-OutputFormat: %s'", self.format)
 			req = req .. string.format(" -H 'Content-Type: %s'", "application/ssml+xml")
-			req = req .. string.format(" -H 'Content-Length: %s'", #payload)
+			-- req = req .. string.format(" -H 'Content-Length: %s'", #payload) -- curl does it correctly
 			req = req .. string.format(" -d '%s'", payload )
 			req = req .. string.format(" 'https://%s/cognitiveservices/v1'", host)
 			debug("AzureTTSEngine:say() curl request: %1", req)
