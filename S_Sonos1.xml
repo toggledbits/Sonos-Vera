@@ -8,7 +8,7 @@
 	<serviceStateTable>
 		<stateVariable sendEvents="no">
 			<name>A_ARG_TYPE_instance</name>
-			<dataType>string</dataType>
+			<dataType>ui4</dataType>
 		</stateVariable>
 		<stateVariable sendEvents="no">
 			<name>A_ARG_TYPE_URI</name>
@@ -302,6 +302,25 @@
 			<argumentList>
 				<argument>
 					<name>Zones</name>
+					<direction>in</direction>
+					<relatedStateVariable>A_ARG_TYPE_Zone</relatedStateVariable>
+				</argument>
+				<argument>
+					<name>Devices</name>
+					<direction>in</direction>
+					<relatedStateVariable>A_ARG_TYPE_Devices</relatedStateVariable>
+				</argument>
+			</argumentList>
+		</action>
+		<action>
+			<name>AcquireGroupControl</name>
+			<argumentList/>
+		</action>
+		<action>
+			<name>DelegateGroupControl</name>
+			<argumentList>
+				<argument>
+					<name>Zone</name>
 					<direction>in</direction>
 					<relatedStateVariable>A_ARG_TYPE_Zone</relatedStateVariable>
 				</argument>

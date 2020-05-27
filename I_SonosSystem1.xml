@@ -177,6 +177,20 @@
 		</action>
 		<action>
 			<serviceId>urn:micasaverde-com:serviceId:Sonos1</serviceId>
+			<name>AcquireGroupControl</name>
+			<job>
+				return L_SonosSystem1.actionSonosAcquireGroupControl( lul_device, lul_settings )
+			</job>
+		</action>
+		<action>
+			<serviceId>urn:micasaverde-com:serviceId:Sonos1</serviceId>
+			<name>DelegateGroupControl</name>
+			<job>
+				return L_SonosSystem1.actionSonosDelegateGroupControl( lul_device, lul_settings )
+			</job>
+		</action>
+		<action>
+			<serviceId>urn:micasaverde-com:serviceId:Sonos1</serviceId>
 			<name>NotifyRenderingChange</name>
 			<job>
 				return L_SonosSystem1.actionSonosNotifyRenderingChange( lul_device, lul_settings )

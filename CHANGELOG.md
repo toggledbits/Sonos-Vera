@@ -2,8 +2,10 @@
 
 **NOTAM (NOtice To All Music-lovers):** ResponsiveVoice is no longer supported. They removed the public URL/endpoint that was being used to create speech audio files by the plugin. The suggested alternative to RV is the Microsoft Azure Speech Service, which produces clear speech audio from a large variety of voices, and offers a usable/meaningful free tier level that is likely sufficient for most users.
 
-## Version 2.1 (development, 20143)
+## Version 2.1 (development, 20148)
 
+* New action `urn:micasaverde-com:serviceId:Sonos1/AcquireGroupControl` to become group controller of a zone's current group.
+* New action `urn:micasaverde-com:serviceId:Sonos1/DelegateGroupControl` to delegate group controller authority to another zone (`Zone` parameter must contain a single zone UUID or zone name).
 * Azure TTS now works for Vera3/Lite. It is necessary to switch the "Requestor" in the TTS settings to "curl," and set "SSL Peer Verification" to "off". Note that these settings are **not secure**, and introduce the (likely remote but not zero) risk of undetected man-in-the-middle and other attacks on the connection/requests, so **you make these settings changes entirely at your own risk**. If cannot accept this risk, your only alternative is to upgrade your Vera to a modern unit that supports the higher levels of encryption and peer verification required, or not use Azure TTS.
 * Support extra fields for MaryTTS, in case there's more that needs to be passed on the URL that isn't preconfigured/canned.
 * Remove bogus 1.x defaults from TTS initialization, masking real defaults now in effect.

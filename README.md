@@ -265,6 +265,28 @@ Notes:
 * It is possible to use the parameter named *GroupDevices* in addition to (or instead of) *GroupZones*. The value is a comma-separated list of Vera device numbers. For example, if your Living Room and Kitchen zone players are linked respectively to devices 667 and 668 in your Vera, you will use `GroupDevices="667,668"`.
 * Parameters not specified will default internally. (*Duration*=0, *GroupDevices*="", *GroupZones*="", *Volume*=`nil`, *SameVolumeForAll*=`false`) By default, the volume is not set.
 
+### Group Control
+
+A group is an association of zone players in which one, the *group coordinator* is in control of what media is currently playing for all zones; the playback in all zones is synchronized. Each zone in a group can have its own volume, mute, and other rendering settings, but all transport and media navigation is handled by the group controller.
+
+The Sonos plugin, in addition to providing direct access to the Sonos' UPnP functions for controlling groups, provides several meta-methods to make it easier. These metamethods are all defined in service `urn:micasaverde-com:serviceId:Sonos1`:
+
+* AcquireGroupControl - No parameters; the zone on which the action is invoked is made the coordinator of its current group;
+* DelegateGroupControl - The zone (UUID or name) in parameter `Zone` (which must be a member of the group of which the zone on which the action is invoked is coordinator) is made group coordinator;
+* JoinGroup - The group on which the action is invoked is made a member of the group of which `Zone` (UUID or name) is a member;
+* LeaveGroup - The zone on which the action is invoked is removed from its group; if it is the coordinator of the group, the group is dissolved and all members become stand-alone zones;
+* UpdateGroupMembers - When called on a group coordinator, sets the members of the group to set represented by the union of the comma-separated list of zones (using zone UUIDs and/or names) in parameter `Zones`, and Luup device numbers or names in `Devices`. Zones are added or removed as needed. Zones removed from the group become stand-alone. If a zone being added was a group coordinator of another group, that group is dissolved and only the specified zone is added (it is not a merge of zones).
+
+```
+luup.call_action( "urn:micasaverde-com:serviceId:Sonos1", "AcquireGroupControl", {}, 123 )
+luup.call_action( "urn:micasaverde-com:serviceId:Sonos1", "DelegateGroupControl", { Zone="RINCON_000000000000" }, 123 )
+luup.call_action( "urn:micasaverde-com:serviceId:Sonos1", "JoinGroup", { Zone="RINCON_000000000000" }, 123 )
+luup.call_action( "urn:micasaverde-com:serviceId:Sonos1", "LeaveGroup", 123 )
+luup.call_action( "urn:micasaverde-com:serviceId:Sonos1", "UpdateGroupMembers", { Zones="RINCON_000000000000", Devices="443" }, 123 )
+```
+
+> Note: When specifying zone names, that is the name by which the Sonos network knows the zone, which may be different from the Luup device name. This "official" zone name is what is displayed in the Sonos app, and can also be found by examining the `ZoneName` state variable (service ID `urn:upnp-org:serviceId:DeviceProperties`) on the Luup device.
+
 ## Configuring TTS (Text-to-Speech)
 
 > As of this writing, the only reliably-working TTS services are [MaryTTS](http://mary.dfki.de/) and Microsoft Azure Cognitive Services Voice (aka "Azure"). ResponsiveVoice is not longer available or supported. 

@@ -20,7 +20,7 @@
 		</stateVariable>
 		<stateVariable sendEvents="no">
 			<name>A_ARG_TYPE_enable</name>
-			<dataType>boolean</dataType>
+			<dataType>ui1</dataType>
 		</stateVariable>
 	</serviceStateTable>
 	<actionList>
