@@ -165,7 +165,7 @@
 			<serviceId>urn:micasaverde-com:serviceId:Sonos1</serviceId>
 			<name>LeaveGroup</name>
 			<job>
-				return L_SonosSystem1.actionSonoLeaveGroup( lul_device, lul_settings )
+				return L_SonosSystem1.actionSonosLeaveGroup( lul_device, lul_settings )
 			</job>
 		</action>
 		<action>
