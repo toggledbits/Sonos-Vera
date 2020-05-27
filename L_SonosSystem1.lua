@@ -937,8 +937,8 @@ end
 -- Get UUIDs for all controllable devices (excludes bridges and satellites)
 local function getAllUUIDs()
 	local zones = {}
-	for zid,zone in pairs( zoneInfo.zones ) do
-		if isControllableZone( zone ) then
+	for zid in pairs( zoneInfo.zones ) do
+		if isControllableZone( zid ) then
 			table.insert( zones, zid )
 		end
 	end
