@@ -275,7 +275,7 @@ The Sonos plugin, in addition to providing direct access to the Sonos' UPnP func
 * DelegateGroupControl - The zone (UUID or name) in parameter `Zone` (which must be a member of the group of which the zone on which the action is invoked is coordinator) is made group coordinator;
 * JoinGroup - The group on which the action is invoked is made a member of the group of which `Zone` (UUID or name) is a member;
 * LeaveGroup - The zone on which the action is invoked is removed from its group; if it is the coordinator of the group, the group is dissolved and all members become stand-alone zones;
-* UpdateGroupMembers - When called on a group coordinator, sets the members of the group to set represented by the union of the comma-separated list of zones (using zone UUIDs and/or names) in parameter `Zones`, and Luup device numbers or names in `Devices`. Zones are added or removed as needed. Zones removed from the group become stand-alone. If a zone being added was a group coordinator of another group, that group is dissolved and only the specified zone is added (it is not a merge of zones).
+* UpdateGroupMembers - When called, creates or modifies a group with the zone on which the action is invoked as group coordinator. Sets the members of the group to the set represented by the union of the comma-separated list of zones (using zone UUIDs and/or names) in parameter `Zones`, and Luup device numbers or names in `Devices`. Zones are added or removed as needed. If the `Zones` parameter is the string "ALL", then all zones are added to the group. Zones removed from the group become stand-alone. If a zone being added was a group coordinator of another group, that group is dissolved and only the specified zone is added (it is not a merge of zones).
 
 ```
 luup.call_action( "urn:micasaverde-com:serviceId:Sonos1", "AcquireGroupControl", {}, 123 )
@@ -283,6 +283,7 @@ luup.call_action( "urn:micasaverde-com:serviceId:Sonos1", "DelegateGroupControl"
 luup.call_action( "urn:micasaverde-com:serviceId:Sonos1", "JoinGroup", { Zone="RINCON_000000000000" }, 123 )
 luup.call_action( "urn:micasaverde-com:serviceId:Sonos1", "LeaveGroup", 123 )
 luup.call_action( "urn:micasaverde-com:serviceId:Sonos1", "UpdateGroupMembers", { Zones="RINCON_000000000000", Devices="443" }, 123 )
+luup.call_action( "urn:micasaverde-com:serviceId:Sonos1", "UpdateGroupMembers", { Zones="ALL" }, 123 )
 ```
 
 > Note: When specifying zone names, that is the name by which the Sonos network knows the zone, which may be different from the Luup device name. This "official" zone name is what is displayed in the Sonos app, and can also be found by examining the `ZoneName` state variable (service ID `urn:upnp-org:serviceId:DeviceProperties`) on the Luup device.
