@@ -1116,7 +1116,7 @@ input#language { width: 6em; } \
 	{
 		if (jQuery('#audioInputs option:selected').index() >= 0) {
 			var uri = encodeURIComponent(jQuery('#audioInputs').val());
-			api.performActionOnDevice(device, SONOS_SID, 'PlayURI', { actionArguments: {'URI':uri} } );
+			api.performActionOnDevice(device, SONOS_SID, 'PlayURI', { actionArguments: {'URIToPlay':uri} } );
 		}
 	}
 
@@ -1124,7 +1124,7 @@ input#language { width: 6em; } \
 	{
 		if (jQuery('#savedQueues option:selected').index() >= 0) {
 			var id = encodeURIComponent('ID:' + jQuery('#savedQueues').val());
-			api.performActionOnDevice(device, SONOS_SID, 'PlayURI', { actionArguments: {'URI':id} } );
+			api.performActionOnDevice(device, SONOS_SID, 'PlayURI', { actionArguments: {'URIToPlay':id} } );
 		}
 	}
 
@@ -1141,14 +1141,14 @@ input#language { width: 6em; } \
 			idx += 1;
 			uri += idx;
 		}
-		api.performActionOnDevice(device, SONOS_SID, 'PlayURI', { actionArguments: {'URI':uri} } );
+		api.performActionOnDevice(device, SONOS_SID, 'PlayURI', { actionArguments: {'URIToPlay':uri} } );
 	}
 
 	function Sonos_playFavRadio(device)
 	{
 		if (jQuery('#favRadios option:selected').index() >= 0) {
 			var id = encodeURIComponent('ID:' + jQuery('#favRadios').val());
-			api.performActionOnDevice(device, SONOS_SID, 'PlayURI', { actionArguments: {'URI':id} } );
+			api.performActionOnDevice(device, SONOS_SID, 'PlayURI', { actionArguments: {'URIToPlay':id} } );
 		}
 	}
 
@@ -1156,7 +1156,7 @@ input#language { width: 6em; } \
 	{
 		if (jQuery('#favorites option:selected').index() >= 0) {
 			var id = encodeURIComponent('ID:' + jQuery('#favorites').val());
-			api.performActionOnDevice(device, SONOS_SID, 'PlayURI', { actionArguments: {'URI':id} } );
+			api.performActionOnDevice(device, SONOS_SID, 'PlayURI', { actionArguments: {'URIToPlay':id} } );
 		}
 	}
 
@@ -1170,7 +1170,7 @@ input#language { width: 6em; } \
 		uri = encodeURIComponent(uri);
 		//jQuery('#debug').html(uri);
 		if (uri != "") {
-			api.performActionOnDevice(device, SONOS_SID, 'PlayURI', { actionArguments: {'URI':uri} } );
+			api.performActionOnDevice(device, SONOS_SID, 'PlayURI', { actionArguments: {'URIToPlay':uri} } );
 		}
 	}
 
