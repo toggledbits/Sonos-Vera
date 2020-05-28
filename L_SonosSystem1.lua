@@ -8,7 +8,7 @@
 module( "L_SonosSystem1", package.seeall )
 
 PLUGIN_NAME = "Sonos"
-PLUGIN_VERSION = "2.0-hotfix20147"
+PLUGIN_VERSION = "2.0-hotfix20149"
 PLUGIN_ID = 4226
 PLUGIN_URL = "https://github.com/toggledbits/Sonos-Vera"
 
@@ -1393,7 +1393,7 @@ end
 local function updateWithoutProxy(task, device)
 	D("updateWithoutProxy(%1,%2)", tostring(task), device)
 	local uuid = findZoneByDevice( device )
-	refreshNow(uuid, true, true)
+	refreshNow(uuid, false, true)
 	if not upnp.proxyVersionAtLeast(1) then
 		local ts = dataTable[uuid].TransportState or "STOPPED"
 		local rp,rs = getVar("PollDelays", "15,60", device, SONOS_ZONE_SID):match( '^(%S+)%,%s*(.*)$' )
@@ -1478,7 +1478,7 @@ local function decodeURI(localUUID, coordinator, uri)
 		local found = false
 		title = uri:sub(4)
 		local sq = getVar( "SavedQueues", "", pluginDevice, SONOS_SYS_SID )
-		for line in sq:gmatch("(.-)\n") do
+		for line in sq:gmatch("([^\n]+)") do
 			local id, t = line:match("^(.+)@(.-)$")
 			if (id ~= nil and t == title) or id == uri then
 				found = true
@@ -1496,7 +1496,7 @@ local function decodeURI(localUUID, coordinator, uri)
 		title = uri:sub(4)
 		local found = false
 		local ff = getVar( "FavoritesRadios", "", pluginDevice, SONOS_SYS_SID )
-		for line in ff:gmatch("(.-)\n") do
+		for line in ff:gmatch("([^\n]+)") do
 			local id, t = line:match("^(.+)@(.-)$")
 			if id ~= nil and t == uri:sub(4) then
 				found = true
@@ -1514,7 +1514,7 @@ local function decodeURI(localUUID, coordinator, uri)
 		title = uri:sub(4)
 		local found = false
 		local ff = getVar( "Favorites", "", pluginDevice, SONOS_SYS_SID )
-		for line in ff:gmatch("(.-)\n") do
+		for line in ff:gmatch("([^\n]+)") do
 			local id, t = line:match("^(.+)@(.-)$")
 			if (id ~= nil and t == uri:sub(4)) then
 				found = true
