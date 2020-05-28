@@ -1483,7 +1483,7 @@ end
 local function updateWithoutProxy(task, device)
 	D("updateWithoutProxy(%1,%2)", tostring(task), device)
 	local uuid = findZoneByDevice( device )
-	refreshNow(uuid, true, true)
+	refreshNow(uuid, false, true)
 	if not upnp.proxyVersionAtLeast(1) then
 		local ts = dataTable[uuid].TransportState or "STOPPED"
 		local rp,rs = getVar("PollDelays", "15,60", device, SONOS_ZONE_SID):match( '^(%S+)%,%s*(.*)$' )
@@ -1569,7 +1569,7 @@ local function decodeURI(localUUID, coordinator, uri)
 		local found = false
 		title = uri:sub(4)
 		local sq = getVar( "SavedQueues", "", pluginDevice, SONOS_SYS_SID )
-		for line in sq:gmatch("(.-)\n") do
+		for line in sq:gmatch("([^\n]+)") do
 			local id, t = line:match("^(.+)@(.-)$")
 			if (id ~= nil and t == title) or id == uri then
 				found = true
@@ -1587,7 +1587,7 @@ local function decodeURI(localUUID, coordinator, uri)
 		title = uri:sub(4)
 		local found = false
 		local ff = getVar( "FavoritesRadios", "", pluginDevice, SONOS_SYS_SID )
-		for line in ff:gmatch("(.-)\n") do
+		for line in ff:gmatch("([^\n]+)") do
 			local id, t = line:match("^(.+)@(.-)$")
 			if id ~= nil and t == uri:sub(4) then
 				found = true
@@ -1605,7 +1605,7 @@ local function decodeURI(localUUID, coordinator, uri)
 		title = uri:sub(4)
 		local found = false
 		local ff = getVar( "Favorites", "", pluginDevice, SONOS_SYS_SID )
-		for line in ff:gmatch("(.-)\n") do
+		for line in ff:gmatch("([^\n]+)") do
 			local id, t = line:match("^(.+)@(.-)$")
 			if (id ~= nil and t == uri:sub(4)) then
 				found = true
@@ -1801,7 +1801,12 @@ local function playURI(zoneUUID, instanceId, uri, speed, volume, uuids, sameVolu
 	if AVTransport and uri and not onlyEnqueue then
 		if newGroup then
 			D("playURI() creating new group")
-			AVTransport.BecomeCoordinatorOfStandaloneGroup({InstanceID=instanceId})
+			local group = getZoneGroup( uuid ) or {}
+			if group.Coordinator ~= uuid or #group.members > 1 then
+				-- Not group coordinating of current group, or (is and) current group has others
+				D("playURI() removing self (%1) from current group")
+				AVTransport.BecomeCoordinatorOfStandaloneGroup({InstanceID=instanceId})
+			end
 
 			-- If uuids is an array containing other than just the controlling device, group them.
 			if uuids and not (#uuids == 1 and uuids[1] == uuid) then
@@ -1918,7 +1923,7 @@ local function restorePlaybackContext(device, uuid, cxt)
 			Rendering.SetVolume(
 				{OrderedArgs={"InstanceID=" .. instanceId,
 								"Channel=" .. channel,
-								"DesiredVolume=" .. cxt.Volume}})
+								"DesiredVolume=0"}})
 		end
 	end
 
@@ -1931,8 +1936,8 @@ local function restorePlaybackContext(device, uuid, cxt)
 
 		if cxt.AVTransportURI ~= "" then
 			if (cxt.CurrentTransportActions:find("Seek") ~= nil) then
-				D("restorePlaybackContext() %1 restoring position %2 %3", cxt.CurrentTrack,
-					cxt.RelativeTimePosition)
+				D("restorePlaybackContext() %1 restoring position %2 %3", uuid,
+					cxt.CurrentTrack, cxt.RelativeTimePosition)
 				AVTransport.Seek(
 					{OrderedArgs={"InstanceID=" .. instanceId,
 									"Unit=TRACK_NR",
@@ -1972,7 +1977,22 @@ local function restorePlaybackContext(device, uuid, cxt)
 							"Speed=" .. cxt.TransportPlaySpeed or 1}})
 	end
 
-	updateNow( device )
+	-- And reset volume and mute
+	if Rendering and cxt.Volume then
+		D("restorePlaybackContext() %1 ramping volume to %2", uuid, cxt.Volume)
+		-- Don't set volume on fixed output device
+		if tostring(dataTable[uuid].OutputFixed or 0) == "0" then
+			Rendering.RampToVolume(
+				{OrderedArgs={"InstanceID=" .. instanceId,
+								"Channel=" .. channel,
+								"RampType=AUTOPLAY_RAMP_TYPE", -- a few seconds up from 0
+								"DesiredVolume=" .. cxt.Volume,
+								"ResetVolumeAfter=0",
+								"ProgramURI="}})
+		end
+	end
+
+	-- updateNow( device )
 end
 
 local function restorePlaybackContexts(device, playCxt)
@@ -2432,7 +2452,7 @@ local function handleAVTransportChange(uuid, event)
 	local currentUri, currentUriMetaData, trackUri, trackUriMetaData, service, serviceId
 	local changed = false
 	local tmp = event:match("<Event%s?[^>]-><InstanceID%s?[^>]->(.+)</InstanceID></Event>")
-	if tmp ~= nil then
+	if tmp then
 		local found = false
 		local found2 = false
 		for token, attributes in tmp:gmatch('<([a-zA-Z0-9:]+)(%s?.-)/>') do
@@ -3461,9 +3481,9 @@ endSayAlert = false-- Forward declaration, non-local
 local function sayOrAlert(device, parameters, saveAndRestore)
 	D("sayOrAlert(%1,%2,%3)", device, parameters, saveAndRestore)
 	local instanceId = defaultValue(parameters, "InstanceID", "0")
-	local channel = defaultValue(parameters, "Channel", "Master")
+	local channel = defaultValue(parameters, "Channel", "Master") -- not really an accepted param
 	local volume = defaultValue(parameters, "Volume", nil)
-	local forceUnmute = defaultValue(parameters, "UnMute", "1") == "1"
+	local forceUnmute = defaultValue(parameters, "UnMute", "1") ~= "0"
 	local devices = defaultValue(parameters, "GroupDevices", "")
 	local zones = defaultValue(parameters, "GroupZones", "")
 	local uri = defaultValue(parameters, "URI", nil)
@@ -3545,6 +3565,34 @@ local function sayOrAlert(device, parameters, saveAndRestore)
 		end
 	end
 
+	-- If volume is default/current, apply TTSVolume on a per-device basis if set
+	if not volume then
+		for uuid in pairs( targets ) do
+			local dev = findDeviceByUUID(uuid)
+			if dev then
+				local vol = getVar( "TTSVolume", "", SONOS_ZONE_SID, dev )
+				local nv = tonumber(vol)
+				if vol ~= "" and nv then
+					local Rendering = upnp.getService(uuid, UPNP_RENDERING_CONTROL_SERVICE)
+					D("sayOrAlert() setting device-specific TTS/Alert volume %1 on %2 (#%3)",
+						vol, luup.devices[dev].description, dev)
+					if vol:match("^[%+%-]") then
+						-- Relative
+						Rendering.SetRelativeVolume(
+							{OrderedArgs={"InstanceID=" .. instanceId,
+										  "Channel=" .. channel,
+										  "Adjustment=" .. nv}})
+					else
+						Rendering.SetVolume(
+							 {OrderedArgs={"InstanceID=" .. instanceId,
+										   "Channel=" .. channel,
+										   "DesiredVolume=" .. nv}})
+					end
+				end
+			end
+		end
+	end
+
 	-- zoneUUID, instanceId, uri, speed, volume, uuids, sameVolumeForAll, enqueueMode, newGroup, controlByGroup
 	playURI(localUUID, instanceId, uri, "1", volume, newGroup and keys(targets) or nil, sameVolume, nil, newGroup, true)
 
@@ -3554,7 +3602,7 @@ local function sayOrAlert(device, parameters, saveAndRestore)
 		t:delay( duration, { replace=true } )
 	end
 
-	updateNow( device )
+	-- updateNow( device )
 end
 
 local function queueAlert(device, settings)
@@ -5406,13 +5454,15 @@ function actionRCRampToVolume( lul_device, lul_settings )
 
 	local instanceId = defaultValue(lul_settings, "InstanceID", "0")
 
+	-- RampType: ALARM_RAMP_TYPE very slow up from 0; SLEEP_TIMER_RAMP_TYPE slow from current to target;
+	--           AUTOPLAY_RAMP_TYPE soft up from 0;
 	Rendering.RampToVolume(
 		 {OrderedArgs={"InstanceID=" .. instanceId,
-					 "Channel=" .. lul_settings.Channel,
-					 "RampType=" .. lul_settings.RampType,
-					 "DesiredVolume=" .. lul_settings.DesiredVolume,
-					 "ResetVolumeAfter=" .. lul_settings.ResetVolumeAfter,
-					 "ProgramURI=" .. lul_settings.ProgramURI}})
+					 "Channel=" .. defaultValue(lul_settings, "Channel", "Master"),
+					 "RampType=" .. defaultValue(lul_settings, "RampType", "SLEEP_TIMER_RAMP_TYPE"),
+					 "DesiredVolume=" .. defaultValue(lul_settings, "DesiredVolume", 0),
+					 "ResetVolumeAfter=" .. defaultValue(lul_settings, "ResetVolumeAfter", 0),
+					 "ProgramURI=" .. defaultValue(lul_settings, "ProgramURI", "")}})
 	return 4,0
 end
 
@@ -5427,7 +5477,7 @@ function actionRCRestoreVolumePriorToRamp( lul_device, lul_settings )
 
 	Rendering.RestoreVolumePriorToRamp(
 		 {OrderedArgs={"InstanceID=" .. instanceId,
-					 "Channel=" .. lul_settings.Channel}})
+					 "Channel=" .. defaultValue(lul_settings, "Channel", "Master")}})
 
 	return 4,0
 end
