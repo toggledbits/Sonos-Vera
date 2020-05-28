@@ -224,6 +224,8 @@
 				<allowedValue>REPEAT_FOLDER</allowedValue>
 				<allowedValue>SHUFFLE_ALBUM</allowedValue>
 				<allowedValue>SHUFFLE_FOLDER</allowedValue>
+				<!-- ??? -->
+				<allowedValue>SHUFFLE_REPEAT_ONE</allowedValue>
 			</allowedValueList>
 		</stateVariable>
 		<stateVariable sendEvents="no">

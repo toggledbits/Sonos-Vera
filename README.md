@@ -197,7 +197,7 @@ luup.call_action("urn:micasaverde-com:serviceId:Sonos1", "Say",
                  252)
 ```
 
-Accepted values for the engine:
+Accepted values for `Engine`:
 
 * `MARY` for a personal MaryTTS server
 * `AZURE` for Microsoft Azure Cognitive Services Voice
@@ -208,6 +208,8 @@ Accepted values for the engine:
 
 Notes:
 
+* The plugin attempts to save and restore the playback state of all players affected by the operation. This is not always possible, particularly when streaming music services are played.
+* Amazon Alexa-integrated zone players have glitches galore.
 * Explanations on how to get Microsoft Translator credentials: ​https://msdn.microsoft.com/en-us/library/mt146806.aspx ; don't forget to get the free 2 Million characters per month subscription; finally set your Client ID and Client Secret in the TTS tab of the plugin (and push the Set button to save)
 * Explanations on how to setup the OSX TTS server: ​http://wolfpaulus.com/jounal/mac/ttsserver/
 * For GroupZones, you have to use room names (zone names defined with your Sonos application), not the name of your Vera device

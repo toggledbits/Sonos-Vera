@@ -6,6 +6,7 @@
 
 * New action `urn:micasaverde-com:serviceId:Sonos1/AcquireGroupControl` to become group controller of a zone's current group.
 * New action `urn:micasaverde-com:serviceId:Sonos1/DelegateGroupControl` to delegate group controller authority to another zone (`Zone` parameter must contain a single zone UUID or zone name).
+* A device-specific TTS/Alert volume can be specified by placing the volume (0-100) in the `TTSVolume` state variable of any device. If the value has a leading +/-, it is a relative volume adjustment from the current volume, whatever it may be. All of this only works if no volume is passed to the `Say` or `Alert` actions.
 * Azure TTS now works for Vera3/Lite. It is necessary to switch the "Requestor" in the TTS settings to "curl," and set "SSL Peer Verification" to "off". Note that these settings are **not secure**, and introduce the (likely remote but not zero) risk of undetected man-in-the-middle and other attacks on the connection/requests, so **you make these settings changes entirely at your own risk**. If cannot accept this risk, your only alternative is to upgrade your Vera to a modern unit that supports the higher levels of encryption and peer verification required, or not use Azure TTS.
 * Support extra fields for MaryTTS, in case there's more that needs to be passed on the URL that isn't preconfigured/canned.
 * Remove bogus 1.x defaults from TTS initialization, masking real defaults now in effect.
