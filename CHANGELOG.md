@@ -2,8 +2,9 @@
 
 **NOTAM (NOtice To All Music-lovers):** ResponsiveVoice is no longer supported. They removed the public URL/endpoint that was being used to create speech audio files by the plugin. The suggested alternative to RV is the Microsoft Azure Speech Service, which produces clear speech audio from a large variety of voices, and offers a usable/meaningful free tier level that is likely sufficient for most users.
 
-## Version 2.1 (development, 20148)
+## Version 2.1 (development, 20149)
 
+* The TTS UI now includes all action parameters, and shows the action generated.
 * New action `urn:micasaverde-com:serviceId:Sonos1/AcquireGroupControl` to become group controller of a zone's current group.
 * New action `urn:micasaverde-com:serviceId:Sonos1/DelegateGroupControl` to delegate group controller authority to another zone (`Zone` parameter must contain a single zone UUID or zone name).
 * A device-specific TTS/Alert volume can be specified by placing the volume (0-100) in the `TTSVolume` state variable of any device. If the value has a leading +/-, it is a relative volume adjustment from the current volume, whatever it may be. All of this only works if no volume is passed to the `Say` or `Alert` actions.
@@ -12,6 +13,7 @@
 * Remove bogus 1.x defaults from TTS initialization, masking real defaults now in effect.
 * Soft-wrap text input for TTS tab on Sonos device.
 * Improve player display and queue contents accuracy.
+* Hotfix 20149-01 and -02: Fixes for parsing of lists (favorites, etc.) missing last entry (caused more streaming/radio problems).
 * Hotfix 20147-01: Fix for service metadata not being correctly reloaded (affects streaming/radio playback).
 
 ## Version 2.0 (released)

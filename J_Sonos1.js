@@ -5,7 +5,7 @@
  * Current maintainer: rigpapa https://community.getvera.com/u/rigpapa/summary
  * For license information, see https://github.com/toggledbits/Sonos-Vera
  */
-/* globals api,jQuery,$,setTimeout,MultiBox */
+/* globals api,jQuery */
 /* jshint multistr: true, laxcomma: true */
 
 //"use strict"; // fails on UI7, works fine with ALTUI
@@ -15,7 +15,7 @@ var Sonos = (function(api, $) {
 	/* unique identifier for this plugin... */
 	var uuid = '79bf9374-f989-11e9-884c-dbb32f3fa64a'; /* SonosSystem 2019-12-11 19345 */
 
-	var pluginVersion = '2.1-20148';
+	var pluginVersion = '2.1-20149';
 
 	var _UIVERSION = 20103;     /* must coincide with Lua core */
 
@@ -234,6 +234,7 @@ var Sonos = (function(api, $) {
 		html += '</tr>';
 		html += '</table>';
 		html += '</DIV>';
+		html += '<div>Zone UI ' + pluginVersion + '</div>';
 
 		//html += '<p id="debug">';
 
@@ -298,7 +299,7 @@ var Sonos = (function(api, $) {
 	{
 		playerShowing = false;
 
-		var html, pos1, pos2, pos3;
+		var html;
 		Sonos_defineUIStyle();
 
 		Sonos_initXMLParser();
@@ -333,18 +334,18 @@ var Sonos = (function(api, $) {
 		html += '</tr>';
 		html += '<tr>';
 		html += '<td>Github/Wiki:</td>';
-		html += '<td><a href="https://github.com/toggledbits/Sonos-Vera">link</a></td>';
+		html += '<td><a href="https://github.com/toggledbits/Sonos-Vera" target="_blank">link</a></td>';
 		html += '</tr>';
 		html += '<tr>';
 		html += '<td>Community Forum:</td>';
-		html += '<td><a href="https://community.getvera.com/c/plugins-and-plugin-development/sonos-plugin">link</a></td>';
+		html += '<td><a href="https://community.getvera.com/c/plugins-and-plugin-development/sonos-plugin" target="_blank">link</a></td>';
 		html += '</tr>';
 		html += '<tr>';
-		html += '<td>Sonos zone:</td>';
+		html += '<td>Sonos zone name:</td>';
 		html += '<td>' + zone + '</td>';
 		html += '</tr>';
 		html += '<tr>';
-		html += '<td>Sonos UUID:</td>';
+		html += '<td>Sonos zone UUID:</td>';
 		html += '<td>' + uuid + '</td>';
 		html += '</tr>';
 		html += '</table>';
@@ -352,123 +353,104 @@ var Sonos = (function(api, $) {
 		html += '<table border="1">';
 		html += '<tr align="center" style="background-color: '+ tableTitleBgColor + '; color: white">';
 		html += '<th>Description</td>';
-		html += '<th nowrap>Standard URI</td>';
-		html += '<th>Alternative URI for PlayURI</td>';
+		html += '<th>Standard URI **</td>';
+		html += '<th nowrap>Short-cut URI for PlayURI</td>';
 		html += '</tr>';
 
 		html += '<tr>';
 		html += '<td>Sonos queue</td>';
-		html += '<td nowrap>x-rincon-queue:' + uuid + '#0</td>';
-		html += '<td>Q:</td>';
+		html += '<td>x-rincon-queue:' + uuid + '#0</td>';
+		html += '<td nowrap><tt>Q:</tt></td>';
 		html += '</tr>';
 
 		html += '<tr>';
 		html += '<td>Third item in Sonos queue</td>';
-		html += '<td nowrap>x-rincon-queue:' + uuid + '#0 *</td>';
-		html += '<td>Q:3</td>';
+		html += '<td>x-rincon-queue:' + uuid + '#0 *</td>';
+		html += '<td nowrap><tt>Q:3</tt></td>';
 		html += '</tr>';
-
-		var zoneUUID, zoneName, channelMapSet, isZoneBridge;
 
 		for (var i=0; i<members.length; i++) {
 			if ( members[i].UUID !== uuid ) {
 				html += '<tr>';
 				html += '<td>Group with coordinator "' + String(members[i].ZoneName) + '"</td>';
-				html += '<td nowrap>x-rincon:' + String(members[i].UUID) + '</td>';
-				html += '<td>GZ:' + String(members[i].ZoneName) + '</td>';
+				html += '<td>x-rincon:' + String(members[i].UUID) + '</td>';
+				html += '<td nowrap><tt>GZ:' + String(members[i].ZoneName) + '</tt></td>';
 				html += '</tr>';
 			}
 		}
 
 		html += '<tr>';
 		html += '<td>Local audio input</td>';
-		html += '<td nowrap>x-rincon-stream:' + uuid + '</td>';
-		html += '<td>AI:</td>';
+		html += '<td>x-rincon-stream:' + uuid + '</td>';
+		html += '<td><tt>AI:</tt></td>';
 		html += '</tr>';
 
 		for (var i=0; i<members.length; i++) {
 			html += '<tr>';
 			html += '<td>Audio input of zone "' + String(members[i].ZoneName) + '"</td>';
-			html += '<td nowrap>x-rincon-stream:' + String(members[i].UUID) + '</td>';
-			html += '<td>AI:' + String(members[i].ZoneName) + '</td>';
+			html += '<td>x-rincon-stream:' + String(members[i].UUID) + '</td>';
+			html += '<td nowrap><tt>AI:' + String(members[i].ZoneName) + '</tt></td>';
 			html += '</tr>';
 		}
 
 		html += '<tr>';
 		html += '<td>TuneIn radio with sid 50486</td>';
-		html += '<td nowrap>x-sonosapi-stream:s50486?sid=254&flags=32 **</td>';
-		html += '<td>TR:50486</td>';
+		html += '<td>x-sonosapi-stream:s50486?sid=254&flags=32 **</td>';
+		html += '<td nowrap><tt>TR:50486</tt></td>';
 		html += '</tr>';
 
 		html += '<tr>';
 		html += '<td>Sirius radio with sid shade45</td>';
-		html += '<td nowrap>x-sonosapi-hls:r%3ashade45?sid=37&flags=288 **</td>';
-		html += '<td>SR:shade45</td>';
+		html += '<td>x-sonosapi-hls:r%3ashade45?sid=37&flags=288 **</td>';
+		html += '<td nowrap><tt>SR:shade45</tt></td>';
 		html += '</tr>';
 
-		var line, pos, title, value;
-
-		var savedQueues = getParentState( "SavedQueues", device);
+		var savedQueues = getParentState( "SavedQueues", device );
 		if ( ! isEmpty( savedQueues ) ) {
-			pos1 = 0;
-			pos2 = savedQueues.indexOf('\n', pos1);
-			while (pos2 >= 0) {
-				line = savedQueues.substring(pos1, pos2);
-				pos3 = line.indexOf('@');
-				if (pos3 >= 0) {
-					value = line.substring(0, pos3);
-					title = line.substr(pos3+1);
+			savedQueues.split(/\n/).forEach( function( line ) {
+				var vals = line.split(/@/);
+				if ( vals.length > 1 ) {
+					var value = vals.shift();
+					var title = htmlEsc(vals.join('@'));
 					html += '<tr>';
 					html += '<td>Sonos playlist "' + title + '"</td>';
-					html += '<td nowrap>file:///jffs/settings/savedqueues.rsq#' + value + '</td>';
-					html += '<td>SQ:' + title + '</td>';
+					html += '<td>file:///jffs/settings/savedqueues.rsq#' + value + '</td>';
+					html += '<td><tt>SQ:' + title + '</tt></td>';
 					html += '</tr>';
 				}
-				pos1 = pos2+1;
-				pos2 = savedQueues.indexOf('\n', pos1);
-			}
+			});
 		}
 
 		var favRadios = getParentState( "FavoritesRadios", device );
 		if ( ! isEmpty( favRadios ) ) {
-			pos1 = 0;
-			pos2 = favRadios.indexOf('\n', 0);
-			while (pos2 >= 0) {
-				line = favRadios.substring(pos1, pos2);
-				pos3 = line.indexOf('@');
-				if (pos3 > 0) {
-					value = line.substring(0, pos3);
-					title = line.substring(pos3+1);
+			favRadios.split(/\n/).forEach( function( line ) {
+				var vals = line.split(/@/);
+				if ( vals.length > 1 ) {
+					var value = htmlEsc(vals.shift());
+					var title = htmlEsc(vals.join('@'));
 					html += '<tr>';
 					html += '<td>Favorite radio "' + title + '"</td>';
-					html += '<td nowrap>' + value + '</td>';
-					html += '<td>FR:' + title + '</td>';
+					html += '<td>' + value + '</td>';
+					html += '<td><tt>FR:' + title + '</tt></td>';
 					html += '</tr>';
 				}
-				pos1 = pos2+1;
-				pos2 = favRadios.indexOf('\n', pos1);
-			}
+			});
 		}
 
-		var faves = getParentState( "Favorites", device);
-		if ( ! isEmpty( favRadios ) ) {
-			pos1 = 0;
-			pos2 = faves.indexOf('\n', 0);
-			while (pos2 >= 0) {
-				line = faves.substring(pos1, pos2);
-				pos3 = line.indexOf('@');
-				if (pos3 > 0) {
-					value = line.substring(0, pos3);
-					title = line.substring(pos3+1);
+		var faves = getParentState( "Favorites", device );
+		if ( ! isEmpty( faves ) ) {
+			faves.split(/\n/).forEach( function( line ) {
+				var vals = line.split(/@/);
+				if ( vals.length > 1 ) {
+					var value = htmlEsc(vals.shift());
+					var title = htmlEsc(vals.join('@'));
 					html += '<tr>';
 					html += '<td>Favorite "' + title + '"</td>';
-					html += '<td nowrap>' + value + '</td>';
-					html += '<td>SF:' + title + '</td>';
+					html += '<td>' + value + '</td>';
+					html += '<td><tt>SF:' + title + '</tt></td>';
 					html += '</tr>';
 				}
-				pos1 = pos2+1;
-				pos2 = faves.indexOf('\n', pos1);
-			}
+			});
 		}
 
 		html += '</table>';
@@ -486,12 +468,18 @@ var Sonos = (function(api, $) {
 		html += '<th>Value</td>';
 		html += '</tr>';
 		for (var i=0; i<variables.length; i++) {
-			value = api.getDeviceState(device, variables[i][0], variables[i][1], 1) || "";
+			var value = api.getDeviceState(device, variables[i][0], variables[i][1], 1) || "";
+			// console.log(variables[i][1]+"="+value);
 			html += '<tr>';
 			html += '<td>' + variables[i][1] + '</td>';
-			html += '<td>' + Sonos_escapeHtmlSpecialChars(value) + '</td>';
+			html += '<td><tt>' + htmlEsc(value) + '</tt></td>';
 			html += '</tr>';
 		}
+		var zi = getParentState( "zoneInfo", device ) || "";
+		html += '<tr>';
+		html += '<td>(system) zoneInfo</td>';
+		html += '<td><tt>' + htmlEsc(zi) + '</tt></td>';
+		html += '</tr>';
 		html += '</table>';
 
 		html += '<BR>';
@@ -528,9 +516,6 @@ var Sonos = (function(api, $) {
 
 	function Sonos_refreshGroupSelection(device)
 	{
-		var html = '';
-		var disabled = true;
-
 		var uuid = api.getDeviceState(device, DEVICE_PROPERTIES_SID, "SonosID", 1) || "";
 
 		var $container = jQuery('#groupSelection').empty();
@@ -574,11 +559,11 @@ var Sonos = (function(api, $) {
 
 		api.setCpanelContent('<div id="sonos-tts"/>');
 
-		$container = $( 'div#sonos-tts' );
+		var $container = $( 'div#sonos-tts' );
 
 		var $row = $( '<div class="row" />' );
 		$( '<div class="col-xs-6 col-md-3 col-lg-2 col-xl-1">Text to Speak:</div>' ).appendTo( $row );
-		$( '<div class="col-xs-6 col-md-9 col-lg-10 col-xl-11 form-inline"><textarea id="tts-text" wrap="soft" class="form-control" /></div>' )
+		$( '<div class="col-xs-6 col-md-9 col-lg-10 col-xl-11 form-inline"><textarea id="tts-text" wrap="soft" class="form-control" style="resize: both;">Testing, testing, one two three!</textarea></div>' )
 			.appendTo( $row );
 		$row.appendTo( $container );
 
@@ -589,25 +574,70 @@ var Sonos = (function(api, $) {
 		$row.appendTo( $container );
 
 		$row = $( '<div class="row" />' );
-		$( '<div class="col-xs-6 col-md-3 col-lg-2 col-xl-1">Volume:</div>' ).appendTo( $row );
-		$( '<div class="col-xs-6 col-md-9 col-lg-10 col-xl-11 form-inline"><select id="tts-volume" class="form-control" /></div>' )
-			.appendTo( $row );
-		$row.appendTo( $container );
-		var $mm = $( 'select#tts-volume', $row );
-		$( '<option/>' ).val( "" ).text( "(current volume level)" ).appendTo( $mm );
-		for (var k=0; k<= 100; k+= 5 ) {
-			$( '<option/>' ).val( k ).text( k ).appendTo( $mm );
-		}
-
-		$row = $( '<div class="row" />' );
 		$( '<div class="col-xs-6 col-md-3 col-lg-2 col-xl-1">Zone:</div>' ).appendTo( $row );
 		$( '<div class="col-xs-6 col-md-9 col-lg-10 col-xl-11 form-inline"><select id="tts-zone" class="form-control" /></div>' )
 			.appendTo( $row );
 		$row.appendTo( $container );
 		$mm = $( 'select#tts-zone', $row );
-		$( '<option/>' ).val( "" ).text( "This zone player only" ).appendTo( $mm );
+		$( '<option/>' ).val( "" ).text( "This zone player only (default)" ).appendTo( $mm );
 		$( '<option/>' ).val( "CURRENT" ).text( "This player's group" ).appendTo( $mm );
 		$( '<option/>' ).val( "ALL" ).text( "All zone players" ).appendTo( $mm );
+
+		$row = $( '<div class="row" />' );
+		$( '<div class="col-xs-6 col-md-3 col-lg-2 col-xl-1">Volume:</div>' ).appendTo( $row );
+		$( '<div class="col-xs-6 col-md-9 col-lg-10 col-xl-11 form-inline"><select id="tts-volume" class="form-control" /></div>' )
+			.appendTo( $row );
+		$row.appendTo( $container );
+		var $mm = $( 'select#tts-volume', $row );
+		$( '<option/>' ).val( "" ).text( "(current zone level)" ).appendTo( $mm );
+		for (var k=0; k<= 100; k+= 5 ) {
+			$( '<option/>' ).val( k ).text( k ).appendTo( $mm );
+		}
+
+		$row = $( '<div class="row" />' );
+		$( '<div class="col-xs-6 col-md-3 col-lg-2 col-xl-1">Same Volume All Zones:</div>' ).appendTo( $row );
+		$( '<div class="col-xs-6 col-md-9 col-lg-10 col-xl-11 form-inline"><select id="tts-samevol" class="form-control" /></div>' )
+			.appendTo( $row );
+		$row.appendTo( $container );
+		$mm = $( 'select#tts-samevol', $row );
+		$( '<option/>' ).val( "0" ).text( "No" ).appendTo( $mm );
+		$( '<option/>' ).val( "1" ).text( "Yes" ).appendTo( $mm );
+
+		$row = $( '<div class="row" />' );
+		$( '<div class="col-xs-6 col-md-3 col-lg-2 col-xl-1">Chime:</div>' ).appendTo( $row );
+		$( '<div class="col-xs-6 col-md-9 col-lg-10 col-xl-11 form-inline"><select id="tts-chime" class="form-control" /></div>' )
+			.appendTo( $row );
+		$row.appendTo( $container );
+		$mm = $( 'select#tts-chime', $row );
+		$( '<option/>' ).val( "" ).text( "(system default)" ).appendTo( $mm );
+		$( '<option/>' ).val( "0" ).text( "No" ).appendTo( $mm );
+		$( '<option/>' ).val( "1" ).text( "Yes" ).appendTo( $mm );
+
+		$row = $( '<div class="row" />' );
+		$( '<div class="col-xs-6 col-md-3 col-lg-2 col-xl-1">Unmute Zones:</div>' ).appendTo( $row );
+		$( '<div class="col-xs-6 col-md-9 col-lg-10 col-xl-11 form-inline"><select id="tts-unmute" class="form-control" /></div>' )
+			.appendTo( $row );
+		$row.appendTo( $container );
+		$mm = $( 'select#tts-unmute', $row );
+		$( '<option/>' ).val( "" ).text( "(system default)" ).appendTo( $mm );
+		$( '<option/>' ).val( "0" ).text( "No" ).appendTo( $mm );
+		$( '<option/>' ).val( "1" ).text( "Yes" ).appendTo( $mm );
+
+		$row = $( '<div class="row" />' );
+		$( '<div class="col-xs-6 col-md-3 col-lg-2 col-xl-1">Repeat:</div>' ).appendTo( $row );
+		$( '<div class="col-xs-6 col-md-9 col-lg-10 col-xl-11 form-inline"><input id="tts-repeat" class="form-control" /></div>' )
+			.appendTo( $row );
+		$row.appendTo( $container );
+
+		$row = $( '<div class="row" />' );
+		$( '<div class="col-xs-6 col-md-3 col-lg-2 col-xl-1">Use TTS Cache:</div>' ).appendTo( $row );
+		$( '<div class="col-xs-6 col-md-9 col-lg-10 col-xl-11 form-inline"><select id="tts-cache" class="form-control" /></div>' )
+			.appendTo( $row );
+		$row.appendTo( $container );
+		$mm = $( 'select#tts-cache', $row );
+		$( '<option/>' ).val( "" ).text( "(system default)" ).appendTo( $mm );
+		$( '<option/>' ).val( "0" ).text( "No" ).appendTo( $mm );
+		$( '<option/>' ).val( "1" ).text( "Yes" ).appendTo( $mm );
 
 		$row = $( '<div class="row" />' );
 		$( '<div class="col-xs-6 col-md-3 col-lg-2 col-xl-1">&nbsp;</div>' ).appendTo( $row );
@@ -615,17 +645,26 @@ var Sonos = (function(api, $) {
 			.appendTo( $row );
 		$row.appendTo( $container );
 
+		$row = $( '<div class="row" />' ).appendTo( $container );
+		$( '<div id="sonos-tts-status" class="col-xs-12 col-sm-12" style="font-family: monospace";" />' ).appendTo( $row );
+
 		$( 'button#say' ).on( 'click.sonos', function() {
-			var args = {
-				Text: $( 'textarea#tts-text' ).val(),
-				GroupZones: $( 'select#tts-zone' ).val(),
-				Engine: $( 'select#tts-engine' ).val()
-			};
-			var vol = $( 'select#tts-volume' ).val();
-			if ( ! isEmpty( vol ) ) {
-				args.Volume = vol;
-				args.SameVolumeForAll = 1;
+			var args = { Text: $( 'textarea#tts-text' ).val() };
+			var vars = { "tts-engine": "Engine", "tts-zone": "GroupZones", "tts-volume": "Volume", 
+						 "tts-repeat": "Repeat", "tts-chime": "Chime", "tts-cache": "UseCache",
+						 "tts-samevol": "SameVolumeAllZones", "tts-unmute": "UnMute" };
+			var l = [ "Text="+JSON.stringify(args.Text) ];
+			for ( var k in vars ) {
+				if ( vars.hasOwnProperty(k) ) {
+					var v = $( '#' + k ).val();
+					if ( ! isEmpty( v ) ) {
+						args[vars[k]] = v;
+						l.push( vars[k] + '=' + JSON.stringify(v) );
+					}
+				}
 			}
+			$( 'div#sonos-tts-status').text( 'luup.call_action( "urn:micasaverde-com:serviceId:Sonos1", "Say", ' +
+				'{ ' + l.join(', ') + ' }' + ", " + device + " )" );
 			api.performActionOnDevice(device, SONOS_SID, 'Say', { actionArguments: args } );
 		});
 
@@ -653,24 +692,20 @@ var Sonos = (function(api, $) {
 			if ( undefined === tts.engines || ( Array.isArray( tts.engines ) && tts.engines.length == 0 ) ) {
 				tts.engines = {};
 			}
-			val = tts.defaultengine || sysDefaultTTS;
 
-			var $opt;
+			$( '<option/>' ).val("").text("(system default)").appendTo( $el );
 			for ( var eid in ( TTSEngines || {} ) ) {
 				if ( TTSEngines.hasOwnProperty( eid ) ) {
 					var eng = TTSEngines[eid];
-					$opt = $( '<option/>' ).val( eid ).text( ( eng.name || eid ) +
-						( eid === val ? " (default)" : "" ) );
-					$el.append( $opt );
+					$( '<option/>' ).val( eid ).text( ( eng.name || eid ) +
+						( eid === tts.defaultengine ? " (default)" : "" ) +
+						( tts.engines[eid] ? "" : " (not configured)" ) )
+						.appendTo( $el );
 				}
 			}
-			$opt = $( 'option[value="' + val + '"]', $el );
-			if ( 0 === $opt.length ) {
-				$( '<option/>' ).val( val ).text( val + "??" ).appendTo( $el );
-			}
-			$el.val( val );
 		}).fail( function() {
-			$el.replaceWith( "<span>Failed to load TTS engines; Luup may be reloading. To retry, wait a moment, then go back to the Control tab, then come back here.</span>");
+			$( 'select#tts-engine' )
+				.replaceWith( "<span>Failed to load TTS engines; Luup may be reloading. To retry, wait a moment, then go back to the Control tab, then come back here.</span>");
 		});
 	}
 
@@ -738,18 +773,17 @@ input#language { width: 6em; } \
 		return node.getAttribute(attribute) || null;
 	}
 
-	function Sonos_escapeHtmlSpecialChars(unsafe)
+	function htmlEsc(unsafe)
 	{
-		return String(unsafe)
-				.replace(/&/g, "&amp;")
-				.replace(/</g, "&lt;")
-				.replace(/>/g, "&gt;")
-				.replace(/"/g, "&quot;");
+		var t = document.createTextNode(unsafe);
+		var p = document.createElement('p');
+		p.appendChild(t);
+		return p.innerHTML;
 	}
 
 	function Sonos_refreshPlayer(device)
 	{
-		var $el, html, pos1, pos2;
+		var $el;
 		var uuid = api.getDeviceState(device, DEVICE_PROPERTIES_SID, "SonosID", 1) || "";
 
 		var groups = getParentState( "zoneInfo", device ) || "";
@@ -774,84 +808,63 @@ input#language { width: 6em; } \
 		var savedQueues = getParentState( "SavedQueues", device ) || "";
 		if ( savedQueues != prevSavedQueues) {
 			$el = jQuery('#savedQueues').empty();
-			pos1 = 0;
-			pos2 = savedQueues.indexOf('\n', pos1);
-			while (pos2 >= 0) {
-				var line = savedQueues.substring(pos1, pos2);
-				var pos3 = line.indexOf('@');
-				if (pos3 >= 0) {
-					var value = line.substring(0, pos3);
-					var title = line.substr(pos3+1);
+			savedQueues.split(/\n/).forEach( function( line ) {
+				var vals = line.split(/@/);
+				if ( vals.length > 1 ) {
+					var value = vals.shift();
+					var title = vals.join('@');
 					if (title.length > 60) {
-						title = title.substr(0, 60) + '...';
+						title = title.substr(0, 57) + '...';
 					}
 					jQuery( '<option/>' ).val(value).text(title).appendTo( $el );
 				}
-				pos1 = pos2+1;
-				pos2 = savedQueues.indexOf('\n', pos1);
-			}
+			});
 			prevSavedQueues = savedQueues;
 		}
 
-		var queue = api.getDeviceState(device, CONTENT_DIRECTORY_SID, "Queue") || "";
+		var queue = api.getDeviceState( device, CONTENT_DIRECTORY_SID, "Queue" ) || "";
 		if ( queue != prevQueue ) {
 			$el = jQuery('#queue').empty();
-			pos1 = 0;
-			pos2 = queue.indexOf('\n', pos1);
-			var ix = 0;
-			while (pos2 >= 0) {
-				var title = queue.substring(pos1, pos2);
-				if (title.length > 50) {
-					title = title.substr(0, 50) + '...';
+			queue.split(/\n/).forEach( function( line, ix ) {
+				if (line.length > 60) {
+					line = line.substr(0, 57) + '...';
 				}
-				jQuery( '<option/>' ).val( ++ix ).text( title ).appendTo( $el );
-				pos1 = pos2+1;
-				pos2 = queue.indexOf('\n', pos1);
-			}
+				jQuery( '<option/>' ).val( ix ).text( line ).appendTo( $el );
+			});
 			prevQueue = queue;
 		}
 
 		var favRadios = getParentState( "FavoritesRadios", device ) || "";
 		if ( favRadios != prevFavRadios ) {
 			$el = jQuery('#favRadios').empty();
-			pos1 = 0;
-			pos2 = favRadios.indexOf('\n', pos1);
-			while (pos2 >= 0) {
-				var line = favRadios.substring(pos1, pos2);
-				var pos3 = line.indexOf('@');
-				if (pos3 >= 0) {
-					var value = line.substr(0, pos3);
-					var title = line.substr(pos3+1);
+			favRadios.split(/\n/).forEach( function( line ) {
+				var vals = line.split(/@/);
+				if ( vals.length > 1 ) {
+					var value = vals.shift();
+					var title = vals.join('@');
 					if (title.length > 60) {
-						title = title.substr(0, 60) + '...';
+						title = title.substr(0, 57) + '...';
 					}
 					jQuery( '<option/>' ).val( value ).text( title ).appendTo( $el );
 				}
-				pos1 = pos2+1;
-				pos2 = favRadios.indexOf('\n', pos1);
-			}
+			});
 			prevFavRadios = favRadios;
 		}
 
 		var favorites = getParentState( "Favorites", device ) || "";
 		if ( favorites != prevFavorites ) {
 			$el = jQuery('#favorites').empty();
-			pos1 = 0;
-			pos2 = favorites.indexOf('\n', pos1);
-			while (pos2 >= 0) {
-				var line = favorites.substring(pos1, pos2);
-				var pos3 = line.indexOf('@');
-				if (pos3 >= 0) {
-					var value = line.substr(0, pos3);
-					var title = line.substr(pos3+1);
+			favorites.split(/\n/).forEach( function( line ) {
+				var vals = line.split(/@/);
+				if ( vals.length > 1 ) {
+					var value = vals.shift();
+					var title = vals.join('@');
 					if (title.length > 60) {
-						title = title.substr(0, 60) + '...';
+						title = title.substr(0, 57) + '...';
 					}
 					jQuery( '<option/>' ).val( value ).text( title ).appendTo( $el );
 				}
-				pos1 = pos2+1;
-				pos2 = favorites.indexOf('\n', pos1);
-			}
+			});
 			prevFavorites = favorites;
 		}
 
@@ -1097,7 +1110,7 @@ input#language { width: 6em; } \
 	function Sonos_setVolume(device, volume)
 	{
 		if (jQuery('#newVolume option:selected').index() >= 0) {
-			var volume = jQuery('#newVolume').val();
+			volume = jQuery('#newVolume').val();
 			api.performActionOnDevice(device, RENDERING_CONTROL_SID, 'SetVolume', { actionArguments: {'DesiredVolume':volume} } );
 		}
 	}
@@ -1235,4 +1248,4 @@ input#language { width: 6em; } \
 		doHelp: function() { try { doHelp(api.getCpanelDeviceId()); } catch(e) { console.log(e); } }
 	};
 	return myModule;
-})(api, $ || jQuery);
+})(api, jQuery);
