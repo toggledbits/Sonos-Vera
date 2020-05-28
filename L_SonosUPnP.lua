@@ -185,11 +185,11 @@ function UPnP_request(controlURL, action, servicetype, args)
     -- In this particular case, this entry itself is a table of strings, each element of
     -- the table following the format "parameter=value"
     --
-    if (value.OrderedArgs ~= nil and type(value.OrderedArgs) == "table") then
+    if value and type(value.OrderedArgs) == "table" then
         for _, val in ipairs(value.OrderedArgs) do
             local e, v = val:match("([^=]+)=(.*)")
-            if (e ~= nil) then
-                if (v == nil) then
+            if e then
+                if not v or v == "" then
                     result = result .. string.format("<%s />", e)
                 elseif (type(v) == "table") then
                     result = result .. table2XML(v)
@@ -198,13 +198,13 @@ function UPnP_request(controlURL, action, servicetype, args)
                 elseif (type(v) == "boolean") then
                     result = result .. string.format("<%s>%s</%s>", e, (v and "1" or "0"), e)
                 else
-                    result = result .. string.format("<%s>%s</%s>", e, encode(v), e)
+                    result = result .. string.format("<%s>%s</%s>", e, encode(tostring(v)), e)
                 end
             end
         end
     else
-        for e, v in pairs(value) do
-            if (v == nil) then
+        for e, v in pairs(value or {}) do
+            if not v or v == "" then
                 result = result .. string.format("<%s />", e)
             elseif (type(v) == "table") then
                 result = result .. table2XML(v)
@@ -213,7 +213,7 @@ function UPnP_request(controlURL, action, servicetype, args)
             elseif (type(v) == "boolean") then
                 result = result .. string.format("<%s>%s</%s>", e, (v and "1" or "0"), e)
             else
-                result = result .. string.format("<%s>%s</%s>", e, encode(v), e)
+                result = result .. string.format("<%s>%s</%s>", e, encode(tostring(v)), e)
             end
         end
     end
@@ -250,11 +250,11 @@ function UPnP_request(controlURL, action, servicetype, args)
   local data = table.concat( resultTable, "" )
   resultTable = nil -- luacheck: ignore 311
 
-  if (status == nil) then
+  if not status then
     --
     -- Handle TIMEOUT
     --
-    return false, statusMsg or "An error occurred during the UPnP call"
+    return false, statusMsg or "request timed out"
   end
 
   if (tostring(statusMsg) == "200") then
@@ -264,37 +264,46 @@ function UPnP_request(controlURL, action, servicetype, args)
     debug("UPnP_request() status=%1 statusMsg=%2 result=%3", status, statusMsg, data)
 
     if (data == nil or data == "") then
-      return true, ""
+		return true, ""
     else
-      local pattern = string.format('<.-:Body><.-:%sResponse%%sxmlns:.-="urn:.-">(.*)</.-:%sResponse></.-:Body></.-:Envelope>',
-                                    action, action)
-      local value = unformatXML(data):match(pattern) or ""
+		local pattern = string.format('<.-:Body><.-:%sResponse%%sxmlns:.-="urn:.-">(.*)</.-:%sResponse></.-:Body></.-:Envelope>',
+									action, action)
+		local value = unformatXML(data):match(pattern) or ""
 
-      -- TODO: Handle UPnP Error responses
-      -- TODO: Handle Non-Scalar results
+		-- TODO: Handle UPnP Error responses
+		-- TODO: Handle Non-Scalar results
 
-      -- commented out and returns a simple string instead. Due to multiple tags (not nested though)
-      --      [[local dataTable = {}
-      --      for tagBegin, value, tagEnd in value:gmatch("<(.*)>(.*)</(.*)>") do
-      --        print(tagBegin .. " -> " .. value .. " <- " .. tagEnd)
-      --        dataTable[tagBegin] = value
-      --      end
+		-- commented out and returns a simple string instead. Due to multiple tags (not nested though)
+		--      [[local dataTable = {}
+		--      for tagBegin, value, tagEnd in value:gmatch("<(.*)>(.*)</(.*)>") do
+		--        print(tagBegin .. " -> " .. value .. " <- " .. tagEnd)
+		--        dataTable[tagBegin] = value
+		--      end
 
-      --     return dataTable]]
-      return true, value
+		--     return dataTable]]
+		return true, value
     end
   else
     --
     -- UNKNOWN ERROR
     --
-    error(string.format("UPnP_request (%s, %s): status=%s statusMsg=%s result=[%s]",
-                      action or "no action",
+	-- data often looks like this:
+	-- <s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"><s:Body><s:Fault><faultcode>s:Client</faultcode><faultstring>UPnPError</faultstring><detail><UPnPError xmlns="urn:schemas-upnp-org:control-1-0"><errorCode>711</errorCode></UPnPError></detail></s:Fault></s:Body></s:Envelope>
+
+	local m = string.format("UPnP_request (%s/%s): status=%s statusMsg=%s result=[%s]",
                       servicetype or "no servicetype",
+                      action or "no action",
                       status or "no status",
                       statusMsg or "no message",
-                      data or "no result"))
+                      data or "no result")
+	debug(m)
 
-    assert("Unhandled Response statusMsg=" .. statusMsg)
+	local value = string.match( unformatXML(data or ""), "%<errorCode%>(%d+)%<%/errorCode%>" )
+	if value then return false, value end
+
+	error(m)
+	return false, "Unknown UPnP error"
+
   end
 end -- function UPnP_request
 
@@ -307,7 +316,7 @@ function service(controlURL, servicetype, actions)
     local mt = {}
 
     mt.__index = function(table, key)
-        debug("service.__index: accessing non-existing function %1", key)
+        debug("service.__index: accessing unbound function %1", key)
 
         local fn = function(...)
             if (actions[key]) then
@@ -1068,6 +1077,7 @@ function processProxySubscriptions()
         end
 
         debug("processProxySubscriptions() send Proxy subscription request: %1 SID %2", r.method, subscription.sid )
+		http.TIMEOUT = 5
         local request, reason = http.request(r)
 
         if request == nil and reason == "timeout" then
