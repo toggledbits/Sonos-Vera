@@ -6,7 +6,7 @@
 
 module("L_SonosTTS", package.seeall)
 
-VERSION = 20148
+VERSION = 20167
 DEBUG_MODE = false
 
 local urllib = require("socket.url")
@@ -471,7 +471,7 @@ function AzureTTSEngine:say(text, destFile, engineOptions)
 		os.remove( destFile )
 		if engineOptions.requestor == "C" then
 			-- Ancient LuaSec or curl specified
-			local req = string.format("curl -s -k -m %s -k -o '%s'",
+			local req = string.format("curl -s -k -m %s -o '%s'",
 				engineOptions.timeout or self.optionMeta.timeout.default or 15,
 				destFile)
 			req = req .. string.format(" -H 'Host: %s'", host)
