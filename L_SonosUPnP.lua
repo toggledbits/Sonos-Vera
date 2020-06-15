@@ -6,7 +6,7 @@
 
 module("L_SonosUPnP", package.seeall)
 
-VERSION = 20103
+VERSION = 20167
 DEBUG_MODE = false
 
 local url = require("socket.url")

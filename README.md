@@ -328,6 +328,23 @@ Be sure to check the Apache error log for errors, in addition the LuaUPnP.log fi
 
 If the UPnP Event Proxy is not installed or cannot be contacted, the Sonos plugin will poll players for status. As of 1.4.3-19188, the `PollDelays` state variable contains a pair of numbers, which are the delays to be used for polling when active and inactive (player stopped), respectively. The default is 15 seconds for active players, and 60 seconds on stopped players. This reduces network traffic somewhat, but it's still not as good as using the UPnP Event Proxy, so the proxy remains the recommended solution.
 
+## Guide - Signing up for Microsoft Azure Congnitive Services Voice
+
+To use Azure for text-to-speech (TTS), you will need to register for an Azure account and set up a subscription and cognitive services. Create a subscription here: [https://azure.microsoft.com/free/ ](https://azure.microsoft.com/free/)
+
+**TO CREATE THE COGNITIVE SERVICES RESOURCE (AFTER CREATING A SUBSCRIPTION):**
+
+1. Go to: [https://ms.portal.azure.com/#create/Microsoft.CognitiveServicesAllInOne ](https://ms.portal.azure.com/#create/Microsoft.CognitiveServicesAllInOne)
+2. Enter a name for the resource. “Vera Sonos TTS” for example.
+3. Select the subscription (you’ll probably only have one to choose from)
+4. Location: choose the one that appears geographically nearest to you.
+5. Pricing tier, choose “S0” or whatever is available/cheapest.
+6. Resource group: choose an existing or create a new one. Doesn’t much matter what it is if this is all you’ll be using Azure for.
+7. Check the “OK/agree” box and then click “Create”.
+8. Wait for resource to be created. When it’s finished, click “Go to resource”.
+9. Enter the key shown into the Azure TTS config on the Sonos plugin.
+10. Look at the endpoint URL; it should be  `<region>.api.cognitive.microsoft.com` … choose the region in the Azure TTS config for the Sonos plugin that matches the region shown.
+
 ## User Support
 
 Support for this project is offered through the Vera Community Forums [Sonos category](https://community.getvera.com/c/plugins-and-plugin-development/sonos-plugin). Please post your questions/problems/suggestions there.
