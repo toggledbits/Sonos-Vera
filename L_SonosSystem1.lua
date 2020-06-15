@@ -8,19 +8,19 @@
 module( "L_SonosSystem1", package.seeall )
 
 PLUGIN_NAME = "Sonos"
-PLUGIN_VERSION = "2.1-20148"
+PLUGIN_VERSION = "2.1-20167"
 PLUGIN_ID = 4226
 PLUGIN_URL = "https://github.com/toggledbits/Sonos-Vera"
 
 local _CONFIGVERSION = 20136
-local _UIVERSION = 20103
+local _UIVERSION = 20167
 
 local DEBUG_MODE = false	-- Don't hardcode true--use state variable config
 
 local DEVELOPMENT = true	-- ??? Dev: false for production
 
-local MIN_UPNP_VERSION = 20103	-- Minimum version of L_SonosUPnP that works
-local MIN_TTS_VERSION = 20140	-- Minimum version of L_SonosTTS that works
+local MIN_UPNP_VERSION = 20167	-- Minimum version of L_SonosUPnP that works
+local MIN_TTS_VERSION = 20167	-- Minimum version of L_SonosTTS that works
 
 local MSG_CLASS = "Sonos"
 local isOpenLuup = false
@@ -2211,7 +2211,10 @@ local function setupTTSSettings(device)
 			L("Default chime Sonos_chime.mp3 not found; TTS chime disabled.")
 		end
 	end
-	local chimefile, chimedur, chimevol = unpack( split( chd, "," ) )
+	local chimefile, chimedur, ex = unpack( split( chd, "," ) )
+	if ex and ex ~= "" then
+		W("Setting of chime volume in TTSChime state variable (third value) is no longer supported (the value will be ignored).")
+	end
 	chimefile = chimefile or "" -- unpack returns empty array as nothing (no return values)
 	D("setupTTSSettings() chime file %1 duration %2 from %3", chimefile, chimedur, chd)
 	if chimefile == "0" or string.lower( chimefile ) == "none" or chimefile == "" then
@@ -2225,7 +2228,6 @@ local function setupTTSSettings(device)
 		TTSChime = { URI=TTSBaseURL..chimefile, Repeat=1 }
 		TTSChime.URIMetadata = TTS_METADATA:format( "TTS Chime", "http-get:*:audio/mpeg:*", TTSChime.URI )
 		TTSChime.Duration = tonumber( chimedur ) or 5
-		TTSChime.Volume = tonumber( chimevol ) -- nil OK
 	else
 		W("The specified TTS chime file %1 does not exist", chimefile)
 	end
@@ -2684,7 +2686,26 @@ setup = function(zoneDevice, flag)
 		return false
 	end
 
-	local descrURL = string.format(descriptionURL, newIP, port)
+	local descrURL
+	if zoneInfo.zones[uuid] and zoneInfo.zones[uuid].Location then
+		descrURL = zoneInfo.zones[uuid].Location
+		setVar(SONOS_ZONE_SID, "DescriptionURL", descrURL, zoneDevice)
+		D("setup() using device description URL from zone topology %1", descrURL)
+	end
+	if not descrURL then
+		descrURL = getVar( "DescriptionURL", "", zoneDevice, SONOS_ZONE_SID )
+		if descrURL == "" then
+			descrURL = nil 
+		else
+			D("setup() using discovered device description URL %1", descrURL)
+		end
+	end
+	if not descrURL then
+		-- Can't get from zone topology? Hmmm... use default (hopefully)
+		descrURL = string.format(descriptionURL, newIP, port)
+		setVar(SONOS_ZONE_SID, "DescriptionURL", "", zoneDevice)
+		D("setup() using default device description url %1", descrURL)
+	end
 	local status, _, values, icon =
 							 upnp.setup(descrURL,
 										"urn:schemas-upnp-org:device:ZonePlayer:1",
@@ -3940,7 +3961,7 @@ function actionSonosSay( lul_device, lul_settings )
 			local ch = clone( TTSChime )
 			ch.GroupDevices = alert_settings.GroupDevices
 			ch.GroupZones = alert_settings.GroupZones
-			ch.Volume = (ch.Volume or 0) > 0 and ch.Volume or alert_settings.Volume
+			ch.Volume = alert_settings.Volume
 			ch.SameVolumeForAll = alert_settings.SameVolumeForAll
 			ch.UnMute = alert_settings.UnMute
 			ch.Repeat = 1
@@ -4166,6 +4187,9 @@ function actionSonosStartDiscovery( lul_device, lul_settings ) -- luacheck: igno
 					end
 					setup( zoneDev, true )
 				end
+				if zoneDev then
+					setVar( SONOS_ZONE_SID, "DescriptionURL", zone.descriptionURL, zoneDev )
+				end
 			end
 		end
 		D("actionSonosStartDiscovery() new zones %1", newChildren)
@@ -4187,6 +4211,7 @@ function actionSonosStartDiscovery( lul_device, lul_settings ) -- luacheck: igno
 				table.insert( cv, ",invisible=0" )
 				table.insert( cv, string.format( "%s,SonosID=%s", UPNP_DEVICE_PROPERTIES_SID, zone.udn ) )
 				table.insert( cv, string.format( "%s,SonosIP=%s", SONOS_ZONE_SID, zone.ip ) )
+				table.insert( cv, string.format( "%s,DescriptionURL=%s", SONOS_ZONE_SID, zone.descriptionURL ) )
 				table.insert( cv, string.format( "%s,Port=%s", SONOS_ZONE_SID, zone.port or 1400 ) )
 				local w = {}
 				if (zone.roomName or "") ~= "" then table.insert( w, zone.roomName ) end
@@ -4230,8 +4255,9 @@ function actionSonosSystemIncludeIP( lul_device, lul_settings )
 
 	-- Fetch DD
 	setVariableValue(SONOS_SYS_SID, "DiscoveryMessage", string.format("Querying %s", ipaddr), lul_device)
-	D("Fetching zone description from %1:%2", ipaddr, port)
-	local descr = upnp.UPnP_getDeviceDescription( string.format("http://%s:%s/xml/device_description.xml", ipaddr, port) )
+	local descrURL = string.format(descriptionURL, ipaddr, port)
+	D("Fetching zone description from %1:%2 via %3", ipaddr, port, descrURL)
+	local descr = upnp.UPnP_getDeviceDescription( descrURL )
 	if not descr then
 		E("Failed to read zone data from %1 -- is a Sonos Zone Player? Is it up and rinning?", ipaddr)
 		setVar(SONOS_SYS_SID, "DiscoveryMessage", "Aborted; no/invalid response from "..ipaddr, lul_device)
@@ -4274,6 +4300,7 @@ function actionSonosSystemIncludeIP( lul_device, lul_settings )
 	table.insert( cv, ",invisible=0" )
 	table.insert( cv, string.format( "%s,SonosID=%s", UPNP_DEVICE_PROPERTIES_SID, uuid ) )
 	table.insert( cv, string.format( "%s,SonosIP=%s", SONOS_ZONE_SID, ipaddr ) )
+	table.insert( cv, string.format( "%s,DescriptionURL=%s", SONOS_ZONE_SID, descrURL ) )
 	table.insert( cv, string.format( "%s,Port=%s", SONOS_ZONE_SID, zone.port or 1400 ) )
 	local w = {}
 	if (zone.roomName or "") ~= "" then table.insert( w, zone.roomName ) end
