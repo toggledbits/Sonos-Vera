@@ -122,6 +122,10 @@
 			<name>A_ARG_TYPE_clientSecret</name>
 			<dataType>string</dataType>
 		</stateVariable>
+		<stateVariable sendEvents="no">
+			<name>A_ARG_TYPE_cachelife</name>
+			<dataType>ui4</dataType>
+		</stateVariable>
 	</serviceStateTable>
 	<actionList>
 		<action>
@@ -281,6 +285,11 @@
 					<name>UseCache</name>
 					<direction>in</direction>
 					<relatedStateVariable>A_ARG_TYPE_boolean</relatedStateVariable>
+				</argument>
+				<argument>
+					<name>CacheLifeHours</name>
+					<direction>in</direction>
+					<relatedStateVariable>A_ARG_TYPE_cachelife</relatedStateVariable>
 				</argument>
 			</argumentList>
 		</action>

@@ -15,7 +15,7 @@ var Sonos = (function(api, $) {
 	/* unique identifier for this plugin... */
 	var uuid = '79bf9374-f989-11e9-884c-dbb32f3fa64a'; /* SonosSystem 2019-12-11 19345 */
 
-	var pluginVersion = '2.1-20167';
+	var pluginVersion = '2.1-20209';
 
 	var _UIVERSION = 20167;     /* must coincide with Lua core */
 
@@ -650,7 +650,7 @@ var Sonos = (function(api, $) {
 
 		$( 'button#say' ).on( 'click.sonos', function() {
 			var args = { Text: $( 'textarea#tts-text' ).val() };
-			var vars = { "tts-engine": "Engine", "tts-zone": "GroupZones", "tts-volume": "Volume", 
+			var vars = { "tts-engine": "Engine", "tts-zone": "GroupZones", "tts-volume": "Volume",
 						 "tts-repeat": "Repeat", "tts-chime": "Chime", "tts-cache": "UseCache",
 						 "tts-samevol": "SameVolumeAllZones", "tts-unmute": "UnMute" };
 			var l = [ "Text="+JSON.stringify(args.Text) ];

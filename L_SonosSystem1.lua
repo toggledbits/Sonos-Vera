@@ -8,16 +8,16 @@
 module( "L_SonosSystem1", package.seeall )
 
 PLUGIN_NAME = "Sonos"
-PLUGIN_VERSION = "2.1-20167"
+PLUGIN_VERSION = "2.1-20209"
 PLUGIN_ID = 4226
 PLUGIN_URL = "https://github.com/toggledbits/Sonos-Vera"
 
-local _CONFIGVERSION = 20136
+local _CONFIGVERSION = 20178
 local _UIVERSION = 20167
 
 local DEBUG_MODE = false	-- Don't hardcode true--use state variable config
 
-local DEVELOPMENT = true	-- ??? Dev: false for production
+local DEVELOPMENT = false	-- ??? Dev: false for production
 
 local MIN_UPNP_VERSION = 20167	-- Minimum version of L_SonosUPnP that works
 local MIN_TTS_VERSION = 20167	-- Minimum version of L_SonosTTS that works
@@ -180,7 +180,7 @@ local idConfRefresh = 0
 
 -- TTS queue and support
 local sayQueue = {}
-local cacheTTS = true
+local TTSCache = true
 local TTSBasePath
 local TTSBaseURL
 local TTSConfig
@@ -282,7 +282,7 @@ local function D(msg, ...)
 	if DEBUG_MODE then L({msg="[debug] "..msg, level=50}, ...) end
 end
 
-local function T(msg, ...) L(msg, ...) if debug and debug.traceback() then luup.log(debug.traceback()) end end 
+local function T(msg, ...) L(msg, ...) if debug and debug.traceback() then luup.log(debug.traceback()) end end
 
 local function A(cond, msg, ...)
 	if not cond then
@@ -461,7 +461,7 @@ logToFile = function(str, level)
 		end
 	end
 	if logFile then
-		local maxsizek = getVarNumeric("MaxLogSize", DEVELOPMENT and 512 or 0, pluginDevice, SONOS_SYS_SID)
+		local maxsizek = getVarNumeric("MaxLogSize", DEVELOPMENT and 256 or 0, pluginDevice, SONOS_SYS_SID)
 		if maxsizek <= 0 then
 			-- We should not be open now (runtime change, no reload needed)
 			logFile:close()
@@ -2188,6 +2188,13 @@ local function setupTTSSettings(device)
 	end
 	D("setupTTSSettings() TTSBaseURL=%1; TTSBasePath=%2", TTSBaseURL, TTSBasePath)
 
+	-- Cache disable/enable? First get configuration. Special file overrides.
+	TTSCache = getVarNumeric( "UseTTSCache", 1, pluginDevice, SONOS_SYS_SID ) ~= 0
+	if file_exists( TTSBasePath .. "no-tts-cache" ) then
+		-- Existence of no-tts-cache file overrides configuration
+		TTSCache = false
+	end
+
 	TTSChime = nil
 	local installPath = getInstallPath()
 	local chd = getVar( "TTSChime", "", device, SONOS_SYS_SID, true )
@@ -2509,34 +2516,39 @@ local function handleAVTransportChange(uuid, event)
 	end
 end
 
-local function handleContentDirectoryChange(device, uuid, id)
-	D("handleContentDirectoryChange(%1,%2,%3)", device, uuid, id)
+local function handleContentDirectoryChange(device, uuid, ids)
+	D("handleContentDirectoryChange(%1,%2,%3)", device, uuid, ids)
 	local info
-	local changed = false
 
-	if (id:find("SQ:,") == 1) then
-		-- Sonos playlists
-		info = upnp.browseContent(uuid, UPNP_MR_CONTENT_DIRECTORY_SERVICE, "SQ:", false, "dc:title", parseSavedQueues, BROWSE_TIMEOUT)
-		setVar( SONOS_SYS_SID, "SavedQueues", info, pluginDevice )
-	elseif (id:find("R:0,") == 1) then
-		-- Favorites radio stations
-		info = upnp.browseContent(uuid, UPNP_MR_CONTENT_DIRECTORY_SERVICE, "R:0/0", false, "dc:title", parseIdTitle, BROWSE_TIMEOUT)
-		setVar( SONOS_SYS_SID, "FavoritesRadios", info, pluginDevice )
-	elseif (id:find("FV:2,") == 1) then
-		-- Sonos favorites
-		info = upnp.browseContent(uuid, UPNP_MR_CONTENT_DIRECTORY_SERVICE, "FV:2", false, "dc:title", parseIdTitle, BROWSE_TIMEOUT)
-		setVar( SONOS_SYS_SID, "Favorites", info, pluginDevice )
-	elseif (id:find("Q:0,") == 1) then
-		-- Sonos queue
-		if (fetchQueue) then
-			info = upnp.browseContent(uuid, UPNP_MR_CONTENT_DIRECTORY_SERVICE, "Q:0", false, "dc:title", parseQueue, BROWSE_TIMEOUT)
-		else
-			info = ""
+	for id in ids:gmatch("%a+:%d+,%d+,?") do
+		D("handleContentDirectoryChange() handling container %1", id)
+		if (id:find("SQ:,") == 1) then
+			-- Sonos playlists
+			L("Updating playlists")
+			info = upnp.browseContent(uuid, UPNP_MR_CONTENT_DIRECTORY_SERVICE, "SQ:", false, "dc:title", parseSavedQueues, BROWSE_TIMEOUT)
+			setVar( SONOS_SYS_SID, "SavedQueues", info, pluginDevice )
+		elseif (id:find("R:0,") == 1) then
+			-- Favorites radio stations
+			L("Updating favorite radios")
+			info = upnp.browseContent(uuid, UPNP_MR_CONTENT_DIRECTORY_SERVICE, "R:0/0", false, "dc:title", parseIdTitle, BROWSE_TIMEOUT)
+			setVar( SONOS_SYS_SID, "FavoritesRadios", info, pluginDevice )
+		elseif (id:find("FV:2,") == 1) then
+			-- Sonos favorites
+			L("Updating favorites")
+			info = upnp.browseContent(uuid, UPNP_MR_CONTENT_DIRECTORY_SERVICE, "FV:2", false, "dc:title", parseIdTitle, BROWSE_TIMEOUT)
+			setVar( SONOS_SYS_SID, "Favorites", info, pluginDevice )
+		elseif (id:find("Q:0,") == 1) then
+			-- Sonos queue
+			if (fetchQueue) then
+				L("Updating queue on %1 (#%2)", (luup.devices[device] or {}).description, device)
+				info = upnp.browseContent(uuid, UPNP_MR_CONTENT_DIRECTORY_SERVICE, "Q:0", false, "dc:title", parseQueue, BROWSE_TIMEOUT)
+			else
+				info = ""
+			end
+			if setData("Queue", info, uuid, false) then
+				setVariableValue(HADEVICE_SID, "LastUpdate", os.time(), device)
+			end
 		end
-		changed = setData("Queue", info, uuid, changed)
-	end
-	if changed then
-		setVariableValue(HADEVICE_SID, "LastUpdate", os.time(), device)
 	end
 end
 
@@ -2695,7 +2707,7 @@ setup = function(zoneDevice, flag)
 	if not descrURL then
 		descrURL = getVar( "DescriptionURL", "", zoneDevice, SONOS_ZONE_SID )
 		if descrURL == "" then
-			descrURL = nil 
+			descrURL = nil
 		else
 			D("setup() using discovered device description URL %1", descrURL)
 		end
@@ -3240,9 +3252,10 @@ function startup( lul_device )
 	setDebugLogs(debugLogs)
 
 	-- See if log file needs to be opened
-	if getVarNumeric("MaxLogSize", DEVELOPMENT and 512 or 0, lul_device, SONOS_SYS_SID) > 0 then
+	if getVarNumeric("MaxLogSize", DEVELOPMENT and 256 or 0, lul_device, SONOS_SYS_SID) > 0 then
 		pcall( logToFile, string.rep( "_", 132) )
-		pcall( logToFile, string.format( "Log file opened at startup; plugin %s; luup %s", PLUGIN_VERSION, luup.version) )
+		pcall( logToFile, string.format( "Log file opened at startup; device %d; plugin %s; luup %s",
+			lul_device, PLUGIN_VERSION, luup.version) )
 	end
 
 	-- Quick pass at devices to check for duplicate master devices. Only lowest-numbered survives/runs.
@@ -3769,10 +3782,10 @@ end
 
 -- Cache cleaning task.
 local function cleanTTSCache( task )
-	local maxAge = 86400 * getVarNumeric( "TTSCacheMaxAge", 90, pluginDevice, SONOS_SYS_SID )
+	local now = os.time()
+	local maxAge = 24 * getVarNumeric( "TTSCacheMaxAge", 30, pluginDevice, SONOS_SYS_SID )
 	if maxAge <= 0 then return end
-	maxAge = os.time() - maxAge
-	L("Cleaning TTS cache of files older than %1", os.date("%x %X", maxAge))
+	local nexttime = false
 	function scan( d )
 		D("cleanTTSCache() scanning %1", d)
 		-- See if directory contains a cache meta
@@ -3785,13 +3798,28 @@ local function cleanTTSCache( task )
 				local dels = {}
 				local modified = false
 				for str,md in pairs( fmeta.strings or {} ) do
-					if not md.lastused then
-						D("cleanTTSCache() no timestamp for %1 file %2", str, md.url)
-						md.lastused = os.time() -- stamp it now, catch it later
-						modified = true
-					elseif md.lastused <= maxAge and not md.protected then
-						D("cleanTTSCache() expired %1 file %2", str, md.url)
-						table.insert( dels, str )
+					if not md.protected then
+						if not md.lastused then
+							D("cleanTTSCache() no lastused for %1 file %2", str, md.url)
+							md.lastused = now -- stamp it now, catch it later
+							modified = true
+						end
+						if not md.cachelifehrs then
+							md.cachelifehrs = maxAge
+							modified = true
+						end
+						if not md.expires then
+							D("cleanTTSCache() no expiry for %1 file %2, fixing", str, md.url)
+							md.expires = md.lastused + md.cachelifehrs * 3600
+							modified = true
+						end
+						if md.expires <= now then
+							D("cleanTTSCache() expired %1 file %2", str, md.url)
+							table.insert( dels, str )
+						elseif not nexttime or md.expires < nexttime then
+							-- Not ready to purge, but coming soon
+							nexttime = md.expires
+						end
 					end
 				end
 				for _,str in ipairs( dels ) do
@@ -3805,8 +3833,9 @@ local function cleanTTSCache( task )
 					end
 				end
 				-- If no strings remain, remove cache metafile. Otherwise, save if modified.
-				if not next( fmeta.strings ) then
+				if not next( fmeta.strings or {} ) then
 					os.remove( d .. "/ttsmeta.json" )
+					D("cleanTTScache() remove empty dir %1 returned %2", d, os.execute( "rm -rf -- " .. Q(d) ))
 				elseif modified then
 					fm = io.open( d .. "/ttsmeta.json", "w" )
 					fm:write( json.encode( fmeta ) )
@@ -3815,7 +3844,10 @@ local function cleanTTSCache( task )
 			else
 				E("Broken TTS cache metadata in %1", d)
 			end
+			return
 		end
+
+		-- Not a leaf, descend
 		for dd in lfs.dir( d ) do
 			local path = d .. "/" .. dd
 			mode = lfs.attributes( path, { "mode" } )["mode"]
@@ -3824,10 +3856,14 @@ local function cleanTTSCache( task )
 			end
 		end
 	end
-	scan( TTSBasePath .. "ttscache" )
 
-	-- Reschedule next run for tomorrow (hey, we're optimists).
-	task:delay( 86400 )
+	scan( TTSBasePath .. "ttscache" )
+	local delay = 86400
+	if nexttime then
+		delay = math.max( 60, math.min( delay, nexttime - os.time() ) )
+	end
+	D("cleanTTScache() finished, next %1 delay %2", nexttime, delay)
+	task:delay( delay )
 end
 
 local function makeTTSAlert( device, settings )
@@ -3856,25 +3892,33 @@ local function makeTTSAlert( device, settings )
 	else
 		voice = tts.DEFAULT_LANGUAGE
 	end
-	cacheTTS = not file_exists( TTSBasePath .. "no-tts-cache" ) and
-		getVarNumeric( "UseTTSCache", 1, pluginDevice, SONOS_SYS_SID ) ~= 0
-	if cacheTTS and settings.UseCache ~= "0" then
+	local cacheThis = TTSCache
+	if (settings.UseCache or "") ~= "" then
+		-- Action-specific parameter overrides system configuration
+		cacheThis = settings.UseCache ~= "0"
+	end
+	if cacheThis then
 		local fmeta = loadTTSCache( eid, voice, hash(text) )
 		D("makeTTSAlert() checking cache for %1: %2", text, fmeta)
-		if fmeta.strings[text] then
-			D("makeTTSAlert() found it!")
-			fmeta.strings[text].lastused = os.time()
+		local e = fmeta.strings[text]
+		if e then
+			e.lastused = os.time()
+			e.cachelifehrs = tonumber(settings.CacheLifeHours) or e.cachelifehrs or
+				( 24 * getVarNumeric( "TTSCacheMaxAge", 30, pluginDevice, SONOS_SYS_SID ) )
+			e.expires = os.time() + 3600 * e.cachelifehrs
+			D("makeTTSAlert() found it! New life %1 expiry %2", e.cachelifehrs,
+				e.expires)
 			saveTTSCache( eid, voice, hash(text), fmeta )
-			settings.Duration = fmeta.strings[text].duration
-			settings.URI = TTSBaseURL .. fmeta.strings[text].url
+			settings.Duration = e.duration
+			settings.URI = TTSBaseURL .. e.url
 			settings.URIMetadata = TTS_METADATA:format(engobj.title, engobj.protocol,
 				settings.URI or "")
 			settings.TempFile = nil -- flag no delete in endPlayback
 			local t = scheduler.getTask( "TTSCacheCleaner" )
 			if not t then
 				t = scheduler.Task:new( "TTSCacheCleaner", pluginDevice, cleanTTSCache )
-				t:delay( 60 )
 			end
+			t:delay( 60 )
 			L("(TTS) Speaking phrase from cache: %1", settings.URI)
 			return settings
 		end
@@ -3896,7 +3940,7 @@ local function makeTTSAlert( device, settings )
 	settings.URIMetadata = TTS_METADATA:format(engobj.title, engobj.protocol,
 		settings.URI)
 	L("(TTS) Engine %1 created %2", engobj.title, settings.URI)
-	if cacheTTS and settings.UseCache ~= "0" then
+	if cacheThis then
 		-- Save in cache
 		local fmeta, curl = loadTTSCache( eid, voice, hash(text) )
 		local cpath = TTSBasePath .. curl
@@ -3912,8 +3956,14 @@ local function makeTTSAlert( device, settings )
 		if os.execute( "cp -f -- " .. Q( destFile ) .. " " .. Q( cachefile ) ) ~= 0 then
 			W("(TTS) Cache failed to copy %1 to %2", destFile, cachefile)
 		else
+			local now = os.time()
 			fmeta.strings[text] = { duration=settings.Duration, url=curl .. fmeta.nextfile .. ft,
-				created=os.time(), lastused=os.time() }
+				created=now, lastused=now }
+			fmeta.strings[text].cachelifehrs = tonumber(settings.CacheLifeHours) or
+				( 24 * getVarNumeric( "TTSCacheMaxAge", 30, pluginDevice, SONOS_SYS_SID ) )
+			fmeta.strings[text].expires = now + 3600 * fmeta.strings[text].cachelifehrs
+			D("makeTTSAlert() found it! New life %1 expiry %2", fmeta.strings[text].cachelifehrs,
+				fmeta.strings[text].expires)
 			fmeta.nextfile = fmeta.nextfile + 1
 			if not saveTTSCache( eid, voice, hash(text), fmeta ) then
 				W("(TTS) Can't write cache meta in %1", cpath)
@@ -3923,8 +3973,8 @@ local function makeTTSAlert( device, settings )
 				local t = scheduler.getTask( "TTSCacheCleaner" )
 				if not t then
 					t = scheduler.Task:new( "TTSCacheCleaner", pluginDevice, cleanTTSCache )
-					t:delay( 60 )
 				end
+				t:delay( 60 )
 			end
 		end
 	else
@@ -4108,7 +4158,7 @@ function actionSonosDelegateGroupControl( lul_device, lul_settings )
 	local me = findZoneByDevice( lul_device )
 	local target = resolveZone( lul_settings.Zone or "" )
 	if not target then
-		E("%1 (#%2) can't delegate group control, target %3 not available", 
+		E("%1 (#%2) can't delegate group control, target %3 not available",
 			luup.devices[lul_device].description, lul_device, lul_settings.Zone)
 		return 2,0
 	end
@@ -4259,7 +4309,7 @@ function actionSonosSystemIncludeIP( lul_device, lul_settings )
 	D("Fetching zone description from %1:%2 via %3", ipaddr, port, descrURL)
 	local descr = upnp.UPnP_getDeviceDescription( descrURL )
 	if not descr then
-		E("Failed to read zone data from %1 -- is a Sonos Zone Player? Is it up and rinning?", ipaddr)
+		E("Failed to read zone data from %1 -- is it a Sonos Zone Player? Is it up and running?", ipaddr)
 		setVar(SONOS_SYS_SID, "DiscoveryMessage", "Aborted; no/invalid response from "..ipaddr, lul_device)
 		return 2,0
 	end

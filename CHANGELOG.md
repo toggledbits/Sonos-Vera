@@ -2,10 +2,13 @@
 
 **NOTAM (NOtice To All Music-lovers):** ResponsiveVoice is no longer supported. They removed the public URL/endpoint that was being used to create speech audio files by the plugin. The suggested alternative to RV is the Microsoft Azure Speech Service, which produces clear speech audio from a large variety of voices, and offers a usable/meaningful free tier level that is likely sufficient for most users.
 
-## Version 2.1 (development, 20167)
+## Version 2.1 (development, 20209)
 
 **DEFEATURE:** The setting of a chime volume as the third parameter of the `TTSChime` state variable is no longer supported. The TTS chime sound will play at the specified volume for the speech audio. Users can control relative volume of the chime by ensuring that the amplitude of audio in the chime file is adequate (most audio editors will allow you to make this adjustment).
 
+* Fix: updates to the content directory may list multiple changes; make sure we handle all of them, not just the first.
+* The TTS cache max age has been reduced to 30 days from 90 days. This helps Edge users because they still have the old partitioning scheme and are thus more space-constrained.
+* A `CacheLifeHours` parameter has been added to the `Say` action to allow the cache expiration to be controlled on a per-speech basis. If not specified, the system `TTSCacheMaxAge` is used to compute it.
 * The TTS UI now includes all action parameters, and shows the action generated.
 * New action `urn:micasaverde-com:serviceId:Sonos1/AcquireGroupControl` to become group controller of a zone's current group.
 * New action `urn:micasaverde-com:serviceId:Sonos1/DelegateGroupControl` to delegate group controller authority to another zone (`Zone` parameter must contain a single zone UUID or zone name).
