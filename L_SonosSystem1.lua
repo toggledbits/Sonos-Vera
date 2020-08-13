@@ -5785,7 +5785,7 @@ function handleRequest( lul_request, lul_parameters, lul_outputformat )
 
 	elseif action == "files" then
 		local st = {}
-		local fd = { [getInstallPath()]=true, ["/etc/cmh-lu"]=true, ["/etc/cmh"]=true }
+		local fd = { [getInstallPath()]=true, ["/etc/cmh-lu/"]=true, ["/etc/cmh/"]=true }
 		fd[TTSBasePath] = true
 		local function flist( dir, r )
 			r = r or {}
