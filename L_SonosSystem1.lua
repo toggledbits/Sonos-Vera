@@ -8,7 +8,7 @@
 module( "L_SonosSystem1", package.seeall )
 
 PLUGIN_NAME = "Sonos"
-PLUGIN_VERSION = "2.1-20209"
+PLUGIN_VERSION = "2.1-20226"
 PLUGIN_ID = 4226
 PLUGIN_URL = "https://github.com/toggledbits/Sonos-Vera"
 
@@ -1151,7 +1151,6 @@ local function loadServicesMetaDataKeys()
 		local s, d = line:match("^([^=]+)=(.*)")
 		D("loadServicesMetaDataKeys() service=%1 metaDataDesc=%2", s, d)
 		if s and d then k[tostring(s)] = d end
-D("loadServicesMetaDataKeys() k=%1", k)
 	end
 	D("loadServicesMetaDataKeys() result %1", k)
 	return k

@@ -15,7 +15,7 @@ var Sonos = (function(api, $) {
 	/* unique identifier for this plugin... */
 	var uuid = '79bf9374-f989-11e9-884c-dbb32f3fa64a'; /* SonosSystem 2019-12-11 19345 */
 
-	var pluginVersion = '2.1-20209';
+	var pluginVersion = '2.1-20226';
 
 	var _UIVERSION = 20167;     /* must coincide with Lua core */
 
@@ -299,7 +299,7 @@ var Sonos = (function(api, $) {
 	{
 		playerShowing = false;
 
-		var html;
+		var html, i;
 		Sonos_defineUIStyle();
 
 		Sonos_initXMLParser();
@@ -369,7 +369,7 @@ var Sonos = (function(api, $) {
 		html += '<td nowrap><tt>Q:3</tt></td>';
 		html += '</tr>';
 
-		for (var i=0; i<members.length; i++) {
+		for (i=0; i<members.length; i++) {
 			if ( members[i].UUID !== uuid ) {
 				html += '<tr>';
 				html += '<td>Group with coordinator "' + String(members[i].ZoneName) + '"</td>';
@@ -385,7 +385,7 @@ var Sonos = (function(api, $) {
 		html += '<td><tt>AI:</tt></td>';
 		html += '</tr>';
 
-		for (var i=0; i<members.length; i++) {
+		for (i=0; i<members.length; i++) {
 			html += '<tr>';
 			html += '<td>Audio input of zone "' + String(members[i].ZoneName) + '"</td>';
 			html += '<td>x-rincon-stream:' + String(members[i].UUID) + '</td>';
@@ -467,7 +467,7 @@ var Sonos = (function(api, $) {
 		html += '<th>Variable</td>';
 		html += '<th>Value</td>';
 		html += '</tr>';
-		for (var i=0; i<variables.length; i++) {
+		for (i=0; i<variables.length; i++) {
 			var value = api.getDeviceState(device, variables[i][0], variables[i][1], 1) || "";
 			// console.log(variables[i][1]+"="+value);
 			html += '<tr>';
@@ -877,7 +877,7 @@ input#language { width: 6em; } \
 			onlineState = '1';
 		}
 		var currentAlbumArtUrl = api.getDeviceState(device, AVTRANSPORT_SID, "CurrentAlbumArt", 1) || "";
-		var title = api.getDeviceState(device, AVTRANSPORT_SID, "CurrentTitle", 1) || "";
+		title = api.getDeviceState(device, AVTRANSPORT_SID, "CurrentTitle", 1) || "";
 		var album = api.getDeviceState(device, AVTRANSPORT_SID, "CurrentAlbum", 1) || "";
 		var artist = api.getDeviceState(device, AVTRANSPORT_SID, "CurrentArtist", 1) || "";
 		var details = api.getDeviceState(device, AVTRANSPORT_SID, "CurrentDetails", 1) || "";

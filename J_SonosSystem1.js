@@ -15,7 +15,7 @@ var SonosSystem = (function(api, $) {
 	/* unique identifier for this plugin... */
 	var uuid = '79bf9374-f989-11e9-884c-dbb32f3fa64a'; /* SonosSystem 2019-12-11 19345 */
 
-	var pluginVersion = '2.1-20209';
+	var pluginVersion = '2.1-20226';
 
 	var _UIVERSION = 20167;     /* must coincide with Lua core */
 
@@ -261,7 +261,7 @@ var SonosSystem = (function(api, $) {
 		var $container = $( 'div#sonos-settings' );
 		var $el = $( 'select#tts-engine', $container );
 		var eid = $el.val() || sysDefaultTTS;
-		var tts;
+		var tts, ix;
 		var s = api.getDeviceState(api.getCpanelDeviceId(), Sonos.SONOS_SYS_SID, "TTSConfig") || "";
 		try {
 			tts = JSON.parse( s );
@@ -312,7 +312,7 @@ var SonosSystem = (function(api, $) {
 							$( '<option/>' ).val( "" ).text( "(engine default: " + meta.default + ")" )
 								.prependTo( $mm );
 						}
-						for ( var ix=0; ix<meta.values.length; ix++ ) {
+						for ( ix=0; ix<meta.values.length; ix++ ) {
 							$( '<option/>' ).val( meta.values[ix] )
 								.text( meta.values[ix] )
 								.appendTo( $mm );
@@ -335,7 +335,7 @@ var SonosSystem = (function(api, $) {
 								( meta.values[meta.default] ? meta.values[meta.default] : meta.default ) +
 								")" ).prependTo( $mm );
 						}
-						for ( var ix=0; ix<vl.length; ix++ ) {
+						for ( ix=0; ix<vl.length; ix++ ) {
 							$( '<option/>' ).val( vl[ix].id ).text( vl[ix].val )
 								.appendTo( $mm );
 						}
