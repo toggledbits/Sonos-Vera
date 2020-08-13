@@ -2519,7 +2519,7 @@ setup = function(zoneDevice, flag)
 	local status, _, values, icon =
 							 upnp.setup(descrURL,
 										"urn:schemas-upnp-org:device:ZonePlayer:1",
-										{ "UDN", "roomName", "modelName", "modelNumber" },
+										{ "UDN", "roomName", "modelName", "modelNumber", "swGen" },
 										{ { "urn:schemas-upnp-org:device:ZonePlayer:1",
 											{ UPNP_MUSICSERVICES_SERVICE,
 											UPNP_DEVICE_PROPERTIES_SERVICE,
@@ -2537,6 +2537,11 @@ setup = function(zoneDevice, flag)
 				zoneDevice, uuid, newuuid)
 			status = false
 		end
+	end
+
+	if values and values.swGen ~= "1" then
+		W("Zone %1 (#%2) zone device reports firmware generation %3, which may not be supported by this plugin.",
+			(luup.devices[zoneDevice] or {}).description, zoneDevice, values.swGen)
 	end
 
 	-- Subscribe to service notifications from proxy. If we know ourselves to be a satellite at
@@ -4187,7 +4192,7 @@ function actionSonosNotifyAVTransportChange( lul_device, lul_settings )
 	local uuid = findZoneByDevice( lul_device )
 	-- D("actionSonosNotifyAVTransportChange(%1,%2)", lul_device, lul_settings)
 	D("actionSonosNotifyAVTransportChange(%1, lul_settings) zone %2", lul_device, uuid)
-	assert(luup.devices[lul_device].device_type == SONOS_ZONE_DEVICE_TYPE)
+	assert( luup.devices[lul_device].device_type == SONOS_ZONE_DEVICE_TYPE )
 	assert( uuid ~= nil )
 	assert( EventSubscriptions[uuid] ~= nil )
 	if (upnp.isValidNotification("NotifyAVTransportChange", lul_settings.sid, EventSubscriptions[uuid])) then
