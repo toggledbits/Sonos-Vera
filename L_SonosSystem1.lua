@@ -5,6 +5,8 @@
 	For license information, please see the above repository.
 --]]
 
+--[[ TO-DO: 0.UpnpScanning="1", 0.UpnpDiscoveryInterval, 0.EnableUPnP="1", 0.LuaUPnPAlive=timestamp --]]
+
 module( "L_SonosSystem1", package.seeall )
 
 PLUGIN_NAME = "Sonos"
@@ -3133,6 +3135,7 @@ local function deferredStartup(device)
 	local chorder = {}
 	local designated = {}
 	for uuid,dev in pairs( Zones ) do
+		D("deferredStartup() considering %1 (%2)", uuid, dev)
 		setVar( SONOS_ZONE_SID, "MasterRole", 0, dev )
 		if getVarNumeric( "DesignatedMaster", 0, dev, SONOS_ZONE_SID ) ~= 0 then
 			L("Zone %1 %2 (#%3) is a designated master", uuid, luup.devices[dev].description, dev)
