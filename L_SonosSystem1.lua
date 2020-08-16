@@ -8,7 +8,7 @@
 module( "L_SonosSystem1", package.seeall )
 
 PLUGIN_NAME = "Sonos"
-PLUGIN_VERSION = "2.0-hotfix20149"
+PLUGIN_VERSION = "2.0-hotfix20229"
 PLUGIN_ID = 4226
 PLUGIN_URL = "https://github.com/toggledbits/Sonos-Vera"
 
@@ -791,11 +791,18 @@ local zoneInfoMemberAttributes = { "UUID", "Location", "ZoneName", "HTSatChanMap
 function updateZoneInfo( zs )
 	-- D("updateZoneInfo(%1)", zs)
 	D("updateZoneInfo(<xml>)")
-	zoneInfo = { zones={}, groups={} }
 	-- D("updateZoneInfo() zone info is \r\n%1", zs)
 	local root = lom.parse( zs )
-	assert( root and root.tag == "ZoneGroupState" )
-	local groups = xmlNodesForTag( root, "ZoneGroups" )()
+	assert( root and root.tag, "Invalid zone topology data:\n"..zs )
+	-- PHR??? This is odd. Response for at least one users' configuration does not include <ZoneGroupState> enclosing tag.
+	D("updateZoneInfo() zone topology data root tag is %1", root.tag)
+	local groups
+	if root.tag == "ZoneGroupState" then
+		groups = xmlNodesForTag( root, "ZoneGroups" )()
+	elseif root.tag == "ZoneGroups" then
+		groups = root
+	end
+	zoneInfo = { zones={}, groups={} }
 	if not groups then return end -- probably no data yet
 	for v in xmlNodesForTag( groups, "ZoneGroup" ) do
 		local gr = { UUID=v.attr.ID, Coordinator=v.attr.Coordinator, members={} }

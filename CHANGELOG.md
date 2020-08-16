@@ -4,6 +4,7 @@
 
 ## Version 2.0 HOTFIXES
 
+* 20229-01: Some recent UK firmware apparently has a different XML response form for zone group topology.
 * 20149-02: Fix errors in player UI that cause incorrect parsing of lists (saved queues, queue, favorites).
 * 20149-01: Fix error in URI decoding that causes last list (saved queue, favorites) element to be ignored.
 * 20147-01: Fix restore of services metadata (bug causing problems playing streaming services).
