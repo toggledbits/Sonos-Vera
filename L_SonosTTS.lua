@@ -465,13 +465,13 @@ function AzureTTSEngine:say(text, destFile, engineOptions)
 		local voice = engineOptions.voice or self.optionMeta.voice.default
 		local lang = voice:gsub( "^(%w+%-%w+)%-.*", "%1" )
 		local payload = string.format('<speak version="1.0" xml:lang="%s"><voice name="%s"><![CDATA[%s]]></voice></speak>',
-			lang, voice, text:gsub("'", "''"))
+			lang, voice, text:gsub("'", "\\'"))
 		debug("AzureTTSEngine:say() host %1 payload %2", host, payload)
 		debug("AzureTTSEngine:say() system LuaSec version is %1", ssl._VERSION)
 		os.remove( destFile )
 		if engineOptions.requestor == "C" then
 			-- Ancient LuaSec or curl specified
-			local req = string.format("curl -s -k -m %s -o '%s'",
+			local req = string.format("curl -s -k -m %s -X POST -o '%s'",
 				engineOptions.timeout or self.optionMeta.timeout.default or 15,
 				destFile)
 			req = req .. string.format(" -H 'Host: %s'", host)
@@ -482,8 +482,9 @@ function AzureTTSEngine:say(text, destFile, engineOptions)
 			req = req .. string.format(" -d '%s'", payload )
 			req = req .. string.format(" 'https://%s/cognitiveservices/v1'", host)
 			debug("AzureTTSEngine:say() curl request: %1", req)
-			if os.execute( req ) ~= 0 then
-				error("curl request failed: %1", req)
+			local rst = os.execute( req )
+			if rst ~= 0 then
+				error("curl request failed (%2): %1", req, rst)
 				if tries == 1 then
 					-- Fail on first attempt will retry with a new token
 					debug("AzureTTSEngine:say() arming for new token and retry")
