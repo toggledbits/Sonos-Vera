@@ -4,6 +4,7 @@
 
 ## Version 2.0 HOTFIXES
 
+* 20282-01: Workaround very long bearer tokens (longer than allowed command line length) for curl requests in Azure TTS.
 * 20273-01: Upgrade TTS module to 20273.
 * 20229-01: Some recent UK firmware apparently has a different XML response form for zone group topology.
 * 20149-02: Fix errors in player UI that cause incorrect parsing of lists (saved queues, queue, favorites).
