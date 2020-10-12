@@ -2,7 +2,7 @@
 
 **NOTAM (NOtice To All Music-lovers):** ResponsiveVoice is no longer supported. They removed the public URL/endpoint that was being used to create speech audio files by the plugin. The suggested alternative to RV is the Microsoft Azure Speech Service, which produces clear speech audio from a large variety of voices, and offers a usable/meaningful free tier level that is likely sufficient for most users.
 
-## Version 2.0 HOTFIXES
+## Version 2.0 HOTFIXES (20286)
 
 * 20282-01: Workaround very long bearer tokens (longer than allowed command line length) for curl requests in Azure TTS.
 * 20273-01: Upgrade TTS module to 20273.

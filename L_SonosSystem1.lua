@@ -8,7 +8,7 @@
 module( "L_SonosSystem1", package.seeall )
 
 PLUGIN_NAME = "Sonos"
-PLUGIN_VERSION = "2.0-hotfix20282.1145"
+PLUGIN_VERSION = "2.0-hotfix20286.0925"
 PLUGIN_ID = 4226
 PLUGIN_URL = "https://github.com/toggledbits/Sonos-Vera"
 
@@ -20,7 +20,7 @@ local DEBUG_MODE = false	-- Don't hardcode true--use state variable config
 local DEVELOPMENT = false	-- ??? Dev: false for production
 
 local MIN_UPNP_VERSION = 20103	-- Minimum version of L_SonosUPnP that works
-local MIN_TTS_VERSION = 20103	-- Minimum version of L_SonosTTS that works
+local MIN_TTS_VERSION = 20286	-- Minimum version of L_SonosTTS that works
 
 local MSG_CLASS = "Sonos"
 local isOpenLuup = false
