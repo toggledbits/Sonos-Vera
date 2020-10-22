@@ -6,7 +6,7 @@
 
 module("L_SonosTTS", package.seeall)
 
-VERSION = 20286
+VERSION = 20296
 DEBUG_MODE = true
 
 local urllib = require("socket.url")
@@ -324,10 +324,13 @@ function AzureTTSEngine:new(o)
 	self.filetype = "mp3"
 	self.bitrate = 64
 	self.protocol = "http-get:*:audio/mpeg:*"
+-- ??? Need to use: https://docs.microsoft.com/en-us/azure/cognitive-services/speech-service/get-started-text-to-speech?tabs=script%2Cwindowsinstall&pivots=programming-language-curl
 	self.optionMeta = {
 		subkey={ index=1, title="Subscription Key", required=true, infourl="https://docs.microsoft.com/en-us/azure/cognitive-services/cognitive-services-apis-create-account?tabs=multiservice%2Cwindows" },
 		region={ index=2, title="Region", default="eastus", values={"australiaeast","canadacentral","centralus","eastasia","eastus","eastus2","francecentral","centralindia","japaneast","koreacentral","northcentralus","northeurope","southcentralus","southeastasia","uksouth","westeurope","westus","westus2"}, unrestricted=true },
-		voice={ index=3, title="Voice", default="en-US-JessaRUS", values={
+		endpoint={ index=2, title="Endpoint", default="", required=false },
+		voice={ index=3, title="Voice", instructions="Availability subject to change. Not all voices available in all regions. See the linked documentation.",
+		default="en-US-JessaRUS", values={
 				["ar-EG-Hoda"]="Arabic (Egypt), female",
 				["ar-SA-Naayf"]="Arabic (Saudi Arabia), male",
 				["bg-BG-Ivan"]="Bulgarian",
@@ -356,8 +359,9 @@ function AzureTTSEngine:new(o)
 				["en-US-ZiraRUS"]="English (US), female (Zira)",
 				["en-US-BenjaminRUS"]="English (US), male (Benjamin)",
 				["es-ES-HelenaRUS"]="Spanish (Spain), female (Helena)",
+				["en-US-AriaNeural"]="English (US), female (Aria, neural)",
 				["en-US-GuyNeural"]="English (US), male (Guy, neural)",
-				["en-US-JessaNeural"]="English (US), female (Jessa, neural)",
+				["en-US-JennyNeural"]="English (US), female (Jenny, neural)",
 				["es-ES-Laura-Apollo"]="Spanish (Spain), female (Laura)",
 				["es-ES-Pablo-Apollo"]="Spanish (Spain), male (Pablo)",
 				["es-MX-HildaRUS"]="Spanish (Mexico), female (Hilda)",
@@ -427,9 +431,16 @@ function AzureTTSEngine:say(text, destFile, engineOptions)
 	while tries < 3 do
 		tries = tries + 1
 		if os.time() - self.lastToken >= self.maxTokenLife then
-			debug("AzureTTSEngine:say() token is expired, fetching new")
-			local url = string.format("https://%s.api.cognitive.microsoft.com/sts/v1.0/issueToken",
-				engineOptions.region or self.optionMeta.region.default)
+			debug("AzureTTSEngine:say() token is expired, fetching new (engine %1)", VERSION)
+			local url
+			if ( engineOptions.endpoint or "" ) ~= "" then
+				debug("AzureTTSEngine:say() using provided endpoint %1", engineOptions.endpoint)
+				url = string.format("%ssts/v1.0/issueToken", engineOptions.endpoint)
+			else
+				debug("AzureTTSEngine:say() creating default endpoint from region")
+				url = string.format("https://%s.api.cognitive.microsoft.com/sts/v1.0/issueToken",
+					engineOptions.region or self.optionMeta.region.default)
+			end
 			local cmd = string.format([[curl -s -k -o - -m 15 -X POST -H 'Content-length: 0' \
 -H 'Content-type: application/x-www-form-urlencoded' -H 'Ocp-Apim-Subscription-Key: %s' '%s']],
 				((engineOptions.subkey or "undefined"):gsub( "'", "\\'" )), url)
@@ -467,7 +478,7 @@ function AzureTTSEngine:say(text, destFile, engineOptions)
 		local payload = string.format('<speak version="1.0" xml:lang="%s"><voice name="%s"><![CDATA[%s]]></voice></speak>',
 			lang, voice, text:gsub("'", "\\'"))
 		debug("AzureTTSEngine:say() host %1 payload %2", host, payload)
-		debug("AzureTTSEngine:say() system LuaSec version is %1", ssl._VERSION)
+		debug("AzureTTSEngine:say() system LuaSec version is %1, engine is %2", ssl._VERSION, VERSION)
 		os.remove( destFile )
 		if engineOptions.requestor == "C" or (ssl._VERSION or ""):match( "^0%.[54]" ) then
 			-- Ancient LuaSec, or curl specified
