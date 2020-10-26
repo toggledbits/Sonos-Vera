@@ -2,7 +2,7 @@
 
 **NOTAM (NOtice To All Music-lovers):** ResponsiveVoice is no longer supported. They removed the public URL/endpoint that was being used to create speech audio files by the plugin. The suggested alternative to RV is the Microsoft Azure Speech Service, which produces clear speech audio from a large variety of voices, and offers a usable/meaningful free tier level that is likely sufficient for most users.
 
-## Version 2.1 (development, 20226)
+## Version 2.1 (development, 20300)
 
 **DEFEATURE:** The setting of a chime volume as the third parameter of the `TTSChime` state variable is no longer supported. The TTS chime sound will play at the specified volume for the speech audio. Users can control relative volume of the chime by ensuring that the amplitude of audio in the chime file is adequate (most audio editors will allow you to make this adjustment).
 
@@ -11,6 +11,7 @@
 * The TTS cache max age has been reduced to 30 days from 90 days. This helps Edge users because they still have the old partitioning scheme and are thus more space-constrained.
 * A `CacheLifeHours` parameter has been added to the `Say` action to allow the cache expiration to be controlled on a per-speech basis. If not specified, the system `TTSCacheMaxAge` is used to compute it.
 * The TTS UI now includes all action parameters, and shows the action generated.
+* TTS configuration now allows the endpoint to be specified in addition to the region. If the endpoint is left blank, `https://<region>.tts.speech.microsoft.com/` is used.
 * New action `urn:micasaverde-com:serviceId:Sonos1/AcquireGroupControl` to become group controller of a zone's current group.
 * New action `urn:micasaverde-com:serviceId:Sonos1/DelegateGroupControl` to delegate group controller authority to another zone (`Zone` parameter must contain a single zone UUID or zone name).
 * A device-specific TTS/Alert volume can be specified by placing the volume (0-100) in the `TTSVolume` state variable of any device. If the value has a leading +/-, it is a relative volume adjustment from the current volume, whatever it may be. All of this only works if no volume is passed to the `Say` or `Alert` actions.

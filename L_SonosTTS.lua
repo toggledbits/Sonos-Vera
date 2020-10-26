@@ -6,7 +6,7 @@
 
 module("L_SonosTTS", package.seeall)
 
-VERSION = 20296
+VERSION = 20300
 DEBUG_MODE = true
 
 local urllib = require("socket.url")
@@ -327,9 +327,9 @@ function AzureTTSEngine:new(o)
 -- ??? Need to use: https://docs.microsoft.com/en-us/azure/cognitive-services/speech-service/get-started-text-to-speech?tabs=script%2Cwindowsinstall&pivots=programming-language-curl
 	self.optionMeta = {
 		subkey={ index=1, title="Subscription Key", required=true, infourl="https://docs.microsoft.com/en-us/azure/cognitive-services/cognitive-services-apis-create-account?tabs=multiservice%2Cwindows" },
-		region={ index=2, title="Region", default="eastus", values={"australiaeast","canadacentral","centralus","eastasia","eastus","eastus2","francecentral","centralindia","japaneast","koreacentral","northcentralus","northeurope","southcentralus","southeastasia","uksouth","westeurope","westus","westus2"}, unrestricted=true },
-		endpoint={ index=2, title="Endpoint", default="", required=false },
-		voice={ index=3, title="Voice", instructions="Availability subject to change. Not all voices available in all regions. See the linked documentation.",
+		region={ index=2, title="Region", values={"australiaeast","canadacentral","centralus","eastasia","eastus","eastus2","francecentral","centralindia","japaneast","koreacentral","northcentralus","northeurope","southcentralus","southeastasia","uksouth","westeurope","westus","westus2"}, default="eastus", unrestricted=true },
+		endpoint={ index=3, title="Endpoint", default="", instructions="If left blank, <region>.tts.speech.microsoft.com will be used" },
+		voice={ index=4, title="Voice", instructions="Availability subject to change. Not all voices available in all regions. Click 'info' above for more.",
 		default="en-US-JessaRUS", values={
 				["ar-EG-Hoda"]="Arabic (Egypt), female",
 				["ar-SA-Naayf"]="Arabic (Saudi Arabia), male",
@@ -420,8 +420,8 @@ function AzureTTSEngine:new(o)
 			unrestricted=true,
 			infourl="https://docs.microsoft.com/en-us/azure/cognitive-services/speech-service/language-support#text-to-speech"
 		},
-		timeout={ title="Timeout (secs)", default="15" },
-		requestor={ title="Requestor", default="", values={ [""]="LuaSocket/LuaSec (recommended)", ["C"]="curl" } }
+		requestor={ index=5, title="Requestor", default="", values={ [""]="automatic (recommended)", L="LuaSocket/LuaSec", C="curl" } },
+		timeout={ title="Timeout (secs)", default="15" }
 	}
 	return o
 end
@@ -432,15 +432,8 @@ function AzureTTSEngine:say(text, destFile, engineOptions)
 		tries = tries + 1
 		if os.time() - self.lastToken >= self.maxTokenLife then
 			debug("AzureTTSEngine:say() token is expired, fetching new (engine %1)", VERSION)
-			local url
-			if ( engineOptions.endpoint or "" ) ~= "" then
-				debug("AzureTTSEngine:say() using provided endpoint %1", engineOptions.endpoint)
-				url = string.format("%ssts/v1.0/issueToken", engineOptions.endpoint)
-			else
-				debug("AzureTTSEngine:say() creating default endpoint from region")
-				url = string.format("https://%s.api.cognitive.microsoft.com/sts/v1.0/issueToken",
-					engineOptions.region or self.optionMeta.region.default)
-			end
+			local url = string.format("https://%s.api.cognitive.microsoft.com/sts/v1.0/issueToken",
+				engineOptions.region or self.optionMeta.region.default)
 			local cmd = string.format([[curl -s -k -o - -m 15 -X POST -H 'Content-length: 0' \
 -H 'Content-type: application/x-www-form-urlencoded' -H 'Ocp-Apim-Subscription-Key: %s' '%s']],
 				((engineOptions.subkey or "undefined"):gsub( "'", "\\'" )), url)
@@ -472,31 +465,43 @@ function AzureTTSEngine:say(text, destFile, engineOptions)
 			debug("AzureTTSEngine:say() current token assumed valid")
 		end
 
-		local host = string.format("%s.tts.speech.microsoft.com", engineOptions.region or self.optionMeta.region.default )
+		local host, url
+		if ( engineOptions.endpoint or "" ) ~= "" then
+			debug("AzureTTSEngine:say() using provided endpoint %1", engineOptions.endpoint)
+			url = engineOptions.endpoint
+			if not url:match( "^https?://" ) then url = "https://" .. url end
+			if not url:match( "/$" ) then url = url .. "/" end
+			host = url:match( "^https?://([^/]*)/" )
+		else
+			debug("AzureTTSEngine:say() creating default endpoint from region")
+			host = string.format( "%s.tts.speech.microsoft.com",
+				engineOptions.region or self.optionMeta.region.default )
+			url = string.format( "https://%s/cognitiveservices/v1", host )
+		end
 		local voice = engineOptions.voice or self.optionMeta.voice.default
 		local lang = voice:gsub( "^(%w+%-%w+)%-.*", "%1" )
 		local payload = string.format('<speak version="1.0" xml:lang="%s"><voice name="%s"><![CDATA[%s]]></voice></speak>',
 			lang, voice, text:gsub("'", "\\'"))
-		debug("AzureTTSEngine:say() host %1 payload %2", host, payload)
+		debug("AzureTTSEngine:say() host %1 url %3 payload %2", host, payload, url)
 		debug("AzureTTSEngine:say() system LuaSec version is %1, engine is %2", ssl._VERSION, VERSION)
 		os.remove( destFile )
-		if engineOptions.requestor == "C" or (ssl._VERSION or ""):match( "^0%.[54]" ) then
+		if engineOptions.requestor == "C" or ( engineOptions.requestor == "" and (ssl._VERSION or ""):match( "^0%.[654]" ) ) then
 			-- Ancient LuaSec, or curl specified
-		   local fp = io.open(destFile .. "-curl.sh", "w")
-		   fp:write( "#!/bin/sh\n# This file is automatically generated; DO NOT EDIT\n\n" )
-		   fp:write( string.format("rm -f -- '%s'\n", destFile) )
-		   fp:write( string.format("curl -s -k -m %s -X POST -o '%s' \\\n",
-				   engineOptions.timeout or self.optionMeta.timeout.default or 15,
-				   destFile) )
-		   fp:write( string.format(" -H 'Host: %s' \\\n", host) )
-		   fp:write( string.format(" -H 'Authorization: Bearer %s' \\\n", self.token) )
-		   fp:write( string.format(" -H 'X-Microsoft-OutputFormat: %s' \\\n", self.format) )
-		   fp:write( " -H 'Content-Type: application/ssml+xml' \\\n" )
-		   -- fp:write( string.format(" -H 'Content-Length: %d'", #payload) -- curl does it correctly
-		   fp:write( string.format(" -d '%s' \\\n", payload ) )
-		   fp:write( string.format(" 'https://%s/cognitiveservices/v1'\n", host) )
-		   fp:close()
-		   local rst = os.execute( "sh " .. destFile .. "-curl.sh" )
+			local fp = io.open(destFile .. "-curl.sh", "w")
+			fp:write( "#!/bin/sh\n# This file is automatically generated; DO NOT EDIT\n\n" )
+			fp:write( string.format("rm -f -- '%s'\n", destFile) )
+			fp:write( string.format("curl -s -k -m %s -X POST -o '%s' \\\n",
+				engineOptions.timeout or self.optionMeta.timeout.default or 15,
+				destFile) )
+			fp:write( string.format(" -H 'Host: %s' \\\n", host) )
+			fp:write( string.format(" -H 'Authorization: Bearer %s' \\\n", self.token) )
+			fp:write( string.format(" -H 'X-Microsoft-OutputFormat: %s' \\\n", self.format) )
+			fp:write( " -H 'Content-Type: application/ssml+xml' \\\n" )
+			-- fp:write( string.format(" -H 'Content-Length: %d'", #payload) -- curl does it correctly
+			fp:write( string.format(" -d '%s' \\\n", payload ) )
+			fp:write( string.format(" '%s'\n", url) )
+			fp:close()
+			local rst = os.execute( "sh " .. destFile .. "-curl.sh" )
 			if rst ~= 0 then
 				fp = io.open(destFile .. "-curl.sh", "r")
 				local req = fp:read("*a")
@@ -528,18 +533,19 @@ function AzureTTSEngine:say(text, destFile, engineOptions)
 			if not fp then error("Unable to open "..tostring(destFile)..": "..tostring(ferr)) end
 			http.TIMEOUT = engineOptions.timeout or self.optionMeta.timeout.default or 15
 			local req = {
-				url = "https://" .. host .. "/cognitiveservices/v1",
-					sink = ltn12.sink.file(fp, ferr),
-					method = "POST",
-					headers = {
-						["X-Microsoft-OutputFormat"] = self.format,
-						["Host"] = host,
-						["Content-Type"] = "application/ssml+xml",
-						["Content-Length"] = #payload,
-						["Authorization"] = "Bearer " .. tostring(self.token)
-					},
-					source = ltn12.source.string(payload),
-					protocol = "any"
+				url = url,
+				TIMEOUT = http.TIMEOUT,
+				sink = ltn12.sink.file(fp, ferr),
+				method = "POST",
+				headers = {
+					["X-Microsoft-OutputFormat"] = self.format,
+					["Host"] = host,
+					["Content-Type"] = "application/ssml+xml",
+					["Content-Length"] = #payload,
+					["Authorization"] = "Bearer " .. tostring(self.token)
+				},
+				source = ltn12.source.string(payload),
+				protocol = "any"
 			}
 			local r, statusMsg, h, e = https.request( req )
 			debug("AzureTTSEngine:say() response %1, %2, %3, %4", r, statusMsg, h, e)

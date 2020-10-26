@@ -15,7 +15,7 @@ var SonosSystem = (function(api, $) {
 	/* unique identifier for this plugin... */
 	var uuid = '79bf9374-f989-11e9-884c-dbb32f3fa64a'; /* SonosSystem 2019-12-11 19345 */
 
-	var pluginVersion = '2.1-20226';
+	var pluginVersion = '2.1-20230';
 
 	var _UIVERSION = 20167;     /* must coincide with Lua core */
 
@@ -386,7 +386,12 @@ var SonosSystem = (function(api, $) {
 						.text( '[info]' ).appendTo( $col );
 				}
 				if ( undefined !== meta.default ) {
-					$( '<div class="inp-default" />' ).text( "Default: " + meta.default )
+					$( '<div class="inp-default" />' ).text( "Default: " +
+						( "" === meta.default ? "(blank)" : meta.default ) )
+						.appendTo( $col );
+				}
+				if ( "" !== ( meta.instructions || "" ) ) {
+					$( '<div class="inp-inst" />' ).text( meta.instructions )
 						.appendTo( $col );
 				}
 				if ( meta.required ) {
@@ -445,7 +450,8 @@ var SonosSystem = (function(api, $) {
 		if ( 0 === $( 'style#sonos-settings-styles' ).length ) {
 			$( '<style id="sonos-settings-styles"> \
 div#sonos-settings div.row { margin-top: 12px; } \
-div.inp-default { color: #666; font-size: 0.80em; } \
+div.inp-default { color: #333; font-size: 0.90em; } \
+div.inp-inst { color: #333; } \
 .inp-required { font-weight: bold } \
 div.sonos-footer { margin: 16px 0px; } \
 </style>' ).appendTo( $('head') );
