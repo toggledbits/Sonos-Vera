@@ -599,7 +599,9 @@ div.sonos-footer { margin: 16px 0px; } \
 
 		var cv = api.getDeviceState(device, Sonos.SONOS_SYS_SID, "PluginVersion", { dynamic:false }) || "";
 
-		$( '<div class="sonos-footer">Sonos Plugin version ' + cv + "; JSUI " + pluginVersion + '</div>' )
+		$( '<div class="sonos-footer">Sonos Plugin version ' + cv + "; JSUI " + pluginVersion +
+			'; <a href="/cgi-bin/cmh/log.sh?Device=LuaUPnP" target="_blank">Show LuaUPnP Log</a) (local only)' +
+			'</div>' )
 			.appendTo( $container );
 	}
 
