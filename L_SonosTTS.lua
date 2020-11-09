@@ -6,7 +6,7 @@
 
 module("L_SonosTTS", package.seeall)
 
-VERSION = 20300
+VERSION = 20314
 DEBUG_MODE = true
 
 local urllib = require("socket.url")
@@ -328,7 +328,7 @@ function AzureTTSEngine:new(o)
 	self.optionMeta = {
 		subkey={ index=1, title="Subscription Key", required=true, infourl="https://docs.microsoft.com/en-us/azure/cognitive-services/cognitive-services-apis-create-account?tabs=multiservice%2Cwindows" },
 		region={ index=2, title="Region", values={"australiaeast","canadacentral","centralus","eastasia","eastus","eastus2","francecentral","centralindia","japaneast","koreacentral","northcentralus","northeurope","southcentralus","southeastasia","uksouth","westeurope","westus","westus2"}, default="eastus", unrestricted=true },
-		endpoint={ index=3, title="Endpoint", default="", instructions="If left blank, <region>.tts.speech.microsoft.com will be used" },
+		endpoint={ index=3, title="Endpoint", default="", instructions="If left blank, https://<region>.api.cognitive.microsoft.com/ will be used" },
 		voice={ index=4, title="Voice", instructions="Availability subject to change. Not all voices available in all regions. Click 'info' above for more.",
 		default="en-US-JessaRUS", values={
 				["ar-EG-Hoda"]="Arabic (Egypt), female",
@@ -430,10 +430,20 @@ function AzureTTSEngine:say(text, destFile, engineOptions)
 	local tries = 0
 	while tries < 3 do
 		tries = tries + 1
-		if os.time() - self.lastToken >= self.maxTokenLife then
+		if ( os.time() - self.lastToken ) >= self.maxTokenLife then
 			debug("AzureTTSEngine:say() token is expired, fetching new (engine %1)", VERSION)
-			local url = string.format("https://%s.api.cognitive.microsoft.com/sts/v1.0/issueToken",
-				engineOptions.region or self.optionMeta.region.default)
+			local url
+			if ( engineOptions.endpoint or "" ) ~= "" then
+				debug("AzureTTSEngine:say() using provided endpoint %1", engineOptions.endpoint)
+				url = engineOptions.endpoint
+				if not url:match( "^https?://" ) then url = "https://" .. url end
+				if not url:match( "/$" ) then url = url .. "/" end
+			else
+				debug("AzureTTSEngine:say() creating default endpoint from region")
+				url = string.format("https://%s.api.cognitive.microsoft.com/",
+					engineOptions.region or self.optionMeta.region.default)
+			end
+			url = url .. "sts/v1.0/issueToken"
 			local cmd = string.format([[curl -s -k -o - -m 15 -X POST -H 'Content-length: 0' \
 -H 'Content-type: application/x-www-form-urlencoded' -H 'Ocp-Apim-Subscription-Key: %s' '%s']],
 				((engineOptions.subkey or "undefined"):gsub( "'", "\\'" )), url)
@@ -456,7 +466,7 @@ function AzureTTSEngine:say(text, destFile, engineOptions)
 				end
 				error("Unparseable token response: %1", s)
 			elseif s == "" then
-				error("Empty response, likely failed to negotiate SSL or invalid URL")
+				error("Empty response, likely failed to negotiate SSL or invalid URL (%s)", url)
 			end
 			self.token = s
 			self.lastToken = os.time()
@@ -465,19 +475,9 @@ function AzureTTSEngine:say(text, destFile, engineOptions)
 			debug("AzureTTSEngine:say() current token assumed valid")
 		end
 
-		local host, url
-		if ( engineOptions.endpoint or "" ) ~= "" then
-			debug("AzureTTSEngine:say() using provided endpoint %1", engineOptions.endpoint)
-			url = engineOptions.endpoint
-			if not url:match( "^https?://" ) then url = "https://" .. url end
-			if not url:match( "/$" ) then url = url .. "/" end
-			host = url:match( "^https?://([^/]*)/" )
-		else
-			debug("AzureTTSEngine:say() creating default endpoint from region")
-			host = string.format( "%s.tts.speech.microsoft.com",
-				engineOptions.region or self.optionMeta.region.default )
-			url = string.format( "https://%s/cognitiveservices/v1", host )
-		end
+		local host = string.format( "%s.tts.speech.microsoft.com",
+			engineOptions.region or self.optionMeta.region.default )
+		local url = string.format( "https://%s/cognitiveservices/v1", host )
 		local voice = engineOptions.voice or self.optionMeta.voice.default
 		local lang = voice:gsub( "^(%w+%-%w+)%-.*", "%1" )
 		local payload = string.format('<speak version="1.0" xml:lang="%s"><voice name="%s"><![CDATA[%s]]></voice></speak>',
