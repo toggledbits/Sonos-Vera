@@ -15,7 +15,7 @@ var SonosSystem = (function(api, $) {
 	/* unique identifier for this plugin... */
 	var uuid = '79bf9374-f989-11e9-884c-dbb32f3fa64a'; /* SonosSystem 2019-12-11 19345 */
 
-	var pluginVersion = '2.1-20230';
+	var pluginVersion = '2.1develop-20314';
 
 	var _UIVERSION = 20167;     /* must coincide with Lua core */
 
@@ -603,7 +603,7 @@ div.sonos-footer { margin: 16px 0px; } \
 		var cv = api.getDeviceState(device, Sonos.SONOS_SYS_SID, "PluginVersion", { dynamic:false }) || "";
 
 		$( '<div class="sonos-footer">Sonos Plugin version ' + cv + "; JSUI " + pluginVersion + 
-			'; <a href="/cgi-bin/cmh/log.sh?Device=LuaUPnP" target=_blank">Show LuaUPnP Log</a>&nbsp;(local&nbsp;only)'
+			'; <a href="/cgi-bin/cmh/log.sh?Device=LuaUPnP" target="_blank">Show LuaUPnP Log</a>&nbsp;(local&nbsp;only)'
 			'</div>' ).appendTo( $container );
 	}
 
