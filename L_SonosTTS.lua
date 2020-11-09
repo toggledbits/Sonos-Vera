@@ -461,7 +461,7 @@ function AzureTTSEngine:say(text, destFile, engineOptions)
 					error("Can't get token, error %1 response, %2", data.error.code, data.error.message)
 					break
 				end
-				error("Unparseable token response")
+				error("Unparseable token response: %1", s)
 			elseif s == "" then
 				error("Empty response, likely failed to negotiate SSL or invalid URL")
 			end
