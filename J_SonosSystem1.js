@@ -218,7 +218,6 @@ var SonosSystem = (function(api, $) {
 		tts.serial = ( tts.serial || 0 ) + 1;
 		tts.timestamp = Math.floor( Date.now() / 1000 );
 		var ts = JSON.stringify( tts );
-		console.log(ts);
 		api.setDeviceStatePersistent(device, Sonos.SONOS_SYS_SID, "TTSConfig", ts,
 			{
 				'onSuccess' : function() {
@@ -294,11 +293,11 @@ var SonosSystem = (function(api, $) {
 			for ( var k=0; k<elist.length; ++k ) {
 				var meta = elist[k];
 				var $col = makeSettingsRow( ( meta.title || meta.id ) + ":", $container, $last );
-				$col.addClass( "form-inline" );
 				var $row = $col.closest( 'div.row' );
 				$row.attr( 'id', 'eopt-' + meta.id ).addClass( "engineopt" );
 				var currVal = undefined === currOpts[meta.id] ? "" : currOpts[meta.id];
 				if ( undefined !== meta.values ) {
+					$col.addClass( "form-inline" ); /* causes auto-size select control */
 					var $mm = $( '<select class="form-control form-control-sm"/>' )
 						.attr( 'id', 'sel-' + meta.id )
 						.appendTo( $col );
@@ -603,7 +602,7 @@ div.sonos-footer { margin: 16px 0px; } \
 		var cv = api.getDeviceState(device, Sonos.SONOS_SYS_SID, "PluginVersion", { dynamic:false }) || "";
 
 		$( '<div class="sonos-footer">Sonos Plugin version ' + cv + "; JSUI " + pluginVersion + 
-			'; <a href="/cgi-bin/cmh/log.sh?Device=LuaUPnP" target="_blank">Show LuaUPnP Log</a>&nbsp;(local&nbsp;only)'
+			'; <a href="/cgi-bin/cmh/log.sh?Device=LuaUPnP" target="_blank">Show LuaUPnP Log</a>&nbsp;(local&nbsp;only)' +
 			'</div>' ).appendTo( $container );
 	}
 
