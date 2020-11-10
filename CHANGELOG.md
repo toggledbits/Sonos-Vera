@@ -21,6 +21,11 @@
 * Remove bogus 1.x defaults from TTS initialization, masking real defaults now in effect.
 * Soft-wrap text input for TTS tab on Sonos device.
 * Improve player display and queue contents accuracy.
+* 20314-01: Add received data to log message for one failure case where it had been missed; easier diag on TTS auths.
+* 20282-01: Workaround very long bearer tokens (longer than allowed command line length) for curl requests in Azure TTS.
+* 20273-01: Upgrade TTS module to 20273.
+* 20229-01: Some recent UK firmware apparently has a different XML response form for zone group topology.
+* 20149-02: Fix errors in player UI that cause incorrect parsing of lists (saved queues, queue, favorites).
 * Hotfix 20149-01 and -02: Fixes for parsing of lists (favorites, etc.) missing last entry (caused more streaming/radio problems).
 * Hotfix 20147-01: Fix for service metadata not being correctly reloaded (affects streaming/radio playback).
 

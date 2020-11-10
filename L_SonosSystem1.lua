@@ -10,7 +10,7 @@
 module( "L_SonosSystem1", package.seeall )
 
 PLUGIN_NAME = "Sonos"
-PLUGIN_VERSION = "2.1develop-20314"
+PLUGIN_VERSION = "2.1develop-20315"
 PLUGIN_ID = 4226
 PLUGIN_URL = "https://github.com/toggledbits/Sonos-Vera"
 
@@ -22,7 +22,7 @@ local DEBUG_MODE = false	-- Don't hardcode true--use state variable config
 local DEVELOPMENT = false	-- ??? Dev: false for production
 
 local MIN_UPNP_VERSION = 20167	-- Minimum version of L_SonosUPnP that works
-local MIN_TTS_VERSION = 20167	-- Minimum version of L_SonosTTS that works
+local MIN_TTS_VERSION = 20314	-- Minimum version of L_SonosTTS that works
 
 local MSG_CLASS = "Sonos"
 local isOpenLuup = false
@@ -704,6 +704,11 @@ local function defaultValue(arr, val, default)
 	return ret
 end
 
+local function useProxy()
+	return getVarNumeric( "UseProxy", isOpenLuup and 0 or 1, pluginDevice, SONOS_SYS_SID ) ~= 0 and
+		upnp.proxyVersionAtLeast(1)
+end
+
 -- Set local and state variable data for zone. `zoneident` can be device number or zone UUID.
 -- Every caller should use ident; the use of device number is deprecated.
 local function setData(name, value, uuid, default)
@@ -813,11 +818,18 @@ local zoneInfoMemberAttributes = { "UUID", "Location", "ZoneName", "HTSatChanMap
 function updateZoneInfo( zs )
 	-- D("updateZoneInfo(%1)", zs)
 	D("updateZoneInfo(<xml>)")
-	zoneInfo = { zones={}, groups={} }
 	-- D("updateZoneInfo() zone info is \r\n%1", zs)
 	local root = lom.parse( zs )
-	A( root and root.tag == "ZoneGroupState" )
-	local groups = xmlNodesForTag( root, "ZoneGroups" )()
+	assert( root and root.tag, "Invalid zone topology data:\n"..zs )
+	-- PHR??? This is odd. Response for at least one users' configuration does not include <ZoneGroupState> enclosing tag.
+	D("updateZoneInfo() zone topology data root tag is %1", root.tag)
+	local groups
+	if root.tag == "ZoneGroupState" then
+		groups = xmlNodesForTag( root, "ZoneGroups" )()
+	elseif root.tag == "ZoneGroups" then
+		groups = root
+	end
+	zoneInfo = { zones={}, groups={} }
 	if not groups then return end -- probably no data yet
 	for v in xmlNodesForTag( groups, "ZoneGroup" ) do
 		local gr = { UUID=v.attr.ID, Coordinator=v.attr.Coordinator, members={} }
@@ -1064,6 +1076,7 @@ local function deviceIsOffline(device)
 	if device > 0 then
 		luup.attr_set( 'invisible', 0, device )
 		if changed then
+			setVar(SONOS_ZONE_SID, "MasterRole", 0, device)
 			setVar(HADEVICE_SID, "LastUpdate", os.time(), device)
 		end
 	end
@@ -1267,7 +1280,7 @@ local function refreshNow(uuid, force, refreshQueue)
 		return
 	end
 
-	if upnp.proxyVersionAtLeast(1) and not force then
+	if useProxy() and not force then
 		D("refreshNow() proxy running, not forced; no update")
 		return
 	end
@@ -1428,7 +1441,7 @@ end
 local function refreshVolumeNow(uuid, force)
 	D("refreshVolumeNow(%1,%2)", uuid, force)
 
-	if upnp.proxyVersionAtLeast(1) and not force then
+	if useProxy() and not force then
 		return
 	end
 	local Rendering = upnp.getService(uuid, UPNP_RENDERING_CONTROL_SERVICE)
@@ -1453,10 +1466,10 @@ local function refreshVolumeNow(uuid, force)
 	end
 end
 
-local function refreshMuteNow(uuid)
+local function refreshMuteNow(uuid, force)
 	D("refreshMuteNow(%1)", uuid)
 
-	if upnp.proxyVersionAtLeast(1) then
+	if useProxy() and not force then
 		return
 	end
 	local Rendering = upnp.getService(uuid, UPNP_RENDERING_CONTROL_SERVICE)
@@ -1485,7 +1498,7 @@ local function updateWithoutProxy(task, device)
 	D("updateWithoutProxy(%1,%2)", tostring(task), device)
 	local uuid = findZoneByDevice( device )
 	refreshNow(uuid, false, true)
-	if not upnp.proxyVersionAtLeast(1) then
+	if not useProxy() then
 		local ts = dataTable[uuid].TransportState or "STOPPED"
 		local rp,rs = getVar("PollDelays", "15,60", device, SONOS_ZONE_SID):match( '^(%S+)%,%s*(.*)$' )
 		rp = tonumber(rp) or 15
@@ -2660,13 +2673,10 @@ end
 
 setup = function(zoneDevice, flag)
 	D("setup(%1,%2)", zoneDevice, flag)
-	local changed = false
 
 	if getVarNumeric( "Enabled", 1, pluginDevice, SONOS_SYS_SID ) == 0 then
-		setVar(SONOS_ZONE_SID, "SonosOnline", "0", zoneDevice)
-		setVar(UPNP_AVTRANSPORT_SID, "CurrentStatus", "Offline", zoneDevice)
-		setVar(SONOS_ZONE_SID, "ProxyUsed", "", zoneDevice) -- plugin variable??? different per zone?
 		E("Can't start #%1; plugin is disabled", zoneDevice)
+		deviceIsOffline( zoneDevice )
 		return false
 	end
 
@@ -2741,11 +2751,24 @@ setup = function(zoneDevice, flag)
 			status = false
 		end
 	end
+	if not status then -- N.B. not else!
+		E("Zone %1 (#%2) appears to be offline. %3", (luup.devices[zoneDevice] or {}).description,
+			zoneDevice, uuid)
+		deviceIsOffline( zoneDevice )
+		return false
+	end
+
+	-- Mark online
+	dataTable[uuid] = {}
+
+	deviceIsOnline(zoneDevice)
+
+	local changed = setData("CurrentStatus", "Online", uuid, false)
 
 	-- Subscribe to service notifications from proxy. If we know ourselves to be a satellite at
 	-- this point, don't.
 	if status and isControllableZone( uuid ) then
-		if upnp.proxyVersionAtLeast(1) then
+		if useProxy() then
 			-- Create subscription lists from templates. Deep copies because the subscriber modifies
 			-- them per zone/uuid. Non-master don't subscribe to topology or content updates.
 			EventSubscriptions[uuid] = {}
@@ -2771,20 +2794,6 @@ setup = function(zoneDevice, flag)
 			BROWSE_TIMEOUT = 5
 		end
 	end
-
-	if not status then
-		setVar(SONOS_ZONE_SID, "SonosOnline", "0", zoneDevice)
-		setVar(UPNP_AVTRANSPORT_SID, "CurrentStatus", "Offline", zoneDevice)
-		setVar(SONOS_ZONE_SID, "ProxyUsed", "", zoneDevice) -- ??? plugin variable? see above
-		E("Zone %1 (#%2) appears to be offline. %3", (luup.devices[zoneDevice] or {}).description,
-			zoneDevice, uuid)
-		return false
-	end
-
-	dataTable[uuid] = {}
-
-	deviceIsOnline(zoneDevice)
-	changed = setData("CurrentStatus", "Online", uuid, changed)
 
 	changed = setData("SonosID", uuid, uuid, changed)
 	local roomName = upnp.decode( values.roomName or "" )
@@ -3025,7 +3034,7 @@ local function deferredStartup(device)
 	device = tonumber(device)
 
 	-- Allow configured no-proxy operation
-	if getVarNumeric( "UseProxy", isOpenLuup and 0 or 1, device, SONOS_SYS_SID ) == 0 then
+	if not useProxy() then
 		upnp.unuseProxy()
 	else
 		scheduler.Task:new("checkProxy", device, checkProxy, { device }):delay(300)
