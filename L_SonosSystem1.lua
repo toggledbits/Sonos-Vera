@@ -3402,7 +3402,7 @@ function startup( lul_device )
 	local x,y = pcall( fixLegacyIcons )
 	if not x then T({level=1,msg="fixLegacyIcons: %1 %2"}, x, y) end
 
-	D("startup() UPnP module version is %1", upnp.VERSION)
+	L("UPnP module version is %1", upnp.VERSION)
 	if ( upnp.VERSION or 0 ) < MIN_UPNP_VERSION then
 		E("The L_SonosUPNP module installed (%1) is not compatible with this version of the plugin core.",
 			upnp.VERSION)
@@ -3411,7 +3411,7 @@ function startup( lul_device )
 	if not tts then
 		L("TTS module is not installed (it's optional)")
 	else
-		D("startup() TTS module version is %1", tts.VERSION)
+		L("TTS module version is %1", tts.VERSION)
 		if ( tts.VERSION or 0 ) < MIN_TTS_VERSION then
 			W("The L_SonosTTS module installed (%1) may not be compatible with this version of the plugin core.",
 				tts.VERSION)
