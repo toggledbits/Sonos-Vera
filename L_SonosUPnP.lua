@@ -6,7 +6,7 @@
 
 module("L_SonosUPnP", package.seeall)
 
-VERSION = 20103
+VERSION = 20316
 DEBUG_MODE = false
 
 local url = require("socket.url")
@@ -745,19 +745,19 @@ end
 
     local descriptionXML = UPnP_getDeviceDescription(descriptionURL)
     if (descriptionXML == nil) then
-        return false, false, "", {}, nil
+        return false, false, {}, "", ""
     end
 
     local baseURL, baseDirectory = descriptionURL:match("(http://[%d%.]-:%d+)(/.-)[^/]*$")
 
     local found = false
     for _, info in ipairs(infos) do
-        if (info == "UDN") then
+        if info == "UDN" then
             found = true
             break
         end
     end
-    if (not found) then
+    if not found then
         table.insert(infos, "UDN")
     end
 
@@ -774,9 +774,8 @@ end
         addServices(uuid, descriptionURL, descriptionXML, subsetServices)
     end
 
-    return true, aresServicesLoaded(uuid), values, iconURL
+    return true, aresServicesLoaded(uuid), values, iconURL, descriptionXML
   end
-
 
 
   function testURL(URLtoBeChecked, headers)

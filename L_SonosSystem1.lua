@@ -8,7 +8,7 @@
 module( "L_SonosSystem1", package.seeall )
 
 PLUGIN_NAME = "Sonos"
-PLUGIN_VERSION = "2.0-hotfix20315.1540"
+PLUGIN_VERSION = "2.0-hotfix20316.1545"
 PLUGIN_ID = 4226
 PLUGIN_URL = "https://github.com/toggledbits/Sonos-Vera"
 
@@ -19,8 +19,8 @@ local DEBUG_MODE = false	-- Don't hardcode true--use state variable config
 
 local DEVELOPMENT = false	-- ??? Dev: false for production
 
-local MIN_UPNP_VERSION = 20103	-- Minimum version of L_SonosUPnP that works
-local MIN_TTS_VERSION = 20286	-- Minimum version of L_SonosTTS that works
+local MIN_UPNP_VERSION = 20316	-- Minimum version of L_SonosUPnP that works
+local MIN_TTS_VERSION = 20314	-- Minimum version of L_SonosTTS that works
 
 local MSG_CLASS = "Sonos"
 local isOpenLuup = false
@@ -797,6 +797,7 @@ function updateZoneInfo( zs )
 	-- D("updateZoneInfo(%1)", zs)
 	D("updateZoneInfo(<xml>)")
 	-- D("updateZoneInfo() zone info is \r\n%1", zs)
+	setVar( SONOS_SYS_SID, "LZT", zs, pluginDevice )
 	local root = lom.parse( zs )
 	assert( root and root.tag, "Invalid zone topology data:\n"..zs )
 	-- PHR??? This is odd. Response for at least one users' configuration does not include <ZoneGroupState> enclosing tag.
@@ -915,6 +916,7 @@ local function updateZoneGroupTopology(uuid)
 		local status, tmp = ZoneGroupTopology.GetZoneGroupState({})
 		if status then
 			local groupsState = upnp.extractElement("ZoneGroupState", tmp, "")
+			-- setData( uuid, "ZoneGroupState", groupState, false )
 			updateZoneInfo( groupsState )
 			return true
 		end
@@ -2527,7 +2529,7 @@ setup = function(zoneDevice, flag)
 	end
 
 	local descrURL = string.format(descriptionURL, newIP, port)
-	local status, _, values, icon =
+	local status, _, values, icon, descr =
 							 upnp.setup(descrURL,
 										"urn:schemas-upnp-org:device:ZonePlayer:1",
 										{ "UDN", "roomName", "modelName", "modelNumber" },
@@ -2541,6 +2543,7 @@ setup = function(zoneDevice, flag)
 											UPNP_GROUP_RENDERING_CONTROL_SERVICE } },
 										{ "urn:schemas-upnp-org:device:MediaServer:1",
 											{ UPNP_MR_CONTENT_DIRECTORY_SERVICE } }})
+	setVar( SONOS_ZONE_SID, "DDXML", descr or "", zoneDevice )
 	if status then
 		local newuuid = values.UDN:match("uuid:(.+)") or ""
 		if uuid ~= newuuid then
@@ -4237,7 +4240,7 @@ function actionSonosNotifyZoneGroupTopologyChange( lul_device, lul_settings )
 	end
 	if (upnp.isValidNotification("NotifyZoneGroupTopologyChange", lul_settings.sid, EventSubscriptions[uuid])) then
 		local groupsState = lul_settings.ZoneGroupState or error("Missing ZoneGroupState")
-
+		-- setData("ZoneGroupState", groupState, uuid, false)
 		updateZoneInfo( groupsState )
 		return 4,0
 	end
