@@ -14,7 +14,6 @@
 * TTS configuration now allows the endpoint to be specified in addition to the region. If the endpoint is left blank, `https://<region>.tts.speech.microsoft.com/` is used.
 * New action `urn:micasaverde-com:serviceId:Sonos1/AcquireGroupControl` to become group controller of a zone's current group.
 * New action `urn:micasaverde-com:serviceId:Sonos1/DelegateGroupControl` to delegate group controller authority to another zone (`Zone` parameter must contain a single zone UUID or zone name).
-* A device-specific TTS/Alert volume can be specified by placing the volume (0-100) in the `TTSVolume` state variable of any device. If the value has a leading +/-, it is a relative volume adjustment from the current volume, whatever it may be. All of this only works if no volume is passed to the `Say` or `Alert` actions.
 * Azure TTS now works for Vera3/Lite. It is necessary to switch the "Requestor" in the TTS settings to "curl".
 * Change the order of operations and use a temporary mute and volume ramp during post-TTS/alert recovery. It was reported that in some cases, the previous media was being resumed at excessive volume (TTS/alert volume) for a second or two before it recovered. This never happened to me, but I think these changes will fix it for those that do.
 * Support extra fields for MaryTTS, in case there's more that needs to be passed on the URL that isn't preconfigured/canned.

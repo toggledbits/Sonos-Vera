@@ -2214,9 +2214,9 @@ local function setupTTSSettings(device)
 	local chd = getVar( "TTSChime", "", device, SONOS_SYS_SID, true )
 	if chd == "" then
 		if not isOpenLuup then
-			os.remove( "/www/sonos/Sonos_chime.mp3" )
-			os.remove( "/www/sonos/Sonos_chime.wav" )
-			os.remove( "/www/sonos/Sonos_chime.mp3.lzo" )
+			os.remove( TTSBasePath .. "Sonos_chime.mp3" )
+			os.remove( TTSBasePath .. "Sonos_chime.wav" )
+			os.remove( TTSBasePath .. "Sonos_chime.mp3.lzo" )
 		end
 		os.remove( installPath .. "Sonos_chime.mp3.lzo" )
 		os.remove( installPath .. "Sonos_chime.wav" )
@@ -3001,19 +3001,19 @@ local function runMasterTick( task )
 		W("WARNING! Less than 1MB free space available on %2 (%1K)", f, inst)
 		panic = true
 	end
-	if p and p >= 90 then
+	if p and p >= 95 then
 		W("WARNING! Free space on %2 is critical (%1%% full)", p, inst)
 		panic = true
 	end
 	if not isOpenLuup then
-		f,p = getFreeSpace( "/www/sonos/" )
-		D("runMasterTick() /www/sonos has %1K free at %2%%", f, p)
+		f,p = getFreeSpace( TTSBasePath )
+		D("runMasterTick() %3 has %1K free at %2%%", f, p, TTSBasePath)
 		if f and f < 1024 then
-			W("WARNING! Less than 1MB free space available on /www/sonos (%1K)", f)
+			W("WARNING! Less than 1MB free space available on %2 (%1K)", f, TTSBasePath)
 			panic = true
 		end
-		if p and p >= 90 then
-			W("WARNING! Free space on /www/sonos is critical (%1%% full)", p)
+		if p and p >= 95 then
+			W("WARNING! Free space on %2 is critical (%1%% full)", p, TTSBasePath)
 			panic = true
 		end
 	end
@@ -3055,56 +3055,13 @@ local function deferredStartup(device)
 		end
 	end
 
-	-- Look for and upgrade any 1.x zones remaining that don't have 2.x devices
-	local reload = false
-	for k,v in pairs( luup.devices ) do
-		if v.device_type == SONOS_ZONE_DEVICE_TYPE and v.device_num_parent == 0 then
-			local zid = getVar( "SonosID", "", k, UPNP_DEVICE_PROPERTIES_SID )
-			if zid ~= "" and not Zones[zid] then
-				-- Old-style standalone; convert to child
-				zid = getVar( "SonosID", tostring(k), k, UPNP_DEVICE_PROPERTIES_SID )
-				W("Adopting v1.x device %2 (#%3) %4 by new parent %1", device, v.description, k, zid)
-				luup.attr_set( "altid", zid, k )
-				luup.attr_set( "id_parent", device, k )
-				setVar( UPNP_AVTRANSPORT_SID, "CurrentStatus", "Upgrade in progress...", k )
-				reload = true
-			else
-				-- Leave orphan zombied.
-				W("Leaving old v1.x device %1 (#%2) %4 as orphan; it can be safely deleted; it has been replaced by #%3",
-					v.description, k, Zones[zid], zid)
-				setVar(UPNP_AVTRANSPORT_SID, "CurrentStatus", "DELETE ME!", k)
-			end
-			luup.attr_set( "invisible", 0, k )
-			luup.attr_set( "impl_file", "", k )
-			luup.attr_set( "plugin", "", k )
-			-- Fix IP always (even orphan, because it can be adopted by removing new device + reload)
-			local ip = luup.attr_get( "ip", k ) or ""
-			if ip ~= "" then
-				setVar( SONOS_ZONE_SID, "SonosIP", ip, k )
-				luup.attr_set( "mac", "", k )
-				luup.attr_set( "ip", "", k )
-			end
-			luup.set_failure( 1, k )
-		end
-	end
-	-- And reload if devices were upgraded.
-	if reload then
-		setVar( SONOS_SYS_SID, "Message", "Upgrading devices... please wait", pluginDevice )
-		W("Converted old standalone devices to children; reloading Luup")
-		luup.reload()
-		return false, "Reload required", MSG_CLASS
-	end
-
 	-- At this point, we can be considered ready. We want to allow discovery now.
 	systemReady = true
 
 	-- If there are no children, launch discovery and see if we can find some.
 	-- Otherwise, check the zone topology to see if there are zones we don't have.
 	if getVarNumeric( "StartupInventory", 1, device, SONOS_SYS_SID ) ~= 0 then
-		if count == 0 then
-			L"No children; launching discovery to see who I can find."
-			luup.call_action( SONOS_SYS_SID, "StartSonosDiscovery", {}, device )
-		elseif zoneInfo and next( zoneInfo.zones ) then
+		if zoneInfo and next( zoneInfo.zones or {} ) then
 			-- ??? TO-DO: this may be a good opportunity to handle child devices no longer in zoneInfo
 			D("deferredStartup() taking inventory")
 			local newZones = {}
@@ -3138,7 +3095,7 @@ local function deferredStartup(device)
 		end
 	end
 
-	-- Identify and mark two lowest-numbered non-satellite zones as network masters for us.
+	-- Identify and mark two non-satellite zones as network masters for us.
 	-- This means they will be subscribed to topology and content updates; others will not.
 	L("Selecting zones for master role...")
 	local chorder = {}
@@ -3159,6 +3116,15 @@ local function deferredStartup(device)
 	-- Push designated master(s) to the front of the list
 	for _,dev in ipairs( designated ) do table.insert( chorder, 1, dev ) end
 	local nummaster = getVarNumeric( "NumMasters", 2, device, SONOS_SYS_SID )
+	if #chorder == 0 then
+		-- Uh oh... no masters selected at all. Force all zones; this is usually temporary
+		-- (a startup condition until the initial zone topology is loaded).
+		for _,dev in pairs( Zones ) do
+			table.insert( chorder, dev )
+		end
+		W("No eligible zones selected for master role. Forcing all %1 zones as masters.", #chorder)
+		nummaster = #chorder
+	end
 	if nummaster > #chorder then nummaster = #chorder end
 	masterZones = {}
 	for k = 1, nummaster do
@@ -3242,20 +3208,29 @@ function startup( lul_device )
 
 	-- Hmmm... are we a zone device that's been given the new implementation file?
 	if luup.devices[lul_device].device_type == SONOS_ZONE_DEVICE_TYPE then
-		E("Detected system startup on zone device. Fixing!")
-		L("zone device is %1", getVar( "SonosID", "", lul_device, UPNP_DEVICE_PROPERTIES_SID ))
-		luup.attr_set( "impl_file", "", lul_device )
-		luup.attr_set( "device_file", "D_Sonos1.xml", lul_device )
-		luup.attr_set( "plugin", "", lul_device )
-		return true, "*Upgrading...", "Sonos"
+		E("Detected 1.x devices! YOU MUST INSTALL PLUGIN VERSION 2.0 TO UPGRADE FROM 1.x; THEN YOU CAN RE-INSTALL THIS VERSION "..PLUGIN_VERSION)
+		E("SEE https://github.com/toggledbits/Sonos-Vera/blob/stable/README.md")
+		luup.set_failure( 1, lul_device )
+		return false, "Invalid configuration/version", "Sonos"
 	elseif luup.devices[lul_device].device_type ~= SONOS_SYS_DEVICE_TYPE then
 		E("I don't know what kind of device I am! #%1, %2", lul_device, luup.devices[lul_device].device_type)
 		luup.set_failure( 1, lul_device )
-		return false, "Invalid device", "Sonos"
+		return false, "Invalid device type", "Sonos"
+	end
+
+	-- Take a pass over all devices and see if any need upgrade.
+	for _,v in pairs( luup.devices ) do
+		if v.device_type == SONOS_ZONE_DEVICE_TYPE and v.device_num_parent == 0 then
+			E("Detected 1.x devices! YOU MUST INSTALL PLUGIN VERSION 2.0 TO UPGRADE FROM 1.x; THEN YOU CAN RE-INSTALL THIS VERSION "..PLUGIN_VERSION)
+			E("SEE https://github.com/toggledbits/Sonos-Vera/blob/stable/README.md")
+			luup.set_failure( 1, lul_device )
+			return false, "Invalid configuration/version", "Sonos"
+		end
 	end
 
 	systemReady = false
 	isOpenLuup = luup.openLuup ~= nil
+	if pluginDevice then error("Multi-instance is not supported for this plugin!") end
 	pluginDevice = lul_device
 	unsafeLua = isOpenLuup or ( luup.attr_get( "UnsafeLua", 0 ) or "1" ) == "1"
 
@@ -3267,20 +3242,6 @@ function startup( lul_device )
 		pcall( logToFile, string.rep( "_", 132) )
 		pcall( logToFile, string.format( "Log file opened at startup; device %d; plugin %s; luup %s",
 			lul_device, PLUGIN_VERSION, luup.version) )
-	end
-
-	-- Quick pass at devices to check for duplicate master devices. Only lowest-numbered survives/runs.
-	local master = lul_device
-	for k,v in pairs( luup.devices ) do
-		if v.device_type == SONOS_SYS_DEVICE_TYPE then
-			if k < master then master = k end
-		end
-	end
-	if lul_device ~= master then
-		E("Duplicate Sonos System master device! Real master is #%1", master)
-		luup.variable_set( SONOS_SYS_SID, "Message", "Duplicate master device! Delete me!", lul_device )
-		luup.set_failure( 1, lul_device )
-		return false, "Duplicate master device!", PLUGIN_NAME
 	end
 
 	-- Check required packages.
@@ -3297,7 +3258,7 @@ function startup( lul_device )
 	if installVersion then
 		L("Installed (App Marketplace) plugin version is %1", installVersion)
 		if installVersion < 39806 then -- 28820 is 1.4, 39806 is first 2.0 RC
-			E("The App Marketplace version of the v1.x plugin (%1) is installed! You must first uninstall it to run this version.", installVersion, PLUGIN_VERSION)
+			E("The App Marketplace version of the v1.x plugin (%1) is installed! You must first uninstall it and upgrade through version 2.0; you can thereafter upgrade to this version.", installVersion, PLUGIN_VERSION)
 			luup.attr_set( "plugin", "", lul_device )
 			for k,v in pairs( luup.devices ) do
 				if v.device_type == SONOS_ZONE_DEVICE_TYPE then
@@ -3363,22 +3324,6 @@ function startup( lul_device )
 			os.execute( string.format( "pluto-lzo c '%s/S_VeraAlexaSay1.xml' '%s/S_VeraAlexaSay1.xml.lzo'", ipath, ipath ) )
 		end
 		if not unc then os.remove( ipath.."S_VeraAlexaSay1.xml" ) end
-	end
-
-	-- Disable old plugin implementation if present.
-	if false and not isOpenLuup then
-		-- For now, don't do this on Vera. We need our version of the impl file around to bootstrap
-		-- the new version, since Luup's plugin upgrade won't create the new system device itself.
-		if file_exists( ipath .. "I_Sonos1.xml.lzo" ) or file_exists( ipath .. "I_Sonos1.xml" ) then
-			W("Removing old Sonos plugin implementation files (for standalone devices, no longer used)")
-			os.remove(ipath.."I_Sonos1.xml.lzo")
-			os.remove(ipath.."I_Sonos1.xml")
-		end
-	end
-	-- These are removed on all platforms.
-	for _,v in ipairs{ "L_Sonos1.lua", "D_Sonos1_UI4.json" } do
-		if file_exists( ipath .. v .. ".lzo" ) then os.remove( ipath .. v .. ".lzo" ) end
-		if file_exists( ipath .. v ) then os.remove( ipath .. v ) end
 	end
 
 	-- Find existing child zones
@@ -4475,7 +4420,8 @@ end
 function actionSonosNotifyZoneGroupTopologyChange( lul_device, lul_settings )
 	local uuid = findZoneByDevice( lul_device )
 	-- D("actionSonosNotifyZoneGroupTopologyChange(%1,%2)", lul_device, lul_settings)
-	D("actionSonosNotifyZoneGroupTopologyChange(%1, lul_settings) uuid is %2", lul_device, uuid)
+	D("actionSonosNotifyZoneGroupTopologyChange(%1, lul_settings) uuid is %2 parent %3",
+		lul_device, uuid, luup.devices[lul_device].device_num_parent)
 	A(luup.devices[lul_device].device_type == SONOS_ZONE_DEVICE_TYPE)
 	A( uuid ~= nil )
 	A( EventSubscriptions[uuid] ~= nil )

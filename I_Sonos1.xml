@@ -2,48 +2,10 @@
 <!-- I_Sonos1.xml -->
 <implementation>
     <functions>
-		-- Bootstrap to 2.0 from 1.x
-
-		function legacy_reload()
-			luup.log("\n***** Sonos: reloading Luup after device creation *****\n",2)
-			luup.reload()
-		end
-
-		function legacy_check( pdev )
-			pdev = tonumber( pdev ) or error("I_Sonos.xml:legacy_check(): Invalid device number")
-			luup.log("Sonos legacy bootstrap now checking system state...",2)
-			local found = false
-			local lmin
-			for k,v in pairs( luup.devices ) do
-				if v.device_type == "urn:schemas-toggledbits-com:device:SonosSystem:1" then
-					found = k
-					luup.log("Sonos legacy bootstrap found v2.x system device at "..tostring(k))
-				elseif v.device_type == "urn:schemas-micasaverde-com:device:Sonos:1" and v.device_num_parent == 0 then
-					if not lmin or k &lt; lmin then lmin = k end
-					luup.attr_set( "impl_file", "", k )
-				end
-			end
-			if not found and lmin == pdev then
-				-- Create new Sonos System device, reload.
-				luup.log("Sonos legacy bootstrap creating new 2.x master device (reload required)",2)
-				luup.call_action( "urn:micasaverde-com:serviceId:HomeAutomationGateway1",
-					"CreateDevice", { Description="Sonos System", UpnpDevFilename="D_SonosSystem1.xml",
-						UpnpImplFilename="I_SonosSystem1.xml" }, 0 )
-				luup.call_delay( 'legacy_reload', 10 )
-			end
-		end
-
+		-- Bootstrap from 1.x to 2.1+ not possible; must go through 2.0.
 		function legacy_start( pdev )
-			luup.log("Sonos legacy bootstrap 20135 starting",1)
-			local f = io.open("/etc/cmh-ludl/Z_SonosSystem1.zzz","r")
-			if f then
-				f:close()
-				luup.log("Sonos (I_Sonos1.xml): file /etc/cmh-ludl/Z_SonosSystem1.zzz exists, aborting startup!", 1)
-				return false, "Zzz", "Sonos"
-			end
-			luup.log("Sonos legacy bootstrap scheduling upgrade check for 60 seconds...",2)
-			luup.call_delay( 'legacy_check', 60, tostring(pdev) )
-			return true, "Upgrading...", "Sonos"
+			luup.log("Sonos legacy bootstrap 20351 starting",1)
+			return false, "Can't upgrade device", "Sonos"
 		end
 	</functions>
 	<startup>legacy_start</startup>
