@@ -10,12 +10,12 @@
 module( "L_SonosSystem1", package.seeall )
 
 PLUGIN_NAME = "Sonos"
-PLUGIN_VERSION = "2.1develop-20315"
+PLUGIN_VERSION = "2.1develop-21150"
 PLUGIN_ID = 4226
 PLUGIN_URL = "https://github.com/toggledbits/Sonos-Vera"
 
 local _CONFIGVERSION = 20178
-local _UIVERSION = 20167
+local _UIVERSION = 21150
 
 local DEBUG_MODE = false	-- Don't hardcode true--use state variable config
 
@@ -3233,6 +3233,7 @@ function startup( lul_device )
 	if pluginDevice then error("Multi-instance is not supported for this plugin!") end
 	pluginDevice = lul_device
 	unsafeLua = isOpenLuup or ( luup.attr_get( "UnsafeLua", 0 ) or "1" ) == "1"
+	if isOpenLuup then L("openLuup detected") end
 
 	local debugLogs = getVarNumeric("DebugLogs", 0, lul_device, SONOS_SYS_SID)
 	setDebugLogs(debugLogs)

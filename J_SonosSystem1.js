@@ -15,9 +15,9 @@ var SonosSystem = (function(api, $) {
 	/* unique identifier for this plugin... */
 	var uuid = '79bf9374-f989-11e9-884c-dbb32f3fa64a'; /* SonosSystem 2019-12-11 19345 */
 
-	var pluginVersion = '2.1develop-20315';
+	var pluginVersion = '2.1develop-21150';
 
-	var _UIVERSION = 20167;     /* must coincide with Lua core */
+	var _UIVERSION = 21150;     /* must coincide with Lua core */
 
 	var myModule = {};
 
@@ -172,18 +172,18 @@ var SonosSystem = (function(api, $) {
 	}
 
 	function makeSettingsRow( label, $container, $pred ) {
-		var $row = $('<div class="row"/>');
+		var $row = $('<div class="row"></div>');
 		if ( $pred ) {
 			$row.insertAfter( $pred );
 		} else {
 			$row.appendTo( $container );
 		}
-		var $col = $( '<div class="col-xs-6 col-sm-6 col-md-4 text-right"><span class="rowlabel"/></div>' )
+		var $col = $( '<div class="col-xs-6 col-sm-6 col-md-4 text-right"><span class="rowlabel"></span></div>' )
 			.appendTo( $row );
 		if ( "" !== ( label || "" ) ) {
 			$('span.rowlabel', $col).text( label || "" );
 		}
-		$col = $( '<div class="col-xs-6 col-sm-6 col-md-8"/>' )
+		$col = $( '<div class="col-xs-6 col-sm-6 col-md-8"></div>' )
 			.appendTo( $row );
 		return $col;
 	}
@@ -298,21 +298,21 @@ var SonosSystem = (function(api, $) {
 				var currVal = undefined === currOpts[meta.id] ? "" : currOpts[meta.id];
 				if ( undefined !== meta.values ) {
 					$col.addClass( "form-inline" ); /* causes auto-size select control */
-					var $mm = $( '<select class="form-control form-control-sm"/>' )
+					var $mm = $( '<select class="form-control form-control-sm"></select>' )
 						.attr( 'id', 'sel-' + meta.id )
 						.appendTo( $col );
 					if ( meta.unrestricted ) {
-						$( '<option/>' ).val( "*" ).text( "(user-supplied/custom value)" )
+						$( '<option></option>' ).val( "*" ).text( "(user-supplied/custom value)" )
 							.appendTo( $mm );
 					}
 					if ( Array.isArray( meta.values ) ) {
 						meta.values.sort();
 						if ( undefined !== meta.default ) {
-							$( '<option/>' ).val( "" ).text( "(engine default: " + meta.default + ")" )
+							$( '<option></option>' ).val( "" ).text( "(engine default: " + meta.default + ")" )
 								.prependTo( $mm );
 						}
-						for ( ix=0; ix<meta.values.length; ix++ ) {
-							$( '<option/>' ).val( meta.values[ix] )
+						for ( var ix=0; ix<meta.values.length; ix++ ) {
+							$( '<option></option>' ).val( meta.values[ix] )
 								.text( meta.values[ix] )
 								.appendTo( $mm );
 						}
@@ -330,17 +330,17 @@ var SonosSystem = (function(api, $) {
 							return v1 < v2 ? -1 : 1;
 						});
 						if ( undefined !== meta.default ) {
-							$( '<option/>' ).val( "" ).text( "(engine default: " +
+							$( '<option></option>' ).val( "" ).text( "(engine default: " +
 								( meta.values[meta.default] ? meta.values[meta.default] : meta.default ) +
 								")" ).prependTo( $mm );
 						}
-						for ( ix=0; ix<vl.length; ix++ ) {
-							$( '<option/>' ).val( vl[ix].id ).text( vl[ix].val )
+						for ( var ix=0; ix<vl.length; ix++ ) {
+							$( '<option></option>' ).val( vl[ix].id ).text( vl[ix].val )
 								.appendTo( $mm );
 						}
 					}
 					/* Add the "real" value field */
-					$( '<input/>' ).attr( 'type', 'hidden' )
+					$( '<input>' ).attr( 'type', 'hidden' )
 						.attr( 'id', 'val-' + meta.id )
 						.addClass("form-control form-control-sm enginesetting")
 						.attr( 'placeholder', 'Enter custom/non-standard value' )
@@ -375,17 +375,17 @@ var SonosSystem = (function(api, $) {
 						}
 					});
 				} else {
-					$( '<input type="text" class="form-control form-control-sm enginesetting"/>' )
+					$( '<input type="text" class="form-control form-control-sm enginesetting">' )
 						.attr( 'id', 'val-' + meta.id )
 						.val( currVal )
 						.appendTo( $col );
 				}
 				if ( undefined !== meta.infourl ) {
-					$( '<a/>' ).attr( 'href', meta.infourl ).attr( 'target', '_blank' )
+					$( '<a></a>' ).attr( 'href', meta.infourl ).attr( 'target', '_blank' )
 						.text( '[info]' ).appendTo( $col );
 				}
 				if ( undefined !== meta.default ) {
-					$( '<div class="inp-default" />' ).text( "Default: " +
+					$( '<div class="inp-default"></div>' ).text( "Default: " +
 						( "" === meta.default ? "(blank)" : meta.default ) )
 						.appendTo( $col );
 				}
@@ -443,7 +443,7 @@ var SonosSystem = (function(api, $) {
 
 		var rate = api.getDeviceState(device, Sonos.SONOS_SID, "CheckStateRate") || "";
 
-		var html =  '<div id="sonos-settings" class="sonostab" />';
+		var html =  '<div id="sonos-settings" class="sonostab"></div>';
 		api.setCpanelContent(html);
 
 		if ( 0 === $( 'style#sonos-settings-styles' ).length ) {
@@ -458,7 +458,7 @@ div.sonos-footer { margin: 16px 0px; } \
 
 		var $container = $( 'div#sonos-settings' );
 
-		var $row = $('<div class="row"/>');
+		var $row = $('<div class="row"></div>');
 		var $col = $( '<div class="col-xs-12 col-sm-12">Device (Zone) Discovery</div>' )
 			.appendTo( $row );
 		$row.appendTo( $container );
@@ -481,7 +481,7 @@ div.sonos-footer { margin: 16px 0px; } \
 			.on( 'click.sonos', handleDiscoverClick )
 			.appendTo( $col );
 		val = api.getDeviceState(device, Sonos.SONOS_SYS_SID, "DiscoveryMessage");
-		$( '<span id="discovery-status"/>' ).text(val || "").appendTo( $col );
+		$( '<span id="discovery-status"></span>' ).text(val || "").appendTo( $col );
 
 		$col = makeSettingsRow( "Manual Include:", $container );
 		$( '<label>IP Address:&nbsp;<input type="text" id="manip" class="form-control"></label>' ).appendTo( $col );
@@ -503,13 +503,13 @@ div.sonos-footer { margin: 16px 0px; } \
 			})
 			.appendTo( $col );
 
-		$row = $('<div class="row"/>').appendTo( $container );
+		$row = $('<div class="row"></div>').appendTo( $container );
 		$col = $( '<div class="col-xs-12 col-sm-12">Text-to-Speech (TTS)</div>' )
 			.appendTo( $row );
 
 		$col = makeSettingsRow( "Default Engine:", $container );
 		$col.attr( 'id', 'ttsenginerow' ).addClass( "form-inline" );
-		var $el = $( '<select id="tts-engine" class="form-control" />' );
+		var $el = $( '<select id="tts-engine" class="form-control"></select>' );
 		$el.appendTo( $col );
 		$.ajax({
 			url: api.getDataRequestURL(),
@@ -526,7 +526,7 @@ div.sonos-footer { margin: 16px 0px; } \
 			for ( var eid in ( TTSEngines || {} ) ) {
 				if ( TTSEngines.hasOwnProperty( eid ) ) {
 					var eng = TTSEngines[eid];
-					$opt = $( '<option/>' ).val( eid ).text( eng.name || eid );
+					$opt = $( '<option></option>' ).val( eid ).text( eng.name || eid );
 					$el.append( $opt );
 				}
 			}
@@ -542,7 +542,7 @@ div.sonos-footer { margin: 16px 0px; } \
 
 			$opt = $( 'option[value="' + val + '"]', $el );
 			if ( 0 === $opt.length ) {
-				$( '<option/>' ).val( val ).text( val + " (not available)" )
+				$( '<option></option>' ).val( val ).text( val + " (not available)" )
 					.appendTo( $el );
 			}
 			$el.val( val ).on( 'change.sonos', handleTTSEngineChange );
@@ -551,13 +551,13 @@ div.sonos-footer { margin: 16px 0px; } \
 			$el.replaceWith( "<span>Failed to load TTS engines; Luup may be reloading. To retry, wait a moment, then go back to the Control tab, then come back here.</span>");
 		});
 
-		$row = $( '<div class="row"/>' );
+		$row = $( '<div class="row"></div>' );
 		$col = $( '<div class="col-xs-12 col-sm-12">Other Plugin Settings</div>' )
 			.appendTo( $row );
 		$row.appendTo( $container );
 		if ( !isOpenLuup ) {
 			$col = makeSettingsRow( "UPnP Event Proxy:", $container );
-			$el = $( '<span id="proxy-state" />' );
+			$el = $( '<span id="proxy-state"></span>' );
 			$el.appendTo( $col );
 			var devices = api.getListOfDevices();
 			var installed = false;
@@ -570,7 +570,7 @@ div.sonos-footer { margin: 16px 0px; } \
 			}
 			if ( ! installed ) {
 				$el.text("not installed -- ");
-				$( '<a/>' ).attr( 'href', api.getDataRequestURL() + "?id=action&serviceId=urn:micasaverde-com:serviceId:HomeAutomationGateway1&action=CreatePlugin&PluginNum=3716" )
+				$( '<a></a>' ).attr( 'href', api.getDataRequestURL() + "?id=action&serviceId=urn:micasaverde-com:serviceId:HomeAutomationGateway1&action=CreatePlugin&PluginNum=3716" )
 					.attr( 'target', '_blank' )
 					.text( "install it now" )
 					.appendTo( $col );

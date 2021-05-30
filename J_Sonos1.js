@@ -15,9 +15,9 @@ var Sonos = (function(api, $) {
 	/* unique identifier for this plugin... */
 	var uuid = '79bf9374-f989-11e9-884c-dbb32f3fa64a'; /* SonosSystem 2019-12-11 19345 */
 
-	var pluginVersion = '2.1develop-20315';
+	var pluginVersion = '2.1develop-21150';
 
-	var _UIVERSION = 20167;     /* must coincide with Lua core */
+	var _UIVERSION = 21150;     /* must coincide with Lua core */
 
 	var myModule = {};
 
@@ -101,7 +101,7 @@ var Sonos = (function(api, $) {
 
 		html += '<table cellpadding="2">';
 		html += '<tr>';
-		html += '<td rowspan=6><img id="albumArt" width="100" height="100"/></td>';
+		html += '<td rowspan=6><img id="albumArt" width="100" height="100"></td>';
 		html += '<td id="service"></td>';
 		html += '<td id="radio"></td>';
 		html += '</tr>';
@@ -173,21 +173,21 @@ var Sonos = (function(api, $) {
 		html += '<tr>';
 		html += '<td>Audio Input:</td>';
 		html += '<td class="form-inline">';
-		html += '<select id="audioInputs" class="form-control form-control-sm"/>';
+		html += '<select id="audioInputs" class="form-control form-control-sm"></select>';
 		html += '<button id="playAudioInput" type="button" class="btn btn-sm sonosbtn">Play</button>';
 		html += '</td>';
 		html += '</tr>';
 		html += '<tr>';
 		html += '<td>Sonos playlist:</td>';
 		html += '<td class="form-inline">';
-		html += '<select id="savedQueues" class="form-control form-control-sm"/>';
+		html += '<select id="savedQueues" class="form-control form-control-sm"></select>';
 		html += '<button id="playSQ" type="button" class="btn btn-sm sonosbtn">Play</button>';
 		html += '</td>';
 		html += '</tr>';
 		html += '<tr>';
 		html += '<td>Queue:</td>';
 		html += '<td class="form-inline">';
-		html += '<select id="queue" class="form-control form-control-sm"/>';
+		html += '<select id="queue" class="form-control form-control-sm"></select>';
 		html += '<button id="playQueue" type="button" class="btn btn-sm sonosbtn">Play</button>';
 		html += '<button id="clearQueue" type="button" class="btn btn-sm sonosbtn">Clear</button>';
 		html += '</td>';
@@ -195,14 +195,14 @@ var Sonos = (function(api, $) {
 		html += '<tr>';
 		html += '<td>Favorite radios:</td>';
 		html += '<td class="form-inline">';
-		html += '<select id="favRadios" class="form-control form-control-sm"/>';
+		html += '<select id="favRadios" class="form-control form-control-sm"></select>';
 		html += '<button id="playFavRadio" type="button" class="btn btn-sm sonosbtn">Play</button>';
 		html += '</td>';
 		html += '</tr>';
 		html += '<tr>';
 		html += '<td>Sonos favorites:</td>';
 		html += '<td class="form-inline">';
-		html += '<select id="favorites" class="form-control form-control-sm"/>';
+		html += '<select id="favorites" class="form-control form-control-sm"></select>';
 		html += '<button id="playFavorite" type="button" class="btn btn-sm sonosbtn">Play</button>';
 		html += '</td>';
 		html += '</tr>';
@@ -228,7 +228,7 @@ var Sonos = (function(api, $) {
 		html += '<option value="SR">Sirius radio</option>';
 		html += '<option value="GZ">Group zone</option>';
 		html += '</select>';
-		html += '<input id="playuri" type="text" class="form-control form-control-sm"/>';
+		html += '<input id="playuri" type="text" class="form-control form-control-sm">';
 		html += '<button id="playUri" type="button" class="btn btn-sm sonosbtn">Play</button>';
 		html += '</td>';
 		html += '</tr>';
@@ -496,7 +496,7 @@ var Sonos = (function(api, $) {
 
 		Sonos_initXMLParser();
 
-		var html = '<div id="groupSelection"/>';
+		var html = '<div id="groupSelection"></div>';
 
 		html += "<div>Select group members to be added or removed from this zone's group. Press 'Apply Changes' to save.</div>";
 		html += "<div><strong>Note:</strong>It takes a couple of seconds for changes to take effect; you may need to refresh several times.</div>";
@@ -530,15 +530,15 @@ var Sonos = (function(api, $) {
 					var m = groups.zones[zid];
 					if ( ! ( m.IsZoneBridge || m.Invisible || m.isSatellite ) ) {
 						var isCoord = m.UUID === mg.Coordinator;
-						var $lb = $( '<label/>' ).text( m.ZoneName + ( isCoord ? " (coordinator)" : "" ) );
-						$( '<input type="checkbox" class="zonemem"/>' )
+						var $lb = $( '<label></label>' ).text( m.ZoneName + ( isCoord ? " (coordinator)" : "" ) );
+						$( '<input type="checkbox" class="zonemem">' )
 							.attr( 'id', zid )
 							.prop( 'disabled', isCoord )
 							.prependTo( $lb );
 						if ( groupMembers.search( zid ) >= 0 ) {
 							$( 'input', $lb ).prop( 'checked', true );
 						}
-						$lb = $('<div/>').append( $lb );
+						$lb = $('<div></div>').append( $lb );
 						$lb.appendTo( $container );
 					}
 				}
@@ -557,96 +557,96 @@ var Sonos = (function(api, $) {
 		Sonos_detectBrowser();
 		Sonos_defineUIStyle();
 
-		api.setCpanelContent('<div id="sonos-tts"/>');
+		api.setCpanelContent('<div id="sonos-tts"></div>');
 
 		var $container = $( 'div#sonos-tts' );
 
-		var $row = $( '<div class="row" />' );
+		var $row = $( '<div class="row"></div>' );
 		$( '<div class="col-xs-6 col-md-3 col-lg-2 col-xl-1">Text to Speak:</div>' ).appendTo( $row );
 		$( '<div class="col-xs-6 col-md-9 col-lg-10 col-xl-11 form-inline"><textarea id="tts-text" wrap="soft" class="form-control" style="resize: both;">Testing, testing, one two three!</textarea></div>' )
 			.appendTo( $row );
 		$row.appendTo( $container );
 
-		$row = $( '<div class="row" />' );
+		$row = $( '<div class="row"></div>' );
 		$( '<div class="col-xs-6 col-md-3 col-lg-2 col-xl-1">Engine:</div>' ).appendTo( $row );
-		$( '<div class="col-xs-6 col-md-9 col-lg-10 col-xl-11 form-inline"><select id="tts-engine" class="form-control" /></div>' )
+		$( '<div class="col-xs-6 col-md-9 col-lg-10 col-xl-11 form-inline"><select id="tts-engine" class="form-control"></select></div>' )
 			.appendTo( $row );
 		$row.appendTo( $container );
 
-		$row = $( '<div class="row" />' );
+		$row = $( '<div class="row"></div>' );
 		$( '<div class="col-xs-6 col-md-3 col-lg-2 col-xl-1">Zone:</div>' ).appendTo( $row );
-		$( '<div class="col-xs-6 col-md-9 col-lg-10 col-xl-11 form-inline"><select id="tts-zone" class="form-control" /></div>' )
+		$( '<div class="col-xs-6 col-md-9 col-lg-10 col-xl-11 form-inline"><select id="tts-zone" class="form-control"></select></div>' )
 			.appendTo( $row );
 		$row.appendTo( $container );
 		$mm = $( 'select#tts-zone', $row );
-		$( '<option/>' ).val( "" ).text( "This zone player only (default)" ).appendTo( $mm );
-		$( '<option/>' ).val( "CURRENT" ).text( "This player's group" ).appendTo( $mm );
-		$( '<option/>' ).val( "ALL" ).text( "All zone players" ).appendTo( $mm );
+		$( '<option></option>' ).val( "" ).text( "This zone player only (default)" ).appendTo( $mm );
+		$( '<option></option>' ).val( "CURRENT" ).text( "This player's group" ).appendTo( $mm );
+		$( '<option></option>' ).val( "ALL" ).text( "All zone players" ).appendTo( $mm );
 
-		$row = $( '<div class="row" />' );
+		$row = $( '<div class="row"></div>' );
 		$( '<div class="col-xs-6 col-md-3 col-lg-2 col-xl-1">Volume:</div>' ).appendTo( $row );
-		$( '<div class="col-xs-6 col-md-9 col-lg-10 col-xl-11 form-inline"><select id="tts-volume" class="form-control" /></div>' )
+		$( '<div class="col-xs-6 col-md-9 col-lg-10 col-xl-11 form-inline"><select id="tts-volume" class="form-control"></select></div>' )
 			.appendTo( $row );
 		$row.appendTo( $container );
 		var $mm = $( 'select#tts-volume', $row );
-		$( '<option/>' ).val( "" ).text( "(current zone level)" ).appendTo( $mm );
+		$( '<option></option>' ).val( "" ).text( "(current zone level)" ).appendTo( $mm );
 		for (var k=0; k<= 100; k+= 5 ) {
-			$( '<option/>' ).val( k ).text( k ).appendTo( $mm );
+			$( '<option></option>' ).val( k ).text( k ).appendTo( $mm );
 		}
 
-		$row = $( '<div class="row" />' );
+		$row = $( '<div class="row"></div>' );
 		$( '<div class="col-xs-6 col-md-3 col-lg-2 col-xl-1">Same Volume All Zones:</div>' ).appendTo( $row );
-		$( '<div class="col-xs-6 col-md-9 col-lg-10 col-xl-11 form-inline"><select id="tts-samevol" class="form-control" /></div>' )
+		$( '<div class="col-xs-6 col-md-9 col-lg-10 col-xl-11 form-inline"><select id="tts-samevol" class="form-control"></select></div>' )
 			.appendTo( $row );
 		$row.appendTo( $container );
 		$mm = $( 'select#tts-samevol', $row );
-		$( '<option/>' ).val( "0" ).text( "No" ).appendTo( $mm );
-		$( '<option/>' ).val( "1" ).text( "Yes" ).appendTo( $mm );
+		$( '<option></option>' ).val( "0" ).text( "No" ).appendTo( $mm );
+		$( '<option></option>' ).val( "1" ).text( "Yes" ).appendTo( $mm );
 
-		$row = $( '<div class="row" />' );
+		$row = $( '<div class="row"></div>' );
 		$( '<div class="col-xs-6 col-md-3 col-lg-2 col-xl-1">Chime:</div>' ).appendTo( $row );
-		$( '<div class="col-xs-6 col-md-9 col-lg-10 col-xl-11 form-inline"><select id="tts-chime" class="form-control" /></div>' )
+		$( '<div class="col-xs-6 col-md-9 col-lg-10 col-xl-11 form-inline"><select id="tts-chime" class="form-control"></select></div>' )
 			.appendTo( $row );
 		$row.appendTo( $container );
 		$mm = $( 'select#tts-chime', $row );
-		$( '<option/>' ).val( "" ).text( "(system default)" ).appendTo( $mm );
-		$( '<option/>' ).val( "0" ).text( "No" ).appendTo( $mm );
-		$( '<option/>' ).val( "1" ).text( "Yes" ).appendTo( $mm );
+		$( '<option></option>' ).val( "" ).text( "(system default)" ).appendTo( $mm );
+		$( '<option></option>' ).val( "0" ).text( "No" ).appendTo( $mm );
+		$( '<option></option>' ).val( "1" ).text( "Yes" ).appendTo( $mm );
 
-		$row = $( '<div class="row" />' );
+		$row = $( '<div class="row"></div>' );
 		$( '<div class="col-xs-6 col-md-3 col-lg-2 col-xl-1">Unmute Zones:</div>' ).appendTo( $row );
-		$( '<div class="col-xs-6 col-md-9 col-lg-10 col-xl-11 form-inline"><select id="tts-unmute" class="form-control" /></div>' )
+		$( '<div class="col-xs-6 col-md-9 col-lg-10 col-xl-11 form-inline"><select id="tts-unmute" class="form-control"></select></div>' )
 			.appendTo( $row );
 		$row.appendTo( $container );
 		$mm = $( 'select#tts-unmute', $row );
-		$( '<option/>' ).val( "" ).text( "(system default)" ).appendTo( $mm );
-		$( '<option/>' ).val( "0" ).text( "No" ).appendTo( $mm );
-		$( '<option/>' ).val( "1" ).text( "Yes" ).appendTo( $mm );
+		$( '<option></option>' ).val( "" ).text( "(system default)" ).appendTo( $mm );
+		$( '<option></option>' ).val( "0" ).text( "No" ).appendTo( $mm );
+		$( '<option></option>' ).val( "1" ).text( "Yes" ).appendTo( $mm );
 
-		$row = $( '<div class="row" />' );
+		$row = $( '<div class="row"></div>' );
 		$( '<div class="col-xs-6 col-md-3 col-lg-2 col-xl-1">Repeat:</div>' ).appendTo( $row );
-		$( '<div class="col-xs-6 col-md-9 col-lg-10 col-xl-11 form-inline"><input id="tts-repeat" class="form-control" /></div>' )
+		$( '<div class="col-xs-6 col-md-9 col-lg-10 col-xl-11 form-inline"><input id="tts-repeat" class="form-control"></div>' )
 			.appendTo( $row );
 		$row.appendTo( $container );
 
-		$row = $( '<div class="row" />' );
+		$row = $( '<div class="row"></div>' );
 		$( '<div class="col-xs-6 col-md-3 col-lg-2 col-xl-1">Use TTS Cache:</div>' ).appendTo( $row );
-		$( '<div class="col-xs-6 col-md-9 col-lg-10 col-xl-11 form-inline"><select id="tts-cache" class="form-control" /></div>' )
+		$( '<div class="col-xs-6 col-md-9 col-lg-10 col-xl-11 form-inline"><select id="tts-cache" class="form-control"></select></div>' )
 			.appendTo( $row );
 		$row.appendTo( $container );
 		$mm = $( 'select#tts-cache', $row );
-		$( '<option/>' ).val( "" ).text( "(system default)" ).appendTo( $mm );
-		$( '<option/>' ).val( "0" ).text( "No" ).appendTo( $mm );
-		$( '<option/>' ).val( "1" ).text( "Yes" ).appendTo( $mm );
+		$( '<option></option>' ).val( "" ).text( "(system default)" ).appendTo( $mm );
+		$( '<option></option>' ).val( "0" ).text( "No" ).appendTo( $mm );
+		$( '<option></option>' ).val( "1" ).text( "Yes" ).appendTo( $mm );
 
-		$row = $( '<div class="row" />' );
+		$row = $( '<div class="row"></div>' );
 		$( '<div class="col-xs-6 col-md-3 col-lg-2 col-xl-1">&nbsp;</div>' ).appendTo( $row );
 		$( '<div class="col-xs-6 col-md-9 col-lg-10 col-xl-11 form-inline"><button id="say" class="btn btn-sm btn-primary">Say</button></div>' )
 			.appendTo( $row );
 		$row.appendTo( $container );
 
-		$row = $( '<div class="row" />' ).appendTo( $container );
-		$( '<div id="sonos-tts-status" class="col-xs-12 col-sm-12" style="font-family: monospace";" />' ).appendTo( $row );
+		$row = $( '<div class="row"></div>' ).appendTo( $container );
+		$( '<div id="sonos-tts-status" class="col-xs-12 col-sm-12" style="font-family: monospace";"></div>' ).appendTo( $row );
 
 		$( 'button#say' ).on( 'click.sonos', function() {
 			var args = { Text: $( 'textarea#tts-text' ).val() };
@@ -693,11 +693,11 @@ var Sonos = (function(api, $) {
 				tts.engines = {};
 			}
 
-			$( '<option/>' ).val("").text("(system default)").appendTo( $el );
+			$( '<option></option>' ).val("").text("(system default)").appendTo( $el );
 			for ( var eid in ( TTSEngines || {} ) ) {
 				if ( TTSEngines.hasOwnProperty( eid ) ) {
 					var eng = TTSEngines[eid];
-					$( '<option/>' ).val( eid ).text( ( eng.name || eid ) +
+					$( '<option></option>' ).val( eid ).text( ( eng.name || eid ) +
 						( eid === tts.defaultengine ? " (default)" : "" ) +
 						( tts.engines[eid] ? "" : " (not configured)" ) )
 						.appendTo( $el );
@@ -795,7 +795,7 @@ input#language { width: 6em; } \
 					if ( xg.zones.hasOwnProperty( zid ) ) {
 						var zone = xg.zones[zid];
 						if ( ! ( zone.IsZoneBridge || zone.Invisible || zone.isSatellite ) ) {
-							$( '<option/>' ).val( "AI:" + zone.ZoneName ).text( zone.ZoneName )
+							$( '<option></option>' ).val( "AI:" + zone.ZoneName ).text( zone.ZoneName )
 								.appendTo( ctrl );
 						}
 					}
@@ -816,7 +816,7 @@ input#language { width: 6em; } \
 					if (title.length > 60) {
 						title = title.substr(0, 57) + '...';
 					}
-					jQuery( '<option/>' ).val(value).text(title).appendTo( $el );
+					jQuery( '<option></option>' ).val(value).text(title).appendTo( $el );
 				}
 			});
 			prevSavedQueues = savedQueues;
@@ -829,7 +829,7 @@ input#language { width: 6em; } \
 				if (line.length > 60) {
 					line = line.substr(0, 57) + '...';
 				}
-				jQuery( '<option/>' ).val( ix ).text( line ).appendTo( $el );
+				jQuery( '<option></option>' ).val( ix ).text( line ).appendTo( $el );
 			});
 			prevQueue = queue;
 		}
@@ -845,7 +845,7 @@ input#language { width: 6em; } \
 					if (title.length > 60) {
 						title = title.substr(0, 57) + '...';
 					}
-					jQuery( '<option/>' ).val( value ).text( title ).appendTo( $el );
+					jQuery( '<option></option>' ).val( value ).text( title ).appendTo( $el );
 				}
 			});
 			prevFavRadios = favRadios;
@@ -862,7 +862,7 @@ input#language { width: 6em; } \
 					if (title.length > 60) {
 						title = title.substr(0, 57) + '...';
 					}
-					jQuery( '<option/>' ).val( value ).text( title ).appendTo( $el );
+					jQuery( '<option></option>' ).val( value ).text( title ).appendTo( $el );
 				}
 			});
 			prevFavorites = favorites;
