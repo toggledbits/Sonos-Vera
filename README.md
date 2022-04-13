@@ -19,9 +19,17 @@ Please see CHANGELOG.md for release notes.
 
 ## Installation (New and Existing Users)
 
-You can install the Sonos plugin through the Vera App Marketplace (in your Vera, go to *Apps > Install apps*), or the AltAppStore.
+Currently, the Vera App Marketplace version of the Sonos plugin is out of date and will not be updated. Installation of the latest version must be done from Github as follows.
 
 **openLuup Users:** Please note that additional configuration is required to use TTS. Please see "Special TTS Configuration for openLuup" below.
+
+1. Download the desired release ZIP package from here: https://github.com/toggledbits/Sonos-Vera/releases
+2. Unzip the downloaded file;
+3. In the Vera UI, go to *Apps > Develop apps > Luup files*;
+4. Open the unzipped folder;
+5. Group-select the files in the folder (not the folder itself) and drag them as a group to the *Upload* button in the Vera UI;
+6. The files will be uploaded and your Vera will reload Luup;
+7. When the reload completes, [hard-refresh your browser](https://www.howtogeek.com/672607/how-to-hard-refresh-your-web-browser-to-bypass-your-cache/) (important step, do not skip it!).
 
 ## State Variables
 
