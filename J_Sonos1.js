@@ -15,7 +15,7 @@ var Sonos = (function(api, $) {
 	/* unique identifier for this plugin... */
 	var uuid = '79bf9374-f989-11e9-884c-dbb32f3fa64a'; /* SonosSystem 2019-12-11 19345 */
 
-	var pluginVersion = '2.0-20136';
+	var pluginVersion = '2.0-20316.1545';
 
 	var _UIVERSION = 20103;     /* must coincide with Lua core */
 
@@ -234,6 +234,7 @@ var Sonos = (function(api, $) {
 		html += '</tr>';
 		html += '</table>';
 		html += '</DIV>';
+		html += '<div><hr>Zone UI ' + pluginVersion + '</div>';
 
 		//html += '<p id="debug">';
 
@@ -406,68 +407,53 @@ var Sonos = (function(api, $) {
 		html += '<td>SR:shade45</td>';
 		html += '</tr>';
 
-		var line, pos, title, value;
+		var line, pos, value, lst;
 
 		var savedQueues = getParentState( "SavedQueues", device);
 		if ( ! isEmpty( savedQueues ) ) {
-			pos1 = 0;
-			pos2 = savedQueues.indexOf('\n', pos1);
-			while (pos2 >= 0) {
-				line = savedQueues.substring(pos1, pos2);
-				pos3 = line.indexOf('@');
-				if (pos3 >= 0) {
-					value = line.substring(0, pos3);
-					title = line.substr(pos3+1);
+			lst = savedQueues.split( /\n/ );
+			for ( pos=0; pos<lst.length; ++pos ) {
+				line = lst[pos];
+				value = line.split(/@/);
+				if (value.length > 1) {
 					html += '<tr>';
-					html += '<td>Sonos playlist "' + title + '"</td>';
-					html += '<td nowrap>file:///jffs/settings/savedqueues.rsq#' + value + '</td>';
-					html += '<td>SQ:' + title + '</td>';
+					html += '<td>Sonos playlist "' + value[1] + '"</td>';
+					html += '<td nowrap>file:///jffs/settings/savedqueues.rsq#' + value[0] + '</td>';
+					html += '<td>SQ:' + value[1] + '</td>';
 					html += '</tr>';
 				}
-				pos1 = pos2+1;
-				pos2 = savedQueues.indexOf('\n', pos1);
 			}
 		}
 
 		var favRadios = getParentState( "FavoritesRadios", device );
 		if ( ! isEmpty( favRadios ) ) {
-			pos1 = 0;
-			pos2 = favRadios.indexOf('\n', 0);
-			while (pos2 >= 0) {
-				line = favRadios.substring(pos1, pos2);
-				pos3 = line.indexOf('@');
-				if (pos3 > 0) {
-					value = line.substring(0, pos3);
-					title = line.substring(pos3+1);
+			lst = favRadios.split(/\n/);
+			for ( pos=0; pos<lst.length; ++pos ) {
+				line = lst[pos];
+				value = line.split(/@/);
+				if (value.length > 1) {
 					html += '<tr>';
-					html += '<td>Favorite radio "' + title + '"</td>';
-					html += '<td nowrap>' + value + '</td>';
-					html += '<td>FR:' + title + '</td>';
+					html += '<td>Favorite radio "' + value[1] + '"</td>';
+					html += '<td nowrap>' + value[0] + '</td>';
+					html += '<td>FR:' + value[1] + '</td>';
 					html += '</tr>';
 				}
-				pos1 = pos2+1;
-				pos2 = favRadios.indexOf('\n', pos1);
 			}
 		}
 
 		var faves = getParentState( "Favorites", device);
-		if ( ! isEmpty( favRadios ) ) {
-			pos1 = 0;
-			pos2 = faves.indexOf('\n', 0);
-			while (pos2 >= 0) {
-				line = faves.substring(pos1, pos2);
-				pos3 = line.indexOf('@');
-				if (pos3 > 0) {
-					value = line.substring(0, pos3);
-					title = line.substring(pos3+1);
+		if ( ! isEmpty( faves ) ) {
+			lst = faves.split(/\n/);
+			for( pos=0; pos<lst.length; ++pos ) {
+				line = lst[pos];
+				value = line.split(/@/);
+				if (value.length > 1) {
 					html += '<tr>';
-					html += '<td>Favorite "' + title + '"</td>';
-					html += '<td nowrap>' + value + '</td>';
-					html += '<td>SF:' + title + '</td>';
+					html += '<td>Favorite "' + value[1] + '"</td>';
+					html += '<td nowrap>' + value[0] + '</td>';
+					html += '<td>SF:' + value[1] + '</td>';
 					html += '</tr>';
 				}
-				pos1 = pos2+1;
-				pos2 = faves.indexOf('\n', pos1);
 			}
 		}
 
@@ -749,7 +735,7 @@ input#language { width: 6em; } \
 
 	function Sonos_refreshPlayer(device)
 	{
-		var html, pos1, pos2;
+		var html, pos1, pos2, pos, lst, line, title, value;
 		var uuid = api.getDeviceState(device, DEVICE_PROPERTIES_SID, "SonosID", 1) || "";
 
 		var groups = getParentState( "zoneInfo", device ) || "";
@@ -772,87 +758,71 @@ input#language { width: 6em; } \
 		}
 
 		var savedQueues = getParentState( "SavedQueues", device ) || "";
-		if ( ! isEmpty( savedQueues ) && savedQueues != prevSavedQueues) {
+		if ( savedQueues != prevSavedQueues ) {
 			html = "";
-			pos1 = 0;
-			pos2 = savedQueues.indexOf('\n', pos1);
-			while (pos2 >= 0) {
-				var line = savedQueues.substring(pos1, pos2);
-				var pos3 = line.indexOf('@');
-				if (pos3 >= 0) {
-					var value = line.substring(0, pos3);
-					var title = line.substr(pos3+1);
+			lst = savedQueues.split(/\n/);
+			for ( pos=0; pos<lst.length; ++pos ) {
+				line = lst[pos];
+				value = line.split(/@/);
+				if (value.length > 1) {
+					title = value[1];
+					value = value[0];
 					if (title.length > 60) {
-						title = title.substr(0, 60) + '...';
+						title = title.substr(0, 57) + '...';
 					}
 					html += '<option value="' + value + '">' + title + '</option>';
 				}
-				pos1 = pos2+1;
-				pos2 = savedQueues.indexOf('\n', pos1);
 			}
 			jQuery('#savedQueues').html(html);
 			prevSavedQueues = savedQueues;
 		}
 
-		var queue = api.getDeviceState(device, CONTENT_DIRECTORY_SID, "Queue", 1) || "";
-		if ( ! isEmpty( queue ) && queue != prevQueue) {
+		var queue = api.getDeviceState(device, CONTENT_DIRECTORY_SID, "Queue" ) || "";
+		if ( queue != prevQueue ) {
 			html = "";
-			pos1 = 0;
-			pos2 = queue.indexOf('\n', pos1);
-			while (pos2 >= 0) {
-				var title = queue.substring(pos1, pos2);
-				if (title.length > 50) {
-					title = title.substr(0, 50) + '...';
-				}
-				html += '<option>' + title + '</option>';
-				pos1 = pos2+1;
-				pos2 = queue.indexOf('\n', pos1);
+			lst = queue.split(/\n/);
+			for ( pos=0; pos<lst.length; ++pos ) {
+				html += '<option>' + lst[pos] + '</option>';
 			}
 			jQuery('#queue').html(html);
 			prevQueue = queue;
 		}
 
 		var favRadios = getParentState( "FavoritesRadios", device ) || "";
-		if ( ! isEmpty( favRadios ) && favRadios != prevFavRadios) {
+		if ( favRadios != prevFavRadios ) {
 			html = "";
-			pos1 = 0;
-			pos2 = favRadios.indexOf('\n', pos1);
-			while (pos2 >= 0) {
-				var line = favRadios.substring(pos1, pos2);
-				var pos3 = line.indexOf('@');
-				if (pos3 >= 0) {
-					var value = line.substr(0, pos3);
-					var title = line.substr(pos3+1);
+			lst = favRadios.split(/\n/);
+			for ( pos=0; pos<lst.length; ++pos ) {
+				line = lst[pos];
+				value = line.split(/@/);
+				if ( value.length > 1 ) {
+					title = value[1];
+					value = value[0];
 					if (title.length > 60) {
-						title = title.substr(0, 60) + '...';
+						title = title.substr(0, 57) + '...';
 					}
 					html += '<option value="' + value + '">' + title + '</option>';
 				}
-				pos1 = pos2+1;
-				pos2 = favRadios.indexOf('\n', pos1);
 			}
 			jQuery('#favRadios').html(html);
 			prevFavRadios = favRadios;
 		}
 
 		var favorites = getParentState( "Favorites", device ) || "";
-		if ( ! isEmpty( favorites ) && favorites != prevFavorites) {
+		if ( favorites != prevFavorites ) {
 			html = "";
-			pos1 = 0;
-			pos2 = favorites.indexOf('\n', pos1);
-			while (pos2 >= 0) {
-				var line = favorites.substring(pos1, pos2);
-				var pos3 = line.indexOf('@');
-				if (pos3 >= 0) {
-					var value = line.substr(0, pos3);
-					var title = line.substr(pos3+1);
+			lst = favorites.split(/\n/);
+			for ( pos=0; pos<lst.length; ++pos ) {
+				line = lst[pos];
+				value = line.split(/@/);
+				if ( value.length > 1 ) {
+					title = value[1];
+					value = value[0];
 					if (title.length > 60) {
-						title = title.substr(0, 60) + '...';
+						title = title.substr(0, 57) + '...';
 					}
 					html += '<option value="' + value + '">' + title + '</option>';
 				}
-				pos1 = pos2+1;
-				pos2 = favorites.indexOf('\n', pos1);
 			}
 			jQuery('#favorites').html(html);
 			prevFavorites = favorites;
@@ -867,7 +837,7 @@ input#language { width: 6em; } \
 			onlineState = '1';
 		}
 		var currentAlbumArtUrl = api.getDeviceState(device, AVTRANSPORT_SID, "CurrentAlbumArt", 1) || "";
-		var title = api.getDeviceState(device, AVTRANSPORT_SID, "CurrentTitle", 1) || "";
+		title = api.getDeviceState(device, AVTRANSPORT_SID, "CurrentTitle", 1) || "";
 		var album = api.getDeviceState(device, AVTRANSPORT_SID, "CurrentAlbum", 1) || "";
 		var artist = api.getDeviceState(device, AVTRANSPORT_SID, "CurrentArtist", 1) || "";
 		var details = api.getDeviceState(device, AVTRANSPORT_SID, "CurrentDetails", 1) || "";

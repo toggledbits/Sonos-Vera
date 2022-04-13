@@ -6,8 +6,8 @@
 
 module("L_SonosTTS", package.seeall)
 
-VERSION = 20103
-DEBUG_MODE = false
+VERSION = 20314
+DEBUG_MODE = true
 
 local urllib = require("socket.url")
 local http = require("socket.http")
@@ -21,7 +21,7 @@ local log = print
 local warning = log
 local error = log	--luacheck: ignore 231
 
-local defaultEngine = "RV"
+local defaultEngine = "MARY"
 
 local engines = {}
 
@@ -48,6 +48,8 @@ local function cut_text( text, cutSize )
 		remaining = string.sub( remaining, cutSize+3-pos )
 	end
 end
+
+local function xmlescape( t ) return ( t:gsub( '"', "&quot;" ):gsub( "'", "&apos;" ):gsub( "%&", "&amp;" ):gsub( "%<", "&lt;" ):gsub( "%>", "&gt;" ) ) end
 
 -- Abstract base class for TTS engine for this module. Although its abstract-ness is not strictly
 -- enforced and this class can be instantiated directly to use for any HTTP-GET-method engine, the
@@ -198,7 +200,7 @@ MaryTTSEngine = HTTPGetTTSEngine:new{
 --connect-timeout %{timeout:s|15} \
 --header "Accept-Charset: utf-8;q=0.7,*;q=0.3" \
 --header "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" \
-'%{url:s}?INPUT_TYPE=TEXT&AUDIO=WAVE_FILE&OUTPUT_TYPE=AUDIO&LOCALE=%{lang|en_US}&INPUT_TEXT=%{text}']],
+'%{url:s}?INPUT_TYPE=TEXT&AUDIO=WAVE_FILE&OUTPUT_TYPE=AUDIO&LOCALE=%{lang|en-US}&INPUT_TEXT=%{text}&{extraopts:s}']],
 	optionMeta={
 		url={ index=1, title="Server URL", default="http://127.0.0.1:59125/process" },
 		lang={ index=2, title="Language", default="en-US", unrestricted=true, values={
@@ -222,8 +224,9 @@ MaryTTSEngine = HTTPGetTTSEngine:new{
 						['es-es']="Spanish (Spanish)"
 			}
 		},
-		timeout={ title="Timeout (secs)", default=15 },
-		maxchunk={ title="Max Text Chunk", default=100 }
+		maxchunk={ index=3, title="Max Text Chunk", default=100 },
+		timeout={ index=4, title="Timeout (secs)", default=15 },
+		extraopts={ index=5, title="Extra Params", default="" }
 	}
 }
 
@@ -321,10 +324,13 @@ function AzureTTSEngine:new(o)
 	self.filetype = "mp3"
 	self.bitrate = 64
 	self.protocol = "http-get:*:audio/mpeg:*"
+-- ??? Need to use: https://docs.microsoft.com/en-us/azure/cognitive-services/speech-service/get-started-text-to-speech?tabs=script%2Cwindowsinstall&pivots=programming-language-curl
 	self.optionMeta = {
 		subkey={ index=1, title="Subscription Key", required=true, infourl="https://docs.microsoft.com/en-us/azure/cognitive-services/cognitive-services-apis-create-account?tabs=multiservice%2Cwindows" },
-		region={ index=2, title="Region", default="eastus", values={"australiaeast","canadacentral","centralus","eastasia","eastus","eastus2","francecentral","centralindia","japaneast","koreacentral","northcentralus","northeurope","southcentralus","southeastasia","uksouth","westeurope","westus","westus2"}, unrestricted=true },
-		voice={ index=3, title="Voice", default="en-US-JessaRUS", values={
+		region={ index=2, title="Region", values={"australiaeast","canadacentral","centralus","eastasia","eastus","eastus2","francecentral","centralindia","japaneast","koreacentral","northcentralus","northeurope","southcentralus","southeastasia","uksouth","westeurope","westus","westus2"}, default="eastus", unrestricted=true },
+		endpoint={ index=3, title="Endpoint", default="", instructions="If left blank, https://<region>.api.cognitive.microsoft.com/ will be used" },
+		voice={ index=4, title="Voice", instructions="Availability subject to change. Not all voices available in all regions. Click 'info' above for more.",
+		default="en-US-JessaRUS", values={
 				["ar-EG-Hoda"]="Arabic (Egypt), female",
 				["ar-SA-Naayf"]="Arabic (Saudi Arabia), male",
 				["bg-BG-Ivan"]="Bulgarian",
@@ -353,8 +359,9 @@ function AzureTTSEngine:new(o)
 				["en-US-ZiraRUS"]="English (US), female (Zira)",
 				["en-US-BenjaminRUS"]="English (US), male (Benjamin)",
 				["es-ES-HelenaRUS"]="Spanish (Spain), female (Helena)",
+				["en-US-AriaNeural"]="English (US), female (Aria, neural)",
 				["en-US-GuyNeural"]="English (US), male (Guy, neural)",
-				["en-US-JessaNeural"]="English (US), female (Jessa, neural)",
+				["en-US-JennyNeural"]="English (US), female (Jenny, neural)",
 				["es-ES-Laura-Apollo"]="Spanish (Spain), female (Laura)",
 				["es-ES-Pablo-Apollo"]="Spanish (Spain), male (Pablo)",
 				["es-MX-HildaRUS"]="Spanish (Mexico), female (Hilda)",
@@ -382,6 +389,7 @@ function AzureTTSEngine:new(o)
 				["ko-KR-HeamiRUS"]="Korean, female",
 				["ms-MY-Rizwan"]="Malay, male",
 				["nb-NO-HuldaRUS"]="Norwegian, female",
+				["nl-NL-HannaRUS"]="Dutch, female",
 				["pl-PL-PaulinaRUS"]="Polish, female",
 				["pt-BR-HeloisaRUS"]="Portugese (Brazil), female",
 				["pt-BR-Daniel-Apollo"]="Portugese (Brazil), male",
@@ -412,26 +420,38 @@ function AzureTTSEngine:new(o)
 			unrestricted=true,
 			infourl="https://docs.microsoft.com/en-us/azure/cognitive-services/speech-service/language-support#text-to-speech"
 		},
+		requestor={ index=5, title="Requestor", default="", values={ [""]="automatic (recommended)", L="LuaSocket/LuaSec", C="curl" } },
 		timeout={ title="Timeout (secs)", default="15" }
 	}
 	return o
 end
 function AzureTTSEngine:say(text, destFile, engineOptions)
 	assert( engineOptions.subkey, "Subscription key is required" )
-
 	local tries = 0
-	while tries < 2 do
+	while tries < 3 do
 		tries = tries + 1
-		if os.time() - self.lastToken >= self.maxTokenLife then
-			debug("AzureTTSEngine:say() token is expired, fetching new")
-			local url = string.format("https://%s.api.cognitive.microsoft.com/sts/v1.0/issueToken",
-				engineOptions.region or self.optionMeta.region.default)
-			local cmd = string.format([[curl -s -o - -m 15 -X POST %q -H "Content-length: 0" \
--H "Content-type: application/x-www-form-urlencoded" -H "Ocp-Apim-Subscription-Key: %s"]],
-				url, engineOptions.subkey or "undefined")
+		if ( os.time() - self.lastToken ) >= self.maxTokenLife then
+			debug("AzureTTSEngine:say() token is expired, fetching new (engine %1)", VERSION)
+			local url
+			if ( engineOptions.endpoint or "" ) ~= "" then
+				debug("AzureTTSEngine:say() using provided endpoint %1", engineOptions.endpoint)
+				url = engineOptions.endpoint
+				if not url:match( "^https?://" ) then url = "https://" .. url end
+				if not url:match( "/$" ) then url = url .. "/" end
+			else
+				debug("AzureTTSEngine:say() creating default endpoint from region")
+				url = string.format("https://%s.api.cognitive.microsoft.com/",
+					engineOptions.region or self.optionMeta.region.default)
+			end
+			url = url .. "sts/v1.0/issueToken"
+			local cmd = string.format([[curl -s -k -o - -m 15 -X POST -H 'Content-length: 0' \
+-H 'Content-type: application/x-www-form-urlencoded' -H 'Ocp-Apim-Subscription-Key: %s' '%s']],
+				((engineOptions.subkey or "undefined"):gsub( "'", "\\'" )), url)
+			debug("AzureTTSEngine:say() %1", cmd)
 			local fp = io.popen( cmd )
 			local s = fp:read("*a") or ""
 			fp:close()
+			debug("AzureTTSEngine:say() response %1", s)
 			if s:match("error") then
 				warning("AzureTTSEngine:say() failed to fetch token: "..s)
 				local json = require "dkjson"
@@ -439,28 +459,82 @@ function AzureTTSEngine:say(text, destFile, engineOptions)
 				if not data then
 					debug("AzureTTSEngine:say() invalid response JSON: %1", s)
 					error("Invalid response JSON")
+					break
 				elseif data.error and data.error.code ~= 200 then
 					error("Can't get token, error %1 response, %2", data.error.code, data.error.message)
+					break
 				end
-				error("Unparseable token response")
+				error("Unparseable token response: %1", s)
+			elseif s == "" then
+				error("Empty response, likely failed to negotiate SSL or invalid URL (%s)", url)
 			end
 			self.token = s
 			self.lastToken = os.time()
+			debug("AzureTTSEngine:say() acquired new token %1", self.token)
+		else
+			debug("AzureTTSEngine:say() current token assumed valid")
 		end
 
-		local host = string.format("%s.tts.speech.microsoft.com", engineOptions.region or self.optionMeta.region.default )
+		local host = string.format( "%s.tts.speech.microsoft.com",
+			engineOptions.region or self.optionMeta.region.default )
+		local url = string.format( "https://%s/cognitiveservices/v1", host )
 		local voice = engineOptions.voice or self.optionMeta.voice.default
 		local lang = voice:gsub( "^(%w+%-%w+)%-.*", "%1" )
-		local payload = string.format([[<speak version="1.0" xml:lang="%s"><voice name="%s">%s</voice></speak>]],
-			lang, voice,
-			text:gsub("%s+"," "):gsub("^%s+",""):gsub("%s+$",""):gsub("%&","&amp;"):gsub("%>","&gt;"):gsub("%<","&lt;"))
-		debug("AzureTTSEngine:say() host %1 payload %2", host, payload)
+		local payload = string.format('<speak version="1.0" xml:lang="%s"><voice name="%s"><![CDATA[%s]]></voice></speak>',
+			lang, voice, text:gsub("'", "\\'"))
+		debug("AzureTTSEngine:say() host %1 url %3 payload %2", host, payload, url)
+		debug("AzureTTSEngine:say() system LuaSec version is %1, engine is %2", ssl._VERSION, VERSION)
 		os.remove( destFile )
-		local fp,ferr = io.open(destFile, "wb")
-		if not fp then error("Unable to open "..tostring(destFile)..": "..tostring(ferr)) end
-		http.TIMEOUT = engineOptions.timeout or self.optionMeta.timeout.default or 15
-		local req = {
-			url = "https://" .. host .. "/cognitiveservices/v1",
+		if engineOptions.requestor == "C" or ( engineOptions.requestor == "" and (ssl._VERSION or ""):match( "^0%.[654]" ) ) then
+			-- Ancient LuaSec, or curl specified
+			local fp = io.open(destFile .. "-curl.sh", "w")
+			fp:write( "#!/bin/sh\n# This file is automatically generated; DO NOT EDIT\n\n" )
+			fp:write( string.format("rm -f -- '%s'\n", destFile) )
+			fp:write( string.format("curl -s -k -m %s -X POST -o '%s' \\\n",
+				engineOptions.timeout or self.optionMeta.timeout.default or 15,
+				destFile) )
+			fp:write( string.format(" -H 'Host: %s' \\\n", host) )
+			fp:write( string.format(" -H 'Authorization: Bearer %s' \\\n", self.token) )
+			fp:write( string.format(" -H 'X-Microsoft-OutputFormat: %s' \\\n", self.format) )
+			fp:write( " -H 'Content-Type: application/ssml+xml' \\\n" )
+			-- fp:write( string.format(" -H 'Content-Length: %d'", #payload) -- curl does it correctly
+			fp:write( string.format(" -d '%s' \\\n", payload ) )
+			fp:write( string.format(" '%s'\n", url) )
+			fp:close()
+			local rst = os.execute( "sh " .. destFile .. "-curl.sh" )
+			if rst ~= 0 then
+				fp = io.open(destFile .. "-curl.sh", "r")
+				local req = fp:read("*a")
+				fp:close()
+				error("curl request failed (exit status %2): %1", req, rst)
+				if tries == 1 then
+					-- Fail on first attempt will retry with a new token
+					debug("AzureTTSEngine:say() arming for new token and retry")
+					self.lastToken = 0
+				else
+					return nil, "curl request failed"
+				end
+			else
+				fp = io.open( destFile, "rb" )
+				if fp then
+					local size = fp:seek("end") or 0
+					fp:close()
+					if not DEBUG_MODE then os.remove(destFile .. "-curl.sh") end
+					debug("AzureTTSEngine:say() received %1 byte response via curl", size)
+					if size > 0 then
+						-- Convert bitrate in Kbps to Bps, and from that compute clip duration (aggressive rounding up)
+						return math.ceil( size / ( self.bitrate * 128 ) ) + 1, nil, size
+					end
+				end
+				return nil, "received zero-length file"
+			end
+		else
+			local fp,ferr = io.open(destFile, "wb")
+			if not fp then error("Unable to open "..tostring(destFile)..": "..tostring(ferr)) end
+			http.TIMEOUT = engineOptions.timeout or self.optionMeta.timeout.default or 15
+			local req = {
+				url = url,
+				TIMEOUT = http.TIMEOUT,
 				sink = ltn12.sink.file(fp, ferr),
 				method = "POST",
 				headers = {
@@ -471,28 +545,40 @@ function AzureTTSEngine:say(text, destFile, engineOptions)
 					["Authorization"] = "Bearer " .. tostring(self.token)
 				},
 				source = ltn12.source.string(payload),
-				protocol = ( ssl._VERSION or "0.5" ):find( "^0%.5" ) and "tlsv1_2" or "any"
+				protocol = "any"
 			}
-		debug("AzureTTSEngine:say() LuaSec %1, using protocol %2 for request", ssl._VERSION, req.protocol)
-		local _, statusMsg = https.request( req )
-		if statusMsg == 200 then
+			local r, statusMsg, h, e = https.request( req )
+			debug("AzureTTSEngine:say() response %1, %2, %3, %4", r, statusMsg, h, e)
 			if io.type(fp) == "file" then fp:close() end
-			fp = io.open( destFile, "rb" )
-			local size = fp:seek("end") or 0
-			fp:close()
-			debug("AzureTTSEngine:say() received %1 byte response", size)
-			if size > 0 then
-				-- Convert bitrate in Kbps to Bps, and from that compute clip duration (aggressive rounding up)
-				return math.ceil( size / ( self.bitrate * 128 ) ) + 1, nil, size
+			if statusMsg == 200 then
+				fp = io.open( destFile, "rb" )
+				local size = fp:seek("end") or 0
+				fp:close()
+				debug("AzureTTSEngine:say() received %1 byte response via socket.http", size)
+				if size > 0 then
+					-- Convert bitrate in Kbps to Bps, and from that compute clip duration (aggressive rounding up)
+					return math.ceil( size / ( self.bitrate * 128 ) ) + 1, nil, size
+				end
+				return nil, "received zero-length file"
+			elseif statusMsg == 401 then
+				-- Authorization error; assume token has expired. Arm to re-request.
+				debug("AzureTTSEngine:say() auth fail, arming for retry")
+				self.lastToken = 0
+			else
+				warning("AzureTTSEngine:say() conversion request failed, "..tostring(statusMsg))
+				warning("AzureTTSEngine:say() r="..tostring(r))
+				warning("AzureTTSEngine:say() h="..tostring(h))
+				warning("AzureTTSEngine:say() h=%1", h)
+				warning("AzureTTSEngine:say() e="..tostring(e))
+				warning("AzureTTSEngine:say() payload=%1", payload)
+				fp = io.open( destFile, "r" )
+				while fp do
+					local s = fp:read("*l")
+					if s then warning(s) else fp:close() break end
+				end
+				self.lastToken = 0
+				return nil, "request failed "..tostring(statusMsg)
 			end
-			return nil, "received zero-length file"
-		elseif statusMsg == 401 then
-			-- Authorization error; assume token has expired. Arm to re-request.
-			debug("AzureTTSEngine:say() auth fail, arming for retry")
-			self.lastToken = 0
-		else
-			warning("AzureTTSEngine:say() conversion request failed, "..tostring(statusMsg))
-			return nil, "request failed "..tostring(statusMsg)
 		end
 	end
 	warning("AzureTTSEngine:say() authorization failed with Azure service")
@@ -516,7 +602,7 @@ function getEngine( ident )
 end
 
 function setDefaultEngine( ident )
-	ident = ident or DEFAULT_ENGINE
+	ident = ident or "MARY"
 	if not engines[ident] then base.error("Invalid/unregistered engine "..ident) end
 	defaultEngine = ident
 end
@@ -571,10 +657,6 @@ function ConvertTTS(text, destFile, language, engineId, engineOptions)
 	return generate(engines[engineId or defaultEngine], text, destFile, engineOptions)
 end
 
-function setup(language, engine, googleUrl, osxUrl, maryUrl, rvURL, clientId, clientSecret, option)
-	defaultEngine = engine or "RV"
-	engines.GOOGLE.optionMeta.url.default = googleUrl or "https://translate.google.com"
-	engines.MARY.optionMeta.url.default = maryUrl or "http://127.0.0.1:3510"
-	engines.RV.optionMeta.url.default = rvURL or "https://code.responsivevoice.org"
-	engines.OSX_TTS_SERVER.optionMeta.url.default = osxUrl or "http://127.0.0.1"
+function setup(language, engine, googleUrl, osxUrl, maryUrl, rvURL, clientId, clientSecret, option) -- luacheck: ignore 212
+	defaultEngine = engine or "MARY"
 end

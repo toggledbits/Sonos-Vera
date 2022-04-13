@@ -2,6 +2,16 @@
 
 **NOTAM (NOtice To All Music-lovers):** ResponsiveVoice is no longer supported. They removed the public URL/endpoint that was being used to create speech audio files by the plugin. The suggested alternative to RV is the Microsoft Azure Speech Service, which produces clear speech audio from a large variety of voices, and offers a usable/meaningful free tier level that is likely sufficient for most users.
 
+## Version 2.0 HOTFIXES (20314)
+
+* 20314-01: Add received data to log message for one failure case where it had been missed; easier diag on TTS auths.
+* 20282-01: Workaround very long bearer tokens (longer than allowed command line length) for curl requests in Azure TTS.
+* 20273-01: Upgrade TTS module to 20273.
+* 20229-01: Some recent UK firmware apparently has a different XML response form for zone group topology.
+* 20149-02: Fix errors in player UI that cause incorrect parsing of lists (saved queues, queue, favorites).
+* 20149-01: Fix error in URI decoding that causes last list (saved queue, favorites) element to be ignored.
+* 20147-01: Fix restore of services metadata (bug causing problems playing streaming services).
+
 ## Version 2.0 (released)
 
 **DEPRECATION ANNOUNCEMENT:** The "Language" parameter on `Say` actions is now deprecated; it will be removed in a future release. Since language is closely coupled to engine configuration, it isn't reasonable to allow language selection at the action.
